@@ -1,5 +1,6 @@
 import os
-from flask import Flask, render_template
+from datetime import datetime
+from flask import Flask, render_template, redirect, url_for
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from .models import db, User
@@ -8,12 +9,13 @@ from . import register_blueprints
 def create_app():
     app = Flask(__name__)
 
-    # 加载配置
+    # 加载密钥
     app.config['SECRET_KEY'] = os.environ.get(
         'SECRET_KEY',
         'bad4147d0e436553811dc682a3c25822'
     )
-    
+
+    # 加载数据库 URL
     database_url = os.environ.get(
         'DATABASE_URL',
         'postgresql://virtual_event_db_user:Yyqhn8GDTloyPZmeIC3R4ZcuRimS15JF@dpg-d0qt6djuibrs73eu5mjg-a.singapore-postgres.render.com/virtual_event_db'
@@ -29,6 +31,7 @@ def create_app():
     db.init_app(app)
     Migrate(app, db)
 
+    # 登录管理
     login_manager = LoginManager()
     login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
@@ -37,10 +40,23 @@ def create_app():
     def load_user(user_id):
         return User.query.get(int(user_id))
 
-    # 注册所有蓝图
+    # 注册蓝图
     register_blueprints(app)
 
-    # 自定义错误页面
+    # —— 模板全局注入 now —— #
+    @app.context_processor
+    def inject_now():
+        return {'now': datetime.utcnow()}
+
+    # —— 别名 endpoint：让 url_for('index') 指向 main.index —— #
+    # 必须在 register_blueprints 之后才有 app.view_functions['main.index']
+    app.add_url_rule(
+        '/', 
+        endpoint='index', 
+        view_func=app.view_functions.get('main.index')
+    )
+
+    # 自定义错误页
     @app.errorhandler(404)
     def not_found_error(error):
         return render_template('404.html'), 404
@@ -51,7 +67,7 @@ def create_app():
 
     return app
 
-# Gunicorn 使用
+# Gunicorn/Flask CLI 入口
 app = create_app()
 
 if __name__ == '__main__':
