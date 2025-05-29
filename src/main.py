@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
-from flask import Flask, render_template, redirect, url_for
-from flask_migrate import Migrate
+from flask import Flask, render_template
+from flask_migrate import Migrate, upgrade
 from flask_login import LoginManager
 from .models import db, User
 from . import register_blueprints
@@ -9,13 +9,12 @@ from . import register_blueprints
 def create_app():
     app = Flask(__name__)
 
-    # 加载密钥
+    # —— 应用配置 —— #
     app.config['SECRET_KEY'] = os.environ.get(
         'SECRET_KEY',
         'bad4147d0e436553811dc682a3c25822'
     )
 
-    # 加载数据库 URL
     database_url = os.environ.get(
         'DATABASE_URL',
         'postgresql://virtual_event_db_user:Yyqhn8GDTloyPZmeIC3R4ZcuRimS15JF@dpg-d0qt6djuibrs73eu5mjg-a.singapore-postgres.render.com/virtual_event_db'
@@ -27,11 +26,14 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # 初始化扩展
+    # —— 初始化数据库 & 迁移 —— #
     db.init_app(app)
     Migrate(app, db)
+    # 自动执行所有迁移脚本，创建缺失表
+    with app.app_context():
+        upgrade()
 
-    # 登录管理
+    # —— 登录管理 —— #
     login_manager = LoginManager()
     login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
@@ -40,7 +42,7 @@ def create_app():
     def load_user(user_id):
         return User.query.get(int(user_id))
 
-    # 注册蓝图
+    # —— 注册蓝图 —— #
     register_blueprints(app)
 
     # —— 模板全局注入 now —— #
@@ -49,14 +51,14 @@ def create_app():
         return {'now': datetime.utcnow()}
 
     # —— 别名 endpoint：让 url_for('index') 指向 main.index —— #
-    # 必须在 register_blueprints 之后才有 app.view_functions['main.index']
+    # 必须在 register_blueprints 之后才有 view_functions['main.index']
     app.add_url_rule(
-        '/', 
-        endpoint='index', 
+        '/',
+        endpoint='index',
         view_func=app.view_functions.get('main.index')
     )
 
-    # 自定义错误页
+    # —— 自定义错误页 —— #
     @app.errorhandler(404)
     def not_found_error(error):
         return render_template('404.html'), 404
