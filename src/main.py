@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 from flask import Flask, render_template
-from flask_migrate import Migrate, upgrade
 from flask_login import LoginManager
 from .models import db, User
 from . import register_blueprints
@@ -26,13 +25,10 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # —— 初始化数据库 & 迁移 —— #
+    # —— 初始化数据库，并自动创建所有表 —— #
     db.init_app(app)
-    Migrate(app, db)
-
-    # 自动执行所有迁移脚本，创建缺失表
     with app.app_context():
-        upgrade()
+        db.create_all()
 
     # —— 登录管理 —— #
     login_manager = LoginManager()
@@ -52,11 +48,11 @@ def create_app():
         return {'now': datetime.utcnow()}
 
     # —— 别名 endpoint：让 url_for('index') 指向 main.index —— #
-    # 必须在 register_blueprints 之后才有 app.view_functions['main.index']
+    # 必须在 register_blueprints 之后才有 view_functions['main.index']
     app.add_url_rule(
         '/',
         endpoint='index',
-        view_func=app.view_functions.get('main.index')
+        view_func=app.view_functions['main.index']
     )
 
     # —— 自定义错误页 —— #
