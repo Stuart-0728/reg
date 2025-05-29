@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: student-registration-app            # 服务名称，可根据实际情况修改
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn src.main:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.11
+      - key: POETRY_VERSION
+        value: 1.7.1
