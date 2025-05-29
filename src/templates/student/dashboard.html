@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}学生面板 - 重庆师范大学师能素质协会{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h2 class="mb-3">学生控制面板</h2>
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">欢迎回来，{{ current_user.student_info.real_name }}</h5>
+                    <p class="card-text">您可以在这里浏览活动、报名参加和管理个人信息。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知区域 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bell me-2"></i>通知
+                    </h5>
+                </div>
+                <div class="card-body notification-container">
+                    <p class="text-center">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        正在加载通知...
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 已报名活动 -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">我的活动</h5>
+                    <a href="{{ url_for('student.my_activities') }}" class="btn btn-sm btn-outline-primary">查看全部</a>
+                </div>
+                <div class="card-body">
+                    {% if registered_activities %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>活动名称</th>
+                                        <th>地点</th>
+                                        <th>开始时间</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for activity in registered_activities %}
+                                    <tr>
+                                        <td>{{ activity.title }}</td>
+                                        <td>{{ activity.location }}</td>
+                                        <td>{{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                                        <td>
+                                            {% if activity.start_time > now %}
+                                                <span class="badge bg-info">未开始</span>
+                                            {% elif activity.end_time > now %}
+                                                <span class="badge bg-success">进行中</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">已结束</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary">
+                                                查看详情
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            您还没有报名任何活动，<a href="{{ url_for('student.activities') }}">浏览活动</a>并报名参加吧！
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 即将开始的活动 -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">推荐活动</h5>
+                    <a href="{{ url_for('student.activities') }}" class="btn btn-sm btn-outline-primary">浏览全部</a>
+                </div>
+                <div class="card-body">
+                    {% if upcoming_activities %}
+                        <div class="row row-cols-1 row-cols-md-3 g-4">
+                            {% for activity in upcoming_activities %}
+                                <div class="col">
+                                    <div class="card h-100 activity-card">
+                                        {% if activity.registration_deadline < now %}
+                                            <div class="activity-badge bg-danger text-white">已截止</div>
+                                        {% elif activity.start_time < now %}
+                                            <div class="activity-badge bg-warning text-dark">进行中</div>
+                                        {% else %}
+                                            <div class="activity-badge bg-success text-white">可报名</div>
+                                        {% endif %}
+                                        <div class="card-body">
+                                            <h5 class="card-title">{{ activity.title }}</h5>
+                                            <p class="card-text text-muted">
+                                                <i class="fas fa-map-marker-alt me-1"></i>{{ activity.location }}
+                                            </p>
+                                            <p class="card-text">{{ activity.description|truncate(100) }}</p>
+                                        </div>
+                                        <div class="card-footer">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-clock me-1"></i>{{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}
+                                                </small>
+                                                <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary">查看详情</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            暂无推荐活动，请稍后查看。
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
