@@ -29,6 +29,7 @@ def create_app():
     # —— 初始化数据库 & 迁移 —— #
     db.init_app(app)
     Migrate(app, db)
+
     # 自动执行所有迁移脚本，创建缺失表
     with app.app_context():
         upgrade()
@@ -51,7 +52,7 @@ def create_app():
         return {'now': datetime.utcnow()}
 
     # —— 别名 endpoint：让 url_for('index') 指向 main.index —— #
-    # 必须在 register_blueprints 之后才有 view_functions['main.index']
+    # 必须在 register_blueprints 之后才有 app.view_functions['main.index']
     app.add_url_rule(
         '/',
         endpoint='index',
