@@ -21,7 +21,7 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(64), unique=True, index=True)
     email = db.Column(db.String(120), unique=True, index=True)
     password_hash = db.Column(db.String(128))
-    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
+    role_id = db.Column('role', db.Integer, db.ForeignKey('roles.id'))  # 显式绑定数据库中的 `role` 字段
     student_info = db.relationship('StudentInfo', backref='user', uselist=False)
     registrations = db.relationship('Registration', backref='user', lazy='dynamic')
     created_at = db.Column(db.DateTime, default=datetime.now)
@@ -29,6 +29,7 @@ class User(db.Model, UserMixin):
 
     def __repr__(self):
         return f'<User {self.username}>'
+
 
 # 学生信息表
 class StudentInfo(db.Model):
