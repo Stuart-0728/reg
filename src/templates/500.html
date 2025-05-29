@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>服务器错误 - 500</title>
+    <style>
+        body {
+            background-color: #fff3cd;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            padding-top: 100px;
+        }
+        h1 {
+            font-size: 80px;
+            color: #fd7e14;
+        }
+        p {
+            font-size: 20px;
+            color: #856404;
+        }
+        a {
+            color: #fd7e14;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>500</h1>
+    <p>服务器出错了，请稍后再试。</p>
+    <p><a href="{{ url_for('index') }}">返回首页</a></p>
+</body>
+</html>
