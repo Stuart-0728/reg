@@ -27,7 +27,7 @@
                         <a class="nav-link" href="{{ url_for('main.index') }}">首页</a>
                     </li>
                     {% if current_user.is_authenticated %}
-                        {% if current_user.role.name == 'Admin' %}
+                        {% if current_user.role == 'Admin' %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('admin.dashboard') }}">管理面板</a>
                             </li>
@@ -67,14 +67,14 @@
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
                                     <i class="fas fa-user-circle me-1"></i>
-                                    {% if current_user.role.name == 'Student' and current_user.student_info %}
+                                    {% if current_user.role == 'Student' and current_user.student_info %}
                                         {{ current_user.student_info.real_name }}
                                     {% else %}
                                         {{ current_user.username }}
                                     {% endif %}
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end">
-                                    {% if current_user.role.name == 'Student' %}
+                                    {% if current_user.role == 'Student' %}
                                         <li><a class="dropdown-item" href="{{ url_for('student.profile') }}">个人资料</a></li>
                                     {% endif %}
                                     <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">修改密码</a></li>
