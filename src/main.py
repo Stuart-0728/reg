@@ -16,11 +16,13 @@ from datetime import datetime
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'cqnu-association-secret-key')
 
-# 优先使用 DATABASE_URL（Render 环境变量），否则回退到本地 MySQL 配置
+# —— 数据库配置 ——  
 database_url = os.getenv('DATABASE_URL')
 if database_url:
+    # Render 环境下使用 PostgreSQL
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
+    # 本地或其他环境回退到 MySQL
     app.config['SQLALCHEMY_DATABASE_URI'] = (
         f"mysql+pymysql://{os.getenv('DB_USERNAME', 'root')}:"
         f"{os.getenv('DB_PASSWORD', 'password')}@"
@@ -31,7 +33,7 @@ else:
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# 初始化数据库
+# 初始化数据库和迁移
 db.init_app(app)
 migrate = Migrate(app, db)
 
@@ -51,6 +53,12 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(student_bp)
 app.register_blueprint(main_bp)
 
+# —— 上下文处理器 ——  
+# 将当前时间注入到所有模板，使 base.html 中能使用 {{ now.year }}
+@app.context_processor
+def inject_now():
+    return {'now': datetime.now()}
+
 # 记录用户最后登录时间
 @app.before_request
 def before_request():
@@ -67,13 +75,13 @@ def page_not_found(e):
 def internal_server_error(e):
     return render_template('500.html'), 500
 
-# 创建管理员账户和初始化角色
+# CLI 命令：创建管理员账户和初始化角色
 @app.cli.command('create-admin')
 def create_admin():
     """创建管理员账户"""
     from werkzeug.security import generate_password_hash
     
-    # 创建角色
+    # 创建或获取角色
     admin_role = Role.query.filter_by(name='Admin').first()
     if not admin_role:
         admin_role = Role(name='Admin')
@@ -84,7 +92,7 @@ def create_admin():
         student_role = Role(name='Student')
         db.session.add(student_role)
     
-    # 创建管理员账户
+    # 创建或获取管理员用户
     admin = User.query.filter_by(username='admin').first()
     if not admin:
         admin = User(
