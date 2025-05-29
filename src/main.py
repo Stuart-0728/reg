@@ -15,7 +15,20 @@ from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'cqnu-association-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql+pymysql://{os.getenv('DB_USERNAME', 'root')}:{os.getenv('DB_PASSWORD', 'password')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '3306')}/{os.getenv('DB_NAME', 'cqnu_association')}"
+
+# 优先使用 DATABASE_URL（Render 环境变量），否则回退到本地 MySQL 配置
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = (
+        f"mysql+pymysql://{os.getenv('DB_USERNAME', 'root')}:"
+        f"{os.getenv('DB_PASSWORD', 'password')}@"
+        f"{os.getenv('DB_HOST', 'localhost')}:"
+        f"{os.getenv('DB_PORT', '3306')}/"
+        f"{os.getenv('DB_NAME', 'cqnu_association')}"
+    )
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # 初始化数据库
