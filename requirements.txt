@@ -11,3 +11,4 @@ itsdangerous==2.2.0
 sqlalchemy==2.0.41
 wtforms==3.2.1
 gunicorn>=20.1.0
+psycopg2-binary>=2.9.6
