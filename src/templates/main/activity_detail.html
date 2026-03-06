@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ activity.title }} - 活动详情 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="mb-0">{{ activity.title }}</h2>
+                    <span class="badge {% if activity.status == 'active' %}bg-success{% elif activity.status == 'completed' %}bg-secondary{% else %}bg-danger{% endif %}">
+                        {% if activity.status == 'active' %}进行中{% elif activity.status == 'completed' %}已结束{% else %}已取消{% endif %}
+                    </span>
+                </div>
+                
+                {% if activity.poster_image %}
+                <div class="text-center p-3">
+                    {% if 'banner' in activity.poster_image %}
+                    <img src="{{ url_for('static', filename='img/' + activity.poster_image) }}" 
+                         class="img-fluid rounded" 
+                         alt="{{ activity.title }}" 
+                         style="max-height: 400px; width: auto; object-fit: contain;">
+                    {% else %}
+                    <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" 
+                         class="img-fluid rounded" 
+                         alt="{{ activity.title }}" 
+                         style="max-height: 400px; width: auto; object-fit: contain;">
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <div class="card-body">
+                    <div class="mb-4">
+                        <h5>活动详情</h5>
+                        <p class="card-text">{{ activity.description | safe }}</p>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h5>活动信息</h5>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item"><i class="fas fa-map-marker-alt me-2"></i> <strong>地点：</strong>{{ activity.location }}</li>
+                                <li class="list-group-item"><i class="fas fa-calendar-alt me-2"></i> <strong>开始时间：</strong>{{ display_datetime(activity.start_time) }}</li>
+                                <li class="list-group-item"><i class="fas fa-calendar-check me-2"></i> <strong>结束时间：</strong>{{ display_datetime(activity.end_time) }}</li>
+                                <li class="list-group-item"><i class="fas fa-clock me-2"></i> <strong>报名截止：</strong>{{ display_datetime(activity.registration_deadline) }}</li>
+                                {% if activity.max_participants > 0 %}
+                                <li class="list-group-item"><i class="fas fa-users me-2"></i> <strong>人数限制：</strong>{{ activity.max_participants }}人</li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>报名状态</h5>
+                            <div class="card">
+                                <div class="card-body">
+                                    {% if is_student %}
+                                        {% if registration and registration.status == 'registered' %}
+                                            <div class="alert alert-success">
+                                                <i class="fas fa-check-circle me-2"></i> 您已成功报名此活动
+                                                <p class="small mb-0">报名时间：{{ display_datetime(registration.register_time) }}</p>
+                                            </div>
+                                            
+                                            {% if activity.start_time and safe_greater_than(activity.start_time, now) %}
+                                                <button type="button" class="btn btn-outline-danger w-100" id="cancelBtn">
+                                                    <i class="fas fa-times-circle me-2"></i> 取消报名
+                                                </button>
+                                            {% endif %}
+                                        {% elif can_register %}
+                                            <div class="alert alert-info">
+                                                <i class="fas fa-info-circle me-2"></i> 此活动正在接受报名
+                                                <p class="small mb-0">截止时间：{{ display_datetime(activity.registration_deadline) }}</p>
+                                            </div>
+                                            
+                                            <button type="button" class="btn btn-primary w-100" id="registerBtn">
+                                                <i class="fas fa-user-plus me-2"></i> 立即报名
+                                            </button>
+                                        {% else %}
+                                            {% if activity.registration_deadline and safe_less_than(activity.registration_deadline, now) %}
+                                                <div class="alert alert-secondary">
+                                                    <i class="fas fa-ban me-2"></i> 报名已截止
+                                                </div>
+                                            {% elif activity.max_participants > 0 and activity.registrations|length >= activity.max_participants %}
+                                                <div class="alert alert-warning">
+                                                    <i class="fas fa-exclamation-triangle me-2"></i> 报名人数已满
+                                                </div>
+                                            {% elif registration and registration.status == 'cancelled' %}
+                                                <div class="alert alert-warning">
+                                                    <i class="fas fa-exclamation-triangle me-2"></i> 您已取消报名
+                                                    <p class="small mb-0">可重新报名</p>
+                                                </div>
+                                                
+                                                <button type="button" class="btn btn-outline-primary w-100" id="reregisterBtn">
+                                                    <i class="fas fa-redo me-2"></i> 重新报名
+                                                </button>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% elif current_user.is_authenticated %}
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle me-2"></i> 您当前不是学生账号，无法报名活动
+                                        </div>
+                                    {% else %}
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle me-2"></i> 登录学生账号后可报名参加活动
+                                        </div>
+                                        <a href="{{ url_for('auth.login', next=url_for('main.activity_detail', activity_id=activity.id)) }}" class="btn btn-outline-primary w-100">
+                                            <i class="fas fa-sign-in-alt me-2"></i> 登录报名
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <a href="{{ url_for('main.index') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i> 返回首页
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- 天气卡片 -->
+            {% if weather_data %}
+            <div class="card mb-4 border-0 shadow-sm">
+                <div class="card-body p-0">
+                    <div class="weather-card {% if weather_data.description %}
+                        {% if '晴' in weather_data.description %}sunny
+                        {% elif '雨' in weather_data.description %}rainy
+                        {% elif '云' in weather_data.description or '阴' in weather_data.description %}cloudy
+                        {% else %}cloudy{% endif %}
+                    {% else %}cloudy{% endif %}">
+                        <div class="weather-main d-flex align-items-start justify-content-between">
+                            <div class="weather-info">
+                                <div class="weather-temp">
+                                    <span class="temp-value">{{ weather_data.temperature }}</span>
+                                    <span class="temp-unit">°C</span>
+                                </div>
+                                <div class="weather-desc">{{ weather_data.description }}</div>
+                                <div class="weather-location">
+                                    <i class="fas fa-map-marker-alt me-1"></i>{{ weather_data.location }}
+                                </div>
+                            </div>
+                            <div class="weather-icon">
+                                <i class="wi {{ weather_data.icon }}"></i>
+                            </div>
+                        </div>
+                        <div class="weather-details mt-4">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="weather-detail-item">
+                                        <i class="wi wi-thermometer"></i>
+                                        <div class="small">体感温度</div>
+                                        <div class="fw-bold">{{ weather_data.feels_like }}°C</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="weather-detail-item">
+                                        <i class="wi wi-humidity"></i>
+                                        <div class="small">湿度</div>
+                                        <div class="fw-bold">{{ weather_data.humidity }}%</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="weather-forecast-badge mt-3">
+                            <span class="badge">
+                                <i class="fas fa-calendar-alt me-1"></i>{{ weather_data.forecast_note }}
+                            </span>
+                            {% if weather_data.activity_date %}
+                            <span class="badge ms-2">
+                                <i class="fas fa-clock me-1"></i>{{ weather_data.activity_date }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        {% if weather_data.note %}
+                        <div class="weather-note mt-3">
+                            <small>
+                                <i class="fas fa-info-circle me-1"></i>{{ weather_data.note }}
+                            </small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">活动须知</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">
+                            <i class="fas fa-info-circle me-2 text-primary"></i> 请准时参加活动
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-info-circle me-2 text-primary"></i> 活动开始前请提前到场
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-info-circle me-2 text-primary"></i> 如需取消报名，请提前操作
+                        </li>
+                        <li class="list-group-item">
+                            <i class="fas fa-info-circle me-2 text-primary"></i> 活动开始后将无法取消报名
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">联系我们</h5>
+                </div>
+                <div class="card-body">
+                    <p>如有任何问题，请联系我们：</p>
+                    <ul class="list-unstyled">
+                        <li><i class="fas fa-envelope me-2"></i> 2023051101095@stu.cqnu.edu.cn</li>
+                        <li><i class="fas fa-users me-2"></i> QQ群：995213034</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const registerBtn = document.getElementById('registerBtn');
+    const reregisterBtn = document.getElementById('reregisterBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const csrfToken = "{{ csrf_token() }}";
+
+    if (registerBtn) {
+        registerBtn.addEventListener('click', function() {
+            handleRegistration('{{ url_for("student.register_activity", id=activity.id) }}', '报名');
+        });
+    }
+
+    if (reregisterBtn) {
+        reregisterBtn.addEventListener('click', function() {
+            handleRegistration('{{ url_for("student.register_activity", id=activity.id) }}', '重新报名');
+        });
+    }
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            if (confirm('确定要取消报名吗？')) {
+                handleRegistration('{{ url_for("student.cancel_registration", id=activity.id) }}', '取消报名');
+            }
+        });
+    }
+
+    function handleRegistration(url, action) {
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                csrf_token: csrfToken
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                // 延迟1.5秒后刷新页面，让用户有时间看到消息
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                showToast(data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('发生错误，请稍后重试', 'error');
+        });
+    }
+});
+</script>
+{% endblock %}

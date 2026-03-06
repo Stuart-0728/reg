@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+
+{% block title %}标签管理 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
+            <li class="breadcrumb-item active" aria-current="page">标签管理</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-transparent text-dark">
+                    <h5 class="mb-0">添加标签</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('admin.create_tag') }}" class="needs-validation" data-no-loading novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="tagName" class="form-label">标签名称</label>
+                            <input type="text" class="form-control" id="tagName" name="name" required>
+                            <div class="invalid-feedback">
+                                请输入标签名称
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tagColor" class="form-label">标签颜色</label>
+                            <select class="form-select" id="tagColor" name="color" required>
+                                <option value="primary">蓝色</option>
+                                <option value="secondary">灰色</option>
+                                <option value="success">绿色</option>
+                                <option value="danger">红色</option>
+                                <option value="warning">橙黄色</option>
+                                <option value="info">青蓝色</option>
+                                <option value="dark">黑色</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>创建标签
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-transparent text-dark d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">标签列表</h5>
+                    <button type="button" class="btn btn-sm btn-light" onclick="location.reload()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if tags %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>标签名称</th>
+                                        <th>颜色</th>
+                                        <th>使用次数</th>
+                                        <th>创建时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for tag in tags %}
+                                    <tr>
+                                        <td>
+                                            {% set bootstrap_colors = ['primary','secondary','success','danger','warning','info','dark','light'] %}
+                                            <span class="badge bg-{{ tag.color }}" {% if tag.color not in bootstrap_colors %}style="color: {{ tag.color }};"{% endif %}>
+                                                {{ tag.name }}
+                                            </span>
+                                        </td>
+                                        <td>{{ tag.color }}</td>
+                                        <td>{{ tag.activities.count() if tag.activities else 0 }}</td>
+                                        <td>{{ display_datetime(tag.created_at) }}</td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <button type="button" class="btn btn-outline-primary" 
+                                                        onclick="editTag('{{ tag.id }}', '{{ tag.name }}', '{{ tag.color }}')">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-danger" 
+                                                        onclick="deleteTag('{{ tag.id }}', '{{ tag.name }}')">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-center text-muted my-5">暂无标签</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑标签模态框 -->
+<div class="modal fade" id="editTagModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑标签</h5>
+                <button type="button" class="btn-close close-modal" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="editTagForm" class="needs-validation" data-no-loading novalidate>
+                <div class="modal-body">
+                    <input type="hidden" id="editTagId" name="tag_id">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="editTagName" class="form-label">标签名称</label>
+                        <input type="text" class="form-control" id="editTagName" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editTagColor" class="form-label">标签颜色</label>
+                        <select class="form-select" id="editTagColor" name="color" required>
+                            <option value="primary">蓝色</option>
+                            <option value="secondary">灰色</option>
+                            <option value="success">绿色</option>
+                            <option value="danger">红色</option>
+                            <option value="warning">橙黄色</option>
+                            <option value="info">青蓝色</option>
+                            <option value="dark">黑色</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary close-modal" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存更改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除标签的隐藏表单 -->
+<form id="deleteTagForm" method="POST" data-no-loading style="display: none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function editTag(id, name, color) {
+    document.getElementById('editTagId').value = id;
+    document.getElementById('editTagName').value = name;
+    document.getElementById('editTagColor').value = color;
+    
+    // 设置表单的action属性
+    document.getElementById('editTagForm').action = `/admin/tags/${id}/edit`;
+    
+    const editModal = new bootstrap.Modal(document.getElementById('editTagModal'));
+    editModal.show();
+}
+
+function deleteTag(id, name) {
+    if (confirm(`确定要删除标签"${name}"吗？\n删除后不可恢复，且会从所有相关活动中移除此标签。`)) {
+        // 使用隐藏表单提交，确保CSRF令牌被正确传递
+        const form = document.getElementById('deleteTagForm');
+        form.action = `/admin/tags/${id}/delete`;
+        form.submit();
+    }
+}
+
+// 表单验证
+const forms = document.querySelectorAll('.needs-validation');
+forms.forEach(form => {
+    form.addEventListener('submit', event => {
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        form.classList.add('was-validated');
+    });
+});
+</script>
+{% endblock %}

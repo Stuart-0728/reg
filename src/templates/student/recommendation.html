@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}兴趣推荐 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">为你推荐的活动</h2>
+    {% if recommended %}
+    <div class="row">
+        {% for act in recommended %}
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">{{ act.title }}</h5>
+                    <p class="card-text text-muted">{{ display_datetime(act.start_time) }} 至 {{ display_datetime(act.end_time) }}</p>
+                    <p class="card-text">{{ act.description[:80] }}{% if act.description|length > 80 %}...{% endif %}</p>
+                    <a href="{{ url_for('student.activity_detail', id=act.id) }}" class="btn btn-primary btn-sm">查看详情</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">暂无推荐活动，快去参与活动丰富你的兴趣标签吧！</div>
+    {% endif %}
+</div>
+{% endblock %}

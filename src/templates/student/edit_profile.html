@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}编辑个人资料 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-transparent text-dark">
+                    <h5 class="mb-0">编辑个人资料</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="mb-3">
+                            {{ form.real_name.label(class="form-label") }}
+                            {{ form.real_name(class="form-control" + (" is-invalid" if form.real_name.errors else "")) }}
+                            {% if form.real_name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.real_name.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.grade.label(class="form-label") }}
+                            {{ form.grade(class="form-control" + (" is-invalid" if form.grade.errors else "")) }}
+                            {% if form.grade.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.grade.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.major.label(class="form-label") }}
+                            {{ form.major(class="form-control" + (" is-invalid" if form.major.errors else "")) }}
+                            {% if form.major.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.major.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.college.label(class="form-label") }}
+                            {{ form.college(class="form-control" + (" is-invalid" if form.college.errors else "")) }}
+                            {% if form.college.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.college.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.phone.label(class="form-label") }}
+                            {{ form.phone(class="form-control" + (" is-invalid" if form.phone.errors else "")) }}
+                            {% if form.phone.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.phone.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.qq.label(class="form-label") }}
+                            {{ form.qq(class="form-control" + (" is-invalid" if form.qq.errors else "")) }}
+                            {% if form.qq.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.qq.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">兴趣标签</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for tag in all_tags %}
+                                <input type="checkbox" class="btn-check" name="tags" id="tag{{ tag.id }}" value="{{ tag.id }}" autocomplete="off"
+                                    {% if tag.id in selected_tag_ids %}checked{% endif %}>
+                                <label class="btn btn-outline-primary tag-btn" for="tag{{ tag.id }}">{{ tag.name }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <style>
+                        .tag-btn {
+                            border-radius: 20px;
+                            padding: 0.5rem 1.2rem;
+                            font-size: 1rem;
+                            transition: background 0.2s, color 0.2s;
+                        }
+                        .btn-check:checked + .tag-btn {
+                            background: #2196F3;
+                            color: #fff;
+                            border-color: #2196F3;
+                        }
+                        </style>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('student.profile') }}" class="btn btn-outline-secondary">返回</a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

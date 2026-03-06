@@ -1,0 +1,368 @@
+{% extends 'base.html' %}
+
+{% block title %}活动管理 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}" class="text-decoration-none">管理面板</a></li>
+            <li class="breadcrumb-item active fw-medium" aria-current="page">活动管理</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div class="d-flex align-items-center">
+            <div class="bg-transparent bg-opacity-10 rounded-circle p-3 me-3">
+                <i class="fas fa-calendar-alt text-primary fs-4"></i>
+            </div>
+            <h2 class="mb-0 fw-bold">活动管理</h2>
+        </div>
+        <a href="{{ url_for('admin.create_activity') }}" class="btn btn-primary">
+            <i class="fas fa-plus-circle me-1"></i> 创建新活动
+        </a>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4 activities-card">
+        <div class="card-header bg-white p-0">
+            <ul class="nav nav-tabs card-header-tabs border-0">
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'all' %}active fw-medium{% endif %}" href="{{ url_for('admin.activities', status='all') }}">
+                        <i class="fas fa-list me-1"></i>全部
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'active' %}active fw-medium{% endif %}" href="{{ url_for('admin.activities', status='active') }}">
+                        <i class="fas fa-play-circle me-1"></i>进行中
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'completed' %}active fw-medium{% endif %}" href="{{ url_for('admin.activities', status='completed') }}">
+                        <i class="fas fa-check-circle me-1"></i>已结束
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'cancelled' %}active fw-medium{% endif %}" href="{{ url_for('admin.activities', status='cancelled') }}">
+                        <i class="fas fa-ban me-1"></i>已取消
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive" style="overflow-x: auto; overflow-y: visible;">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 25%;">活动标题</th>
+                            <th style="width: 15%;">地点</th>
+                            <th style="width: 15%;">开始时间</th>
+                            <th style="width: 15%;">报名截止</th>
+                            <th style="width: 8%;">状态</th>
+                            <th style="width: 8%;">报名人数</th>
+                            <th style="width: 14%;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for activity in activities.items %}
+                        <tr>
+                            <td class="fw-medium text-truncate" style="max-width: 200px;" title="{{ activity.title }}">
+                                {{ activity.title }}
+                                {% if activity.is_featured %}
+                                <span class="badge bg-warning ms-1" title="重点活动"><i class="fas fa-star"></i></span>
+                                {% endif %}
+                            </td>
+                            <td class="text-truncate" style="max-width: 120px;" title="{{ activity.location }}">{{ activity.location }}</td>
+                            <td>{{ display_datetime(activity.start_time) }}</td>
+                            <td>{{ display_datetime(activity.registration_deadline) }}</td>
+                            <td>
+                                <span class="badge {% if activity.status == 'active' %}bg-success{% elif activity.status == 'completed' %}bg-secondary{% else %}bg-danger{% endif %} rounded-pill">
+                                    {% if activity.status == 'active' %}进行中{% elif activity.status == 'completed' %}已结束{% else %}已取消{% endif %}
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                {% if activity.max_participants > 0 %}
+                                    <span class="badge bg-light text-dark border rounded-pill">
+                                        {{ registration_counts[activity.id] }}/{{ activity.max_participants }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-light text-dark border rounded-pill">
+                                        {{ registration_counts[activity.id] }} (不限)
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle action-btn" type="button" id="actionMenu{{ activity.id }}" data-bs-toggle="dropdown" aria-expanded="false" data-no-loading="true" data-no-global-loading="true">
+                                        操作
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="actionMenu{{ activity.id }}" style="min-width: 220px;">
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('admin.edit_activity', id=activity.id) }}" data-no-loading="true">
+                                                <i class="fas fa-edit text-primary me-2"></i>编辑活动
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('admin.activity_view', id=activity.id) }}" data-no-loading="true">
+                                                <i class="fas fa-eye text-info me-2"></i>查看详情
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('admin.activity_registrations', id=activity.id) }}" data-no-loading="true">
+                                                <i class="fas fa-users text-success me-2"></i>报名情况
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('admin.activity_reviews', id=activity.id) }}" data-no-loading="true">
+                                                <i class="fas fa-star text-warning me-2"></i>活动评价
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('admin.checkin_modal', id=activity.id) }}" data-no-loading="true">
+                                                <i class="fas fa-qrcode text-primary me-2"></i>签到管理
+                                            </a>
+                                        </li>
+                                        {% if activity.status == 'active' %}
+                                        <li>
+                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'completed'); return false;" data-no-loading="true" data-no-global-loading="true">
+                                                <i class="fas fa-check-circle text-success me-2"></i>标记为已结束
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'cancelled'); return false;" data-no-loading="true" data-no-global-loading="true">
+                                                <i class="fas fa-ban text-danger me-2"></i>取消活动
+                                            </button>
+                                        </li>
+                                        {% elif activity.status == 'completed' or activity.status == 'cancelled' %}
+                                        <li>
+                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'active'); return false;" data-no-loading="true" data-no-global-loading="true">
+                                                <i class="fas fa-play-circle text-success me-2"></i>恢复为进行中
+                                            </button>
+                                        </li>
+                                        {% endif %}
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <button class="dropdown-item text-danger" onclick="confirmDeleteActivity('{{ activity.id }}', '{{ activity.title }}', '{{ registration_counts.get(activity.id, 0) }}'); return false;" data-no-loading="true" data-no-global-loading="true">
+                                                <i class="fas fa-trash-alt text-danger me-2"></i>删除活动
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-5">
+                                <div class="bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                                    <i class="fas fa-calendar-times text-muted fs-2"></i>
+                                </div>
+                                <h5 class="text-muted mb-2">暂无活动</h5>
+                                <a href="{{ url_for('admin.create_activity') }}" class="btn btn-primary btn-sm mt-2">
+                                    <i class="fas fa-plus-circle me-1"></i> 创建新活动
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            {% if activities.pages > 1 %}
+            <div class="p-3">
+                <nav aria-label="Page navigation">
+                    <ul class="pagination justify-content-center mb-0">
+                        <li class="page-item {% if not activities.has_prev %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.prev_num) if activities.has_prev else '#' }}">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                        </li>
+                        
+                        {% for page_num in activities.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == activities.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=page_num) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <li class="page-item {% if not activities.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.next_num) if activities.has_next else '#' }}">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteActivityModal" tabindex="-1" aria-labelledby="deleteActivityModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold" id="deleteActivityModalLabel">
+                    <i class="fas fa-trash-alt text-danger me-2"></i>确认删除活动
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span id="deleteActivityWarning">确定要删除此活动吗？</span>
+                </div>
+                <p class="mb-0">删除后将标记为已取消，相关报名记录将保留。如需彻底删除，请点击"永久删除"。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDelete">
+                    <i class="fas fa-trash-alt me-1"></i>删除
+                </button>
+                <button type="button" class="btn btn-danger" id="confirmForceDelete">
+                    <i class="fas fa-trash-alt me-1"></i>永久删除
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认表单 -->
+<form id="deleteActivityForm" method="post" style="display: none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
+<form id="forceDeleteActivityForm" method="post" style="display: none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
+
+<script>
+function confirmDeleteActivity(activityId, activityTitle, registrationCount) {
+    // 设置模态框内容
+    document.getElementById('deleteActivityWarning').innerHTML = 
+        `确定要删除活动 <strong>${activityTitle}</strong> 吗？` + 
+        (registrationCount > 0 ? `<br><br>注意：该活动已有 ${registrationCount} 人报名。` : '');
+    
+    // 设置删除按钮点击事件
+    document.getElementById('confirmDelete').onclick = function() {
+        const form = document.getElementById('deleteActivityForm');
+        form.action = "{{ url_for('admin.delete_activity', id=0) }}".replace('0', activityId);
+        // 确保CSRF令牌存在
+        if (!form.querySelector('input[name="csrf_token"]')) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = "{{ csrf_token() }}";
+            form.appendChild(csrfInput);
+        }
+        form.submit();
+    };
+    
+    // 设置永久删除按钮点击事件
+    document.getElementById('confirmForceDelete').onclick = function() {
+        const form = document.getElementById('forceDeleteActivityForm');
+        form.action = "{{ url_for('admin.delete_activity', id=0) }}?force=true".replace('0', activityId);
+        // 确保CSRF令牌存在
+        if (!form.querySelector('input[name="csrf_token"]')) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = "{{ csrf_token() }}";
+            form.appendChild(csrfInput);
+        }
+        form.submit();
+    };
+    
+    // 显示模态框
+    const modalElement = document.getElementById('deleteActivityModal');
+    const modal = new bootstrap.Modal(modalElement);
+    
+    // 添加动画完成事件监听器
+    modalElement.addEventListener('shown.bs.modal', function() {
+        // 模态框完全显示后的操作
+        document.getElementById('confirmDelete').focus();
+    });
+    
+    modalElement.addEventListener('hidden.bs.modal', function() {
+        // 模态框完全隐藏后的操作
+        // 清空警告内容，避免闪烁
+        setTimeout(() => {
+            document.getElementById('deleteActivityWarning').innerHTML = '';
+        }, 300);
+    });
+    
+    modal.show();
+}
+
+// 添加自定义样式以优化模态框过渡效果
+document.addEventListener('DOMContentLoaded', function() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .modal.fade .modal-dialog {
+            transition: transform 0.3s ease-out, opacity 0.3s ease;
+            transform: translateY(-20px);
+            opacity: 0;
+        }
+        .modal.show .modal-dialog {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .modal-backdrop.fade {
+            transition: opacity 0.3s ease;
+        }
+        .btn-close:focus {
+            box-shadow: none;
+        }
+        
+        `;
+    document.head.appendChild(style);
+    
+    // 添加键盘导航支持
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            // 关闭所有打开的下拉菜单
+            document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                const button = menu.previousElementSibling;
+                if (button && button.classList.contains('dropdown-toggle')) {
+                    bootstrap.Dropdown.getInstance(button)?.hide();
+                }
+            });
+        }
+    });
+});
+
+// 添加更新活动状态的函数
+function updateActivityStatus(activityId, status) {
+    if (confirm(`确定要将活动状态更改为"${status === 'active' ? '进行中' : status === 'completed' ? '已结束' : '已取消'}"吗？`)) {
+        // 创建表单
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = "{{ url_for('admin.change_activity_status', id=0) }}".replace('0', activityId);
+        form.style.display = 'none';
+        
+        // 添加CSRF令牌
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = "{{ csrf_token() }}";
+        form.appendChild(csrfInput);
+        
+        // 添加状态参数
+        const statusInput = document.createElement('input');
+        statusInput.type = 'hidden';
+        statusInput.name = 'status';
+        statusInput.value = status;
+        form.appendChild(statusInput);
+        
+        // 添加表单到文档并提交
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+</script>
+{% endblock %}

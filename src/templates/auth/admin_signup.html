@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员注册 - 重庆师范大学智能社团+</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .singup {
+            display: block;
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 30px;
+            text-decoration: none;
+        }
+        
+        .inputBox1, .inputBox {
+            position: relative;
+            margin-bottom: 30px;
+        }
+        
+        .inputBox1 input, .inputBox input {
+            width: 100%;
+            padding: 15px 0;
+            font-size: 16px;
+            color: #333;
+            border: none;
+            border-bottom: 2px solid #ddd;
+            outline: none;
+            background: transparent;
+            transition: 0.3s;
+        }
+        
+        .inputBox1 span, .inputBox span {
+            position: absolute;
+            top: 15px;
+            left: 0;
+            font-size: 16px;
+            color: #999;
+            pointer-events: none;
+            transition: 0.3s;
+        }
+        
+        .inputBox1 input:focus ~ span,
+        .inputBox1 input:valid ~ span,
+        .inputBox input:focus ~ span,
+        .inputBox input:valid ~ span {
+            top: -5px;
+            font-size: 12px;
+            color: #667eea;
+        }
+        
+        .inputBox1 input:focus,
+        .inputBox input:focus {
+            border-bottom-color: #667eea;
+        }
+        
+        .enter {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 25px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 20px;
+        }
+        
+        .enter:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .alert {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 20px !important; backdrop-filter: blur(15px); border: none !important;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #1976d2;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .error {
+            color: #f44336;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        
+        .flash-message {
+            padding: 10px 15px;
+            border-radius: 20px !important; backdrop-filter: blur(15px); border: none !important;
+            margin-bottom: 10px;
+        }
+        
+        .flash-success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+        }
+        
+        .flash-error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <a class="singup">管理员注册</a>
+            
+            <div class="alert">
+                这是初始化页面，用于创建系统的第一个管理员账户。创建后，此页面将不再可用。
+            </div>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="flash-message flash-{{ category }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            
+            <form method="post" id="adminSignupForm" data-no-loading>
+                {{ form.csrf_token }}
+                
+                <div class="inputBox1">
+                    {{ form.email(required="required", id="email") }}
+                    <span class="user">Email</span>
+                    {% if form.email.errors %}
+                        <div class="error">
+                            {% for error in form.email.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div class="inputBox">
+                    {{ form.username(required="required", id="username") }}
+                    <span>Username</span>
+                    {% if form.username.errors %}
+                        <div class="error">
+                            {% for error in form.username.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div class="inputBox">
+                    {{ form.password(required="required", id="password") }}
+                    <span>Password</span>
+                    {% if form.password.errors %}
+                        <div class="error">
+                            {% for error in form.password.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <div class="inputBox">
+                    {{ form.confirm_password(required="required", id="confirm_password") }}
+                    <span>Confirm Password</span>
+                    {% if form.confirm_password.errors %}
+                        <div class="error">
+                            {% for error in form.confirm_password.errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <button type="submit" class="enter">Enter</button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // 表单验证和提交处理
+        document.getElementById('adminSignupForm').addEventListener('submit', function(e) {
+            const email = document.getElementById('email').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+            
+            if (!email || !username || !password || !confirmPassword) {
+                e.preventDefault();
+                alert('请填写所有字段');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                e.preventDefault();
+                alert('密码和确认密码不匹配');
+                return;
+            }
+            
+            // 显示加载状态
+            const submitBtn = document.querySelector('.enter');
+            submitBtn.textContent = '创建中...';
+            submitBtn.disabled = true;
+        });
+    </script>
+</body>
+</html>

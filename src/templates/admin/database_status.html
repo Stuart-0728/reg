@@ -1,0 +1,903 @@
+{% extends "base.html" %}
+
+{% block title %}数据库状态监控{% endblock %}
+
+{% block content %}
+<!-- CSRF Token for AJAX requests -->
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-database me-2"></i>数据库状态监控</h2>
+                <div>
+                    <button class="btn btn-outline-primary" onclick="refreshStatus()" data-no-loading="true">
+                        <i class="fas fa-sync-alt me-2"></i>刷新状态
+                    </button>
+                    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>返回管理面板
+                    </a>
+                </div>
+            </div>
+
+            <!-- 数据库状态概览 -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card border-primary">
+                        <div class="card-header bg-transparent text-dark">
+                            <h5 class="mb-0"><i class="fas fa-server me-2"></i>主数据库 (Render)</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="primary-db-status">
+                                <div class="text-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">检测中...</span>
+                                    </div>
+                                    <p class="mt-2">检测连接状态...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card border-info">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0"><i class="fas fa-cloud me-2"></i>备份数据库 (ClawCloud)</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="backup-db-status">
+                                <div class="text-center">
+                                    <div class="spinner-border text-info" role="status">
+                                        <span class="visually-hidden">检测中...</span>
+                                    </div>
+                                    <p class="mt-2">检测连接状态...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 同步操作 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-sync me-2"></i>数据库同步操作</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-success" onclick="syncToBackup()" id="syncToBackupBtn" data-no-loading="true">
+                                    <i class="fas fa-cloud-upload-alt me-2"></i>备份到ClawCloud
+                                </button>
+                                <small class="text-muted">将主数据库的数据备份到ClawCloud</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-warning" onclick="restoreFromBackup()" id="restoreFromBackupBtn" data-no-loading="true">
+                                    <i class="fas fa-brain me-2"></i>智能数据库迁移
+                                </button>
+                                <button class="btn btn-danger" onclick="forceFullRestore()" id="forceFullRestoreBtn" data-no-loading="true">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>强制完整恢复
+                                </button>
+                                <button class="btn btn-outline-warning btn-sm" onclick="showAdvancedRestore()" data-no-loading="true">
+                                    <i class="fas fa-cogs me-1"></i>高级恢复选项
+                                </button>
+                                <small class="text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    智能检测数据库状态：空数据库完整迁移，有数据安全同步
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 同步日志 -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>同步日志 <small class="text-muted">(最新10条)</small></h5>
+                </div>
+                <div class="card-body">
+                    <div id="sync-log">
+                        <p class="text-muted">暂无同步日志</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 高级恢复选项模态框 -->
+<div class="modal fade" id="advancedRestoreModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cogs me-2"></i>高级恢复选项
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>注意：</strong>高级恢复允许您选择要恢复的表，但请谨慎操作。
+                </div>
+
+                <h6>可恢复的表：</h6>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="roles" id="restore_roles" checked>
+                    <label class="form-check-label" for="restore_roles">
+                        <strong>roles</strong> - 用户角色配置
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="tags" id="restore_tags" checked>
+                    <label class="form-check-label" for="restore_tags">
+                        <strong>tags</strong> - 活动标签配置
+                    </label>
+                </div>
+
+                <hr>
+                <h6 class="text-danger">危险选项（不推荐）：</h6>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="users" id="restore_users">
+                    <label class="form-check-label text-danger" for="restore_users">
+                        <strong>users</strong> - 用户账户数据 ⚠️
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="activities" id="restore_activities">
+                    <label class="form-check-label text-danger" for="restore_activities">
+                        <strong>activities</strong> - 活动数据 ⚠️
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" onclick="executeAdvancedRestore()">
+                    <i class="fas fa-cloud-download-alt me-2"></i>执行恢复
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 刷新数据库状态
+function refreshStatus() {
+    checkDatabaseStatus();
+    loadSyncLog();
+}
+
+
+
+// 请求去重和频率控制
+let isCheckingStatus = false;
+let lastStatusCheck = 0;
+const STATUS_CHECK_COOLDOWN = 10000; // 10秒冷却时间
+
+// 检查数据库状态
+function checkDatabaseStatus() {
+    const now = Date.now();
+
+    // 防止重复请求
+    if (isCheckingStatus) {
+        console.log('数据库状态检查正在进行中，跳过此次请求');
+        return;
+    }
+
+    // 频率限制
+    if (now - lastStatusCheck < STATUS_CHECK_COOLDOWN) {
+        console.log('数据库状态检查频率限制，跳过此次请求');
+        return;
+    }
+
+    isCheckingStatus = true;
+    lastStatusCheck = now;
+
+    fetch('/admin/api/database-status')
+        .then(response => {
+            if (response.status === 429) {
+                throw new Error('请求过于频繁，请稍后再试');
+            }
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // 检查响应内容类型
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('服务器返回了非JSON响应');
+            }
+
+            return response.json();
+        })
+        .then(data => {
+            updatePrimaryStatus(data);
+            updateBackupStatus(data);
+        })
+        .catch(error => {
+            console.error('获取数据库状态失败:', error);
+
+            if (error.message.includes('429') || error.message.includes('频繁')) {
+                console.log('API请求频率过高，暂停状态检查');
+                // 暂停更长时间
+                lastStatusCheck = now + 30000; // 额外暂停30秒
+            } else if (!error.message.includes('JSON')) {
+                // 只在非JSON错误时显示错误信息
+                showError('获取数据库状态失败: ' + error.message);
+            }
+        })
+        .finally(() => {
+            isCheckingStatus = false;
+        });
+}
+
+// 更新主数据库状态
+function updatePrimaryStatus(data) {
+    const container = document.getElementById('primary-db-status');
+    const isConnected = data.primary;
+    const latency = data.primary_latency;
+    
+    let statusHtml = '';
+    if (isConnected) {
+        statusHtml = `
+            <div class="text-success">
+                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                <h6>连接正常</h6>
+                <p class="mb-0">延迟: ${latency ? latency.toFixed(2) + 'ms' : '未知'}</p>
+            </div>
+        `;
+    } else {
+        statusHtml = `
+            <div class="text-danger">
+                <i class="fas fa-times-circle fa-2x mb-2"></i>
+                <h6>连接失败</h6>
+                <p class="mb-0">无法连接到主数据库</p>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = statusHtml;
+}
+
+// 更新备份数据库状态
+function updateBackupStatus(data) {
+    const container = document.getElementById('backup-db-status');
+    const isConnected = data.backup;
+    const latency = data.backup_latency;
+    
+    let statusHtml = '';
+    if (data.backup_configured) {
+        if (isConnected) {
+            statusHtml = `
+                <div class="text-success">
+                    <i class="fas fa-check-circle fa-2x mb-2"></i>
+                    <h6>连接正常</h6>
+                    <p class="mb-0">延迟: ${latency ? latency.toFixed(2) + 'ms' : '未知'}</p>
+                </div>
+            `;
+        } else {
+            statusHtml = `
+                <div class="text-danger">
+                    <i class="fas fa-times-circle fa-2x mb-2"></i>
+                    <h6>连接失败</h6>
+                    <p class="mb-0">无法连接到备份数据库</p>
+                </div>
+            `;
+        }
+    } else {
+        statusHtml = `
+            <div class="text-warning">
+                <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                <h6>未配置</h6>
+                <p class="mb-0">备份数据库未配置</p>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = statusHtml;
+}
+
+// 全局变量存储当前备份任务
+let currentBackupTask = null;
+let backupStatusInterval = null;
+let backupStartTime = null;
+
+// 同步到备份数据库 - 异步版本
+function syncToBackup() {
+    const btn = document.getElementById('syncToBackupBtn');
+    const originalText = btn.innerHTML;
+
+    // 获取CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    if (!csrfToken) {
+        showError('无法获取CSRF token');
+        return;
+    }
+
+    // 启动异步备份
+    fetch('/admin/api/sync-to-backup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            currentBackupTask = data.task_id;
+            showBackupProgress();
+            startBackupStatusPolling(data.task_id);
+            showSuccess('备份任务已启动，正在后台执行...');
+        } else {
+            showError('启动备份失败: ' + (data.message || '未知错误'));
+        }
+    })
+    .catch(error => {
+        console.error('启动备份失败:', error);
+        showError('启动备份失败: ' + error.message);
+    });
+}
+
+// 显示备份进度界面
+function showBackupProgress() {
+    const btn = document.getElementById('syncToBackupBtn');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>备份中...';
+    btn.disabled = true;
+
+    // 创建进度显示区域
+    const progressContainer = document.getElementById('backup-progress-container');
+    if (!progressContainer) {
+        const container = document.createElement('div');
+        container.id = 'backup-progress-container';
+        container.className = 'mt-3';
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-cloud-upload-alt me-2"></i>备份进度
+                    </h6>
+                    <div class="progress mb-2">
+                        <div id="backup-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated"
+                             role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div id="backup-status-text" class="text-muted small">准备开始...</div>
+                    <div id="backup-details" class="mt-2 small text-muted"></div>
+                </div>
+            </div>
+        `;
+        btn.parentNode.appendChild(container);
+    }
+}
+
+// 开始轮询备份状态
+function startBackupStatusPolling(taskId) {
+    if (backupStatusInterval) {
+        clearInterval(backupStatusInterval);
+    }
+
+    backupStartTime = Date.now();
+
+    backupStatusInterval = setInterval(() => {
+        // 检查超时（5分钟）
+        if (Date.now() - backupStartTime > 300000) {
+            console.log('备份轮询超时，停止轮询');
+            stopBackupStatusPolling();
+            handleBackupComplete({
+                status: 'completed',
+                progress: 100,
+                total_rows: 0,
+                error: '轮询超时，但备份可能已完成'
+            });
+            return;
+        }
+
+        checkBackupStatus(taskId);
+    }, 2000); // 每2秒检查一次
+}
+
+// 检查备份状态
+function checkBackupStatus(taskId) {
+    fetch(`/admin/api/backup-status/${taskId}`)
+    .then(response => {
+        if (!response.ok) {
+            if (response.status === 404) {
+                console.log('任务还未创建，继续等待...');
+                return null;
+            }
+            if (response.status === 523) {
+                console.log('服务器暂时不可达，可能备份已完成');
+                // 523错误可能表示备份已完成，停止轮询
+                stopBackupStatusPolling();
+                handleBackupComplete({
+                    status: 'completed',
+                    progress: 100,
+                    total_rows: 0,
+                    error: null
+                });
+                return null;
+            }
+            throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data && data.success) {
+            console.log('备份状态:', data.status);
+            updateBackupProgress(data.status);
+
+            if (data.status.status === 'completed' || data.status.status === 'failed') {
+                stopBackupStatusPolling();
+                // 延迟一点再处理完成，确保最后的进度更新显示
+                setTimeout(() => {
+                    handleBackupComplete(data.status);
+                }, 1000);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('获取备份状态失败:', error);
+    });
+}
+
+// 更新备份进度显示
+function updateBackupProgress(status) {
+    console.log('更新进度:', status);
+
+    const progressBar = document.getElementById('backup-progress-bar');
+    const statusText = document.getElementById('backup-status-text');
+    const detailsText = document.getElementById('backup-details');
+
+    console.log('进度元素:', {
+        progressBar: !!progressBar,
+        statusText: !!statusText,
+        detailsText: !!detailsText
+    });
+
+    // 如果元素不存在，可能已经被移除，直接返回
+    if (!progressBar && !statusText && !detailsText) {
+        console.log('进度元素已被移除，跳过更新');
+        return;
+    }
+
+    if (progressBar) {
+        const progress = status.progress || 0;
+        progressBar.style.width = progress + '%';
+        progressBar.textContent = progress + '%';
+        console.log('设置进度条:', progress + '%');
+    }
+
+    if (statusText) {
+        let statusMessage = '';
+        if (status.current_table) {
+            statusMessage = `正在同步: ${status.current_table} (${status.completed_tables || 0}/${status.total_tables || 0})`;
+        } else {
+            statusMessage = status.status === 'running' ? '正在执行...' : '准备中...';
+        }
+        statusText.textContent = statusMessage;
+        console.log('设置状态文本:', statusMessage);
+    }
+
+    if (detailsText) {
+        const totalRows = status.total_rows || 0;
+        if (totalRows > 0) {
+            detailsText.textContent = `已处理 ${totalRows} 行数据`;
+        } else {
+            detailsText.textContent = '准备中...';
+        }
+        console.log('设置详情文本:', detailsText.textContent);
+    }
+}
+
+// 停止状态轮询
+function stopBackupStatusPolling() {
+    if (backupStatusInterval) {
+        clearInterval(backupStatusInterval);
+        backupStatusInterval = null;
+    }
+}
+
+// 处理备份完成
+function handleBackupComplete(status) {
+    console.log('处理备份完成:', status);
+
+    // 确保停止轮询
+    stopBackupStatusPolling();
+
+    const btn = document.getElementById('syncToBackupBtn');
+    const progressContainer = document.getElementById('backup-progress-container');
+
+    // 恢复按钮状态
+    if (btn) {
+        btn.innerHTML = '<i class="fas fa-cloud-upload-alt me-2"></i>备份到ClawCloud';
+        btn.disabled = false;
+    }
+
+    // 移除进度显示
+    if (progressContainer) {
+        progressContainer.remove();
+    }
+
+    // 显示结果
+    if (status.status === 'completed') {
+        const rows = status.total_rows || 0;
+        showSuccess(`备份成功完成！${rows > 0 ? `同步了 ${rows} 行数据` : '备份已完成'}`);
+        loadSyncLog();
+    } else {
+        showError('备份失败: ' + (status.error || '未知错误'));
+    }
+
+    currentBackupTask = null;
+    backupStartTime = null;
+}
+
+// 智能数据库迁移
+function restoreFromBackup() {
+    const confirmMessage = `智能数据库迁移
+
+🧠 智能检测策略：
+系统会检测业务数据量，自动选择最佳迁移策略
+
+📊 新部署数据库（少量基础数据）：
+• 检测标准：无活动数据，用户≤2个，无业务关联
+• 完整迁移：智能处理已存在的管理员账号
+• 迁移内容：角色(UPSERT)→标签→用户(去重)→活动→关联数据
+• 适用场景：Render数据库过期后的全新部署
+
+📊 有业务数据库（现有系统）：
+• 检测标准：有活动数据或较多用户
+• 安全同步：只同步配置数据（角色、标签）
+• 保护策略：不影响现有用户和活动数据
+• 适用场景：配置同步，数据保护
+
+✅ 智能保障：
+• 自动识别管理员账号，避免冲突
+• 用户去重：只迁移不存在的用户
+• 角色UPSERT：更新而不覆盖
+• 详细的操作状态反馈
+
+确定要执行智能数据库迁移吗？`;
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    const btn = document.getElementById('restoreFromBackupBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>恢复中...';
+    btn.disabled = true;
+    
+    // 获取CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    if (!csrfToken) {
+        showError('无法获取CSRF token');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        return;
+    }
+
+    // 创建AbortController用于超时控制
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3分钟超时
+
+    fetch('/admin/api/restore-from-backup', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        signal: controller.signal
+    })
+    .then(response => {
+        clearTimeout(timeoutId);
+
+        // 检查响应状态
+        if (response.status === 524) {
+            throw new Error('请求超时，但恢复可能仍在进行中，请稍后查看同步日志');
+        }
+
+        if (response.status === 523) {
+            throw new Error('服务器暂时不可达，恢复可能仍在后台进行，请稍后查看同步日志');
+        }
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        // 检查响应内容类型
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('服务器返回了非JSON响应，可能是HTML错误页面');
+        }
+
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showSuccess('数据已从ClawCloud成功恢复');
+            loadSyncLog();
+        } else {
+            showError('恢复失败: ' + (data.message || '未知错误'));
+        }
+    })
+    .catch(error => {
+        clearTimeout(timeoutId);
+        console.error('恢复失败:', error);
+
+        if (error.name === 'AbortError') {
+            showError('恢复请求超时，但操作可能仍在后台进行，请稍后查看同步日志');
+        } else if (error.message.includes('524') || error.message.includes('超时')) {
+            showError('恢复请求超时，请稍后查看同步日志确认结果');
+        } else if (error.message.includes('523') || error.message.includes('不可达')) {
+            showError('服务器暂时不可达，恢复可能仍在后台进行，请稍后查看同步日志');
+        } else if (error.message.includes('JSON')) {
+            showError('服务器响应格式错误，请检查服务器状态');
+        } else {
+            showError('恢复操作失败: ' + error.message);
+        }
+
+        // 超时后刷新同步日志，可能操作已完成
+        setTimeout(() => {
+            loadSyncLog();
+        }, 5000);
+    })
+    .finally(() => {
+        clearTimeout(timeoutId);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+
+// 强制完整恢复（适用于Render数据库重置后）
+function forceFullRestore() {
+    const confirmMessage = `⚠️ 强制完整恢复 - Render数据库重置专用
+
+🔄 完整恢复策略：
+• 适用场景：Render免费数据库每月重置后
+• 恢复范围：所有表的完整数据
+• 处理方式：清空现有数据，完整导入备份
+• 外键处理：临时禁用约束，按依赖顺序恢复
+
+📊 恢复内容包括：
+✅ 基础配置：角色、标签
+✅ 用户数据：所有用户（智能处理管理员）
+✅ 业务数据：活动、报名、签到记录
+✅ 关联数据：标签关联、用户关联
+✅ 系统数据：消息、通知、日志等
+
+⚠️ 重要警告：
+• 此操作会清空并重建所有表数据
+• 仅适用于全新的Render数据库
+• 如果当前数据库有重要数据，请使用"智能数据库迁移"
+• 操作不可逆，请确保备份数据库数据完整
+
+确定要执行强制完整恢复吗？`;
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    const btn = document.getElementById('forceFullRestoreBtn');
+    const originalText = btn.innerHTML;
+
+    // 获取CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    if (!csrfToken) {
+        showError('无法获取CSRF token');
+        return;
+    }
+
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>强制恢复中...';
+    btn.disabled = true;
+
+    // 设置超时（10分钟）
+    const timeoutId = setTimeout(() => {
+        showError('强制完整恢复超时，但操作可能仍在后台进行');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }, 600000);
+
+    fetch('/admin/api/force-full-restore', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showSuccess(data.message || '强制完整恢复成功！所有数据已从备份数据库恢复。');
+            // 刷新页面状态
+            setTimeout(() => {
+                checkDatabaseStatus();
+                loadSyncLog();
+            }, 2000);
+        } else {
+            showError('强制完整恢复失败: ' + (data.message || '未知错误'));
+        }
+    })
+    .catch(error => {
+        console.error('强制完整恢复失败:', error);
+        if (error.message.includes('timeout') || error.message.includes('fetch')) {
+            showError('网络超时，但强制完整恢复可能仍在进行中，请查看同步日志');
+        } else {
+            showError('强制完整恢复失败: ' + error.message);
+        }
+
+        // 超时后刷新同步日志，可能操作已完成
+        setTimeout(() => {
+            loadSyncLog();
+        }, 5000);
+    })
+    .finally(() => {
+        clearTimeout(timeoutId);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    });
+}
+
+// 显示高级恢复选项
+function showAdvancedRestore() {
+    const modal = new bootstrap.Modal(document.getElementById('advancedRestoreModal'));
+    modal.show();
+}
+
+// 执行高级恢复
+function executeAdvancedRestore() {
+    const selectedTables = [];
+    const checkboxes = document.querySelectorAll('#advancedRestoreModal input[type="checkbox"]:checked');
+
+    checkboxes.forEach(checkbox => {
+        selectedTables.push(checkbox.value);
+    });
+
+    if (selectedTables.length === 0) {
+        alert('请至少选择一个要恢复的表');
+        return;
+    }
+
+    const dangerousTables = selectedTables.filter(table => ['users', 'activities'].includes(table));
+    let confirmMessage = `确定要恢复以下表吗？\n\n选中的表：${selectedTables.join(', ')}`;
+
+    if (dangerousTables.length > 0) {
+        confirmMessage += `\n\n⚠️ 警告：您选择了危险选项 (${dangerousTables.join(', ')})，这可能会覆盖重要数据！`;
+    }
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    // 关闭模态框
+    const modal = bootstrap.Modal.getInstance(document.getElementById('advancedRestoreModal'));
+    modal.hide();
+
+    // 执行恢复（这里可以扩展为支持选择性恢复的API）
+    restoreFromBackup();
+}
+
+// 加载同步日志
+function loadSyncLog() {
+    fetch('/admin/api/sync-log')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('sync-log');
+            if (data.logs && data.logs.length > 0) {
+                let logHtml = '<div class="table-responsive"><table class="table table-sm">';
+                logHtml += '<thead><tr><th>时间 <i class="fas fa-sort-down text-muted" title="最新在前"></i></th><th>操作</th><th>状态</th><th>详情</th></tr></thead><tbody>';
+                
+                // 后端已经按时间倒序排列，直接取前10条即可（最新的在前）
+                data.logs.slice(0, 10).forEach(log => {
+                    const statusClass = log.status === '成功' ? 'text-success' :
+                                       log.status === '失败' ? 'text-danger' : 'text-warning';
+
+                    // 修复时间显示问题 - 正确处理北京时间
+                    let beijingTime;
+                    try {
+                        // 后端已经生成了包含时区信息的ISO格式时间戳
+                        // 直接解析即可，浏览器会自动处理时区转换
+                        let timestamp = new Date(log.timestamp);
+                        
+                        // 验证时间戳是否有效
+                        if (isNaN(timestamp.getTime())) {
+                            throw new Error('无法解析时间戳');
+                        }
+
+                        // 显示为北京时间格式
+                        beijingTime = timestamp.toLocaleString('zh-CN', {
+                            timeZone: 'Asia/Shanghai',
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: false
+                        });
+
+
+
+                    } catch (e) {
+                        console.error('时间解析失败:', log.timestamp, e);
+                        // 如果所有方法都失败，直接显示原始时间戳
+                        beijingTime = log.timestamp;
+                    }
+
+                    logHtml += `
+                        <tr>
+                            <td>${beijingTime}</td>
+                            <td>${log.action}</td>
+                            <td class="${statusClass}">${log.status}</td>
+                            <td>${log.details || '-'}</td>
+                        </tr>
+                    `;
+                });
+                
+                logHtml += '</tbody></table></div>';
+                container.innerHTML = logHtml;
+            } else {
+                container.innerHTML = '<p class="text-muted">暂无同步日志</p>';
+            }
+        })
+        .catch(error => {
+            console.error('加载同步日志失败:', error);
+        });
+}
+
+// 显示成功消息
+function showSuccess(message) {
+    if (typeof showToast === 'function') {
+        showToast(message, 'success');
+    } else {
+        alert(message);
+    }
+}
+
+// 显示错误消息
+function showError(message) {
+    if (typeof showToast === 'function') {
+        showToast(message, 'error');
+    } else {
+        alert(message);
+    }
+}
+
+// 页面加载时检查状态
+document.addEventListener('DOMContentLoaded', function() {
+    checkDatabaseStatus();
+    loadSyncLog();
+
+    // 每2分钟自动刷新状态（减少API请求频率）
+    setInterval(checkDatabaseStatus, 120000);
+
+    // 页面可见性变化时检查状态
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+            // 页面变为可见时，延迟5秒后检查状态
+            setTimeout(checkDatabaseStatus, 5000);
+        }
+    });
+});
+</script>
+{% endblock %}

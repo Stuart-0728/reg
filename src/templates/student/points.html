@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block title %}我的积分 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body text-center">
+                    <div class="mb-3">
+                        <i class="fas fa-star fa-4x text-warning"></i>
+                    </div>
+                    <h2 class="display-4">{{ student_info.points or 0 }}</h2>
+                    <p class="text-muted">当前积分</p>
+                    <a href="{{ url_for('student.points_rank') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-trophy me-1"></i>查看积分排行榜
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-transparent text-dark">
+                    <h5 class="mb-0">积分历史</h5>
+                </div>
+                <div class="card-body">
+                    {% if points_history %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>时间</th>
+                                        <th>积分变动</th>
+                                        <th>原因</th>
+                                        <th>相关活动</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for history in points_history %}
+                                    <tr>
+                                        <td>{{ display_datetime(history.created_at, None, '%Y-%m-%d %H:%M') }}</td>
+                                        <td>
+                                            {% if history.points > 0 %}
+                                                <span class="text-success">+{{ history.points }}</span>
+                                            {% else %}
+                                                <span class="text-danger">{{ history.points }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ history.reason }}</td>
+                                        <td>
+                                            {% if history.activity_id %}
+                                                <a href="{{ url_for('student.activity_detail', id=history.activity_id) }}">查看活动</a>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-center text-muted py-3">暂无积分记录</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">积分规则</h5>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li>参加普通活动：获得10分（或活动指定积分）</li>
+                        <li>参加重点活动：获得20分（或活动指定积分）</li>
+                        <li>提交活动评价：获得5分</li>
+                        <li>其他积分由管理员根据实际情况调整</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

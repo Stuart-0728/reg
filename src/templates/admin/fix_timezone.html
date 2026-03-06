@@ -1,0 +1,83 @@
+{% extends 'admin/dashboard.html' %}
+
+{% block title %}修复时区问题 - 管理面板{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="card">
+        <div class="card-header bg-transparent text-dark">
+            <h3 class="mb-0">修复时区问题</h3>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info">
+                <h5 class="alert-heading">时区问题说明</h5>
+                <p>在PostgreSQL数据库中，时区处理非常重要。本页面将帮助您修复系统中可能存在的时区问题。</p>
+                <hr>
+                <p>当前检测到的问题：</p>
+                <ul>
+                    <li>活动时间显示可能不正确</li>
+                    <li>图片上传路径可能存在问题</li>
+                    <li>数据库中的时区信息可能不一致</li>
+                </ul>
+            </div>
+            
+            <form action="{{ url_for('admin.fix_timezone') }}" method="post" onsubmit="return confirm('确定要执行时区修复操作吗？这将修改数据库中的时间数据。')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="confirm" value="1">
+                
+                <div class="mb-3">
+                    <h5>选择要修复的问题：</h5>
+                    
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="fix_activities" name="fix_activities" checked>
+                        <label class="form-check-label" for="fix_activities">
+                            修复活动时间 (start_time, end_time, registration_deadline)
+                        </label>
+                    </div>
+                    
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="fix_posters" name="fix_posters" checked>
+                        <label class="form-check-label" for="fix_posters">
+                            修复活动海报路径问题 (poster_image)
+                        </label>
+                    </div>
+                    
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="fix_notifications" name="fix_notifications" checked>
+                        <label class="form-check-label" for="fix_notifications">
+                            修复通知时间 (created_at, expiry_date)
+                        </label>
+                    </div>
+                    
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="fix_other_dates" name="fix_other_dates" checked>
+                        <label class="form-check-label" for="fix_other_dates">
+                            修复其他日期时间字段 (created_at, updated_at, etc.)
+                        </label>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-tools me-2"></i>执行修复
+                </button>
+                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary ms-2">
+                    <i class="fas fa-arrow-left me-2"></i>返回面板
+                </a>
+            </form>
+            
+            {% if messages %}
+            <div class="mt-4">
+                <h5>修复结果：</h5>
+                <div class="alert alert-success">
+                    <ul class="mb-0">
+                        {% for message in messages %}
+                        <li>{{ message }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

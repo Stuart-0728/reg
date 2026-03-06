@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+
+{% block title %}活动报名情况 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>活动报名情况</h2>
+            <h5 class="text-muted">{{ activity.title }}</h5>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('admin.export_activity_registrations', id=activity.id) }}" class="btn btn-success">
+                <i class="fas fa-file-excel me-2"></i>导出Excel
+            </a>
+            <a href="{{ url_for('admin.activities') }}" class="btn btn-secondary ms-2">
+                <i class="fas fa-arrow-left me-2"></i>返回
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">活动信息</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>地点：</strong>{{ activity.location }}</p>
+                    <p><strong>开始时间：</strong>{{ display_datetime(activity.start_time) }}</p>
+                    <p><strong>结束时间：</strong>{{ display_datetime(activity.end_time) }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>报名截止：</strong>{{ display_datetime(activity.registration_deadline) }}</p>
+                    <p><strong>最大人数：</strong>{{ activity.max_participants if activity.max_participants > 0 else '不限' }}</p>
+                    <p><strong>状态：</strong>
+                        {% if activity.status == 'active' %}
+                            <span class="badge bg-success">进行中</span>
+                        {% elif activity.status == 'completed' %}
+                            <span class="badge bg-secondary">已结束</span>
+                        {% else %}
+                            <span class="badge bg-danger">已取消</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">报名统计</h5>
+        </div>
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-4">
+                    <div class="card bg-transparent text-dark">
+                        <div class="card-body">
+                            <h3 class="display-4">{{ registered_count }}</h3>
+                            <p class="mb-0">已报名</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white">
+                        <div class="card-body">
+                            <h3 class="display-4">{{ attended_count }}</h3>
+                            <p class="mb-0">已参加</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-danger text-white">
+                        <div class="card-body">
+                            <h3 class="display-4">{{ cancelled_count }}</h3>
+                            <p class="mb-0">已取消</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">报名学生列表</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>姓名</th>
+                            <th>学号</th>
+                            <th>年级</th>
+                            <th>学院</th>
+                            <th>专业</th>
+                            <th>联系方式</th>
+                            <th>报名时间</th>
+                            <th>状态</th>
+                            <th>积分</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reg in registrations %}
+                            <tr>
+                                <td>{{ reg.real_name }}</td>
+                                <td>{{ reg.student_id }}</td>
+                                <td>{{ reg.grade }}</td>
+                                <td>{{ reg.college }}</td>
+                                <td>{{ reg.major }}</td>
+                                <td>{{ reg.phone }}</td>
+                                <td>{{ display_datetime(reg.register_time) }}</td>
+                                <td>
+                                    {% if reg.status == 'registered' %}
+                                        <span class="badge bg-transparent">已报名</span>
+                                    {% elif reg.status == 'attended' %}
+                                        <span class="badge bg-success">已参加</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">已取消</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ reg.points }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        {% if reg.status == 'registered' %}
+                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                {{ form.hidden_tag() }}
+                                                <input type="hidden" name="status" value="attended">
+                                                <button type="submit" class="btn btn-outline-success" title="标记为已参加">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            </form>
+                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                {{ form.hidden_tag() }}
+                                                <input type="hidden" name="status" value="cancelled">
+                                                <button type="submit" class="btn btn-outline-danger" title="标记为已取消">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </form>
+                                        {% elif reg.status == 'attended' %}
+                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                {{ form.hidden_tag() }}
+                                                <input type="hidden" name="status" value="registered">
+                                                <button type="submit" class="btn btn-outline-primary" title="恢复为已报名">
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                            </form>
+                                        {% elif reg.status == 'cancelled' %}
+                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                {{ form.hidden_tag() }}
+                                                <input type="hidden" name="status" value="registered">
+                                                <button type="submit" class="btn btn-outline-primary" title="恢复为已报名">
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                            </form>
+                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                {{ form.hidden_tag() }}
+                                                <input type="hidden" name="status" value="attended">
+                                                <button type="submit" class="btn btn-outline-success" title="标记为已参加">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="10" class="text-center">暂无报名信息</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 为所有状态更新表单添加确认处理
+    const statusForms = document.querySelectorAll('form[action*="update_registration_status"]');
+    statusForms.forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            const statusInput = form.querySelector('input[name="status"]');
+            if (statusInput) {
+                const status = statusInput.value;
+                let message = '';
+                switch(status) {
+                    case 'attended':
+                        message = '确定要标记为已参加吗？';
+                        break;
+                    case 'cancelled':
+                        message = '确定要标记为已取消吗？';
+                        break;
+                    case 'registered':
+                        message = '确定要恢复为已报名状态吗？';
+                        break;
+                    default:
+                        message = '确定要更新状态吗？';
+                }
+                if (!confirm(message)) {
+                    e.preventDefault();
+                }
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

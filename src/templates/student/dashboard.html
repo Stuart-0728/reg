@@ -1,141 +1,237 @@
 {% extends 'base.html' %}
 
-{% block title %}学生面板 - 重庆师范大学师能素质协会{% endblock %}
+{% block title %}个人面板 - 重庆师范大学智能社团+{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <h2 class="mb-3">学生控制面板</h2>
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">欢迎回来，{{ current_user.student_info.real_name }}</h5>
-                    <p class="card-text">您可以在这里浏览活动、报名参加和管理个人信息。</p>
+<div class="container py-4">
+    <div class="row g-4 mb-4">
+        <!-- 个人信息卡片 -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 text-center">
+                    <div class="mb-4 position-relative">
+                        <div class="bg-transparent bg-opacity-10 rounded-circle mx-auto" style="width: 100px; height: 100px; display: flex; align-items: center; justify-content: center;">
+                            <i class="fas fa-user-circle text-primary" style="font-size: 60px;"></i>
+                        </div>
+                        <div class="position-absolute bottom-0 end-0 translate-middle-x">
+                            <span class="badge bg-success rounded-pill">在线</span>
+                        </div>
+                    </div>
+                    <h4 class="card-title fw-bold mb-1">{{ student.real_name }}</h4>
+                    <p class="text-muted mb-3">{{ student.student_id }}</p>
+                    
+                    <div class="d-flex justify-content-center mb-4">
+                        <div class="px-3 border-end">
+                            <h5 class="fw-bold mb-1">{{ student.points or 0 }}</h5>
+                            <small class="text-muted">积分</small>
+                        </div>
+                        <div class="px-3">
+                            <h5 class="fw-bold mb-1">{{ registered_activities|length if registered_activities else 0 }}</h5>
+                            <small class="text-muted">活动</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="fas fa-university text-muted me-2"></i>
+                            <span>{{ student.college }}</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="fas fa-graduation-cap text-muted me-2"></i>
+                            <span>{{ student.major }}</span>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-calendar-alt text-muted me-2"></i>
+                            <span>{{ student.grade }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 mt-4">
+                        <a href="{{ url_for('student.edit_profile') }}" class="btn btn-outline-primary d-flex align-items-center justify-content-center">
+                            <i class="fas fa-edit me-2"></i>编辑资料
+                        </a>
+                        <a href="{{ url_for('student.my_activities') }}" class="btn btn-outline-secondary d-flex align-items-center justify-content-center">
+                            <i class="fas fa-list me-2"></i>我的活动
+                        </a>
+                        <a href="{{ url_for('student.points') }}" class="btn btn-outline-success d-flex align-items-center justify-content-center">
+                            <i class="fas fa-star me-2"></i>我的积分
+                        </a>
                 </div>
             </div>
         </div>
-    </div>
-
-    <!-- 通知区域 -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
-                        <i class="fas fa-bell me-2"></i>通知
-                    </h5>
+        
+            <!-- 通知区域 - 移至侧边栏并缩小 -->
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-header bg-white border-0 p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-warning bg-opacity-10 rounded-circle p-2 me-2">
+                            <i class="fas fa-bell text-warning"></i>
+                            </div>
+                            <h6 class="fw-bold mb-0">通知</h6>
+                        </div>
+                        <a href="{{ url_for('student.notifications') }}" class="btn btn-sm btn-outline-warning">
+                            查看全部
+                        </a>
+                    </div>
                 </div>
-                <div class="card-body notification-container">
-                    <p class="text-center">
-                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        正在加载通知...
-                    </p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 已报名活动 -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">我的活动</h5>
-                    <a href="{{ url_for('student.my_activities') }}" class="btn btn-sm btn-outline-primary">查看全部</a>
-                </div>
-                <div class="card-body">
-                    {% if registered_activities %}
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr>
-                                        <th>活动名称</th>
-                                        <th>地点</th>
-                                        <th>开始时间</th>
-                                        <th>状态</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for activity in registered_activities %}
-                                    <tr>
-                                        <td>{{ activity.title }}</td>
-                                        <td>{{ activity.location }}</td>
-                                        <td>{{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
-                                        <td>
-                                            {% if activity.start_time > now %}
-                                                <span class="badge bg-info">未开始</span>
-                                            {% elif activity.end_time > now %}
-                                                <span class="badge bg-success">进行中</span>
+                <div class="card-body p-0" style="max-height: 200px; overflow-y: auto;">
+                    {% if notifications %}
+                        <div class="list-group list-group-flush">
+                            {% for notification in notifications %}
+                                <a href="{{ notification.link }}" class="list-group-item list-group-item-action border-0 p-2">
+                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                        <div class="text-truncate">
+                                            {% if notification.is_important %}
+                                                <span class="badge bg-danger text-white me-1">重要</span>
                                             {% else %}
-                                                <span class="badge bg-secondary">已结束</span>
+                                                <span class="badge bg-success text-white me-1">新</span>
                                             {% endif %}
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary">
-                                                查看详情
-                                            </a>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <div class="alert alert-info">
-                            您还没有报名任何活动，<a href="{{ url_for('student.activities') }}">浏览活动</a>并报名参加吧！
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 即将开始的活动 -->
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">推荐活动</h5>
-                    <a href="{{ url_for('student.activities') }}" class="btn btn-sm btn-outline-primary">浏览全部</a>
-                </div>
-                <div class="card-body">
-                    {% if upcoming_activities %}
-                        <div class="row row-cols-1 row-cols-md-3 g-4">
-                            {% for activity in upcoming_activities %}
-                                <div class="col">
-                                    <div class="card h-100 activity-card">
-                                        {% if activity.registration_deadline < now %}
-                                            <div class="activity-badge bg-danger text-white">已截止</div>
-                                        {% elif activity.start_time < now %}
-                                            <div class="activity-badge bg-warning text-dark">进行中</div>
-                                        {% else %}
-                                            <div class="activity-badge bg-success text-white">可报名</div>
-                                        {% endif %}
-                                        <div class="card-body">
-                                            <h5 class="card-title">{{ activity.title }}</h5>
-                                            <p class="card-text text-muted">
-                                                <i class="fas fa-map-marker-alt me-1"></i>{{ activity.location }}
-                                            </p>
-                                            <p class="card-text">{{ activity.description|truncate(100) }}</p>
-                                        </div>
-                                        <div class="card-footer">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <small class="text-muted">
-                                                    <i class="fas fa-clock me-1"></i>{{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}
-                                                </small>
-                                                <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary">查看详情</a>
-                                            </div>
+                                            <small>{{ notification.message }}</small>
                                         </div>
                                     </div>
-                                </div>
+                                </a>
                             {% endfor %}
                         </div>
                     {% else %}
-                        <div class="alert alert-info">
-                            暂无推荐活动，请稍后查看。
+                        <div class="p-3 text-center">
+                            <small class="text-muted">暂无通知</small>
                         </div>
                     {% endif %}
+            </div>
+        </div>
+    </div>
+
+        <div class="col-lg-8">
+    <!-- 已报名活动 -->
+            <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 p-4">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-transparent bg-opacity-10 rounded-circle p-2 me-2">
+                            <i class="fas fa-clipboard-list text-primary"></i>
+                        </div>
+                        <h5 class="fw-bold mb-0">我的活动</h5>
+                    </div>
+                    <a href="{{ url_for('student.my_activities') }}" class="btn btn-sm btn-outline-primary">查看全部</a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if registered_activities %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">活动名称</th>
+                                    <th>地点</th>
+                                    <th>开始时间</th>
+                                    <th>状态</th>
+                                    <th class="pe-4">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for activity in registered_activities[:5] %}
+                                <tr>
+                                    <td class="ps-4 fw-medium">{{ activity.title }}</td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-map-marker-alt text-muted me-2"></i>
+                                            <span>{{ activity.location }}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-clock text-muted me-2"></i>
+                                            <span>{{ display_datetime(activity.start_time, None, '%Y-%m-%d %H:%M') }}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if safe_greater_than(activity.start_time, now) %}
+                                            <span class="badge bg-info rounded-pill">未开始</span>
+                                        {% elif safe_greater_than(activity.end_time, now) %}
+                                            <span class="badge bg-success rounded-pill">进行中</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary rounded-pill">已结束</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="pe-4">
+                                        <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye me-1"></i>查看
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="p-4 text-center">
+                        <div class="bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                            <i class="fas fa-calendar-times text-muted fs-4"></i>
+                        </div>
+                        <p class="text-muted mb-2">您还没有报名任何活动</p>
+                        <a href="{{ url_for('student.activities') }}" class="btn btn-primary">
+                            <i class="fas fa-search me-1"></i>浏览活动
+                        </a>
+                    </div>
+                {% endif %}
+        </div>
+    </div>
+
+            <!-- 推荐活动 - 改为卡片网格布局 -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-0 p-4">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-success bg-opacity-10 rounded-circle p-2 me-2">
+                            <i class="fas fa-thumbs-up text-success"></i>
+                        </div>
+                        <h5 class="fw-bold mb-0">推荐活动</h5>
+                    </div>
+                    <a href="{{ url_for('student.activities') }}" class="btn btn-sm btn-outline-primary">浏览全部</a>
+                </div>
+            </div>
+                <div class="card-body p-3">
+                {% if recommended_activities %}
+                        <div class="row row-cols-1 row-cols-md-2 g-3">
+                            {% for activity in recommended_activities[:4] %}
+                            <div class="col">
+                                    <div class="card h-100 border shadow-sm">
+                                        <div class="card-body p-3">
+                                            <h6 class="card-title fw-bold mb-2 text-truncate">{{ activity.title }}</h6>
+                                            <div class="d-flex align-items-center text-muted mb-2 small">
+                                                <i class="fas fa-map-marker-alt me-1"></i>
+                                                <span class="text-truncate">{{ activity.location }}</span>
+                                            </div>
+                                            <div class="d-flex align-items-center text-muted mb-2 small">
+                                                <i class="fas fa-clock me-1"></i>
+                                                <span>{{ display_datetime(activity.start_time, None, '%Y-%m-%d %H:%M') }}</span>
+                                            </div>
+                                            {% if safe_less_than(activity.end_time, now) %}
+                                                <span class="badge bg-secondary">已结束</span>
+                                    {% elif safe_less_than(activity.start_time, now) %}
+                                                <span class="badge bg-success">进行中</span>
+                                    {% else %}
+                                                <span class="badge bg-info">未开始</span>
+                                    {% endif %}
+                                        </div>
+                                        <div class="card-footer bg-white border-0 p-3 pt-0">
+                                            <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary w-100">
+                                                查看详情
+                                            </a>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <div class="bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                            <i class="fas fa-calendar-alt text-muted fs-4"></i>
+                        </div>
+                        <p class="text-muted mb-0">暂无推荐活动，请稍后查看</p>
+                    </div>
+                {% endif %}
                 </div>
             </div>
         </div>

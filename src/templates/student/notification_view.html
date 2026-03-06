@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ notification.title }} - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('student.dashboard') }}" class="text-decoration-none">个人中心</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('student.notifications') }}" class="text-decoration-none">通知中心</a></li>
+            <li class="breadcrumb-item active fw-medium" aria-current="page">通知详情</li>
+        </ol>
+    </nav>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-0 p-4">
+            <div class="d-flex align-items-center">
+                <div class="bg-{% if notification.is_important %}danger{% else %}primary{% endif %} bg-opacity-10 rounded-circle p-3 me-3">
+                    <i class="fas fa-{% if notification.is_important %}exclamation{% else %}bell{% endif %} text-{% if notification.is_important %}danger{% else %}primary{% endif %}"></i>
+                </div>
+                <div>
+                    <h3 class="mb-1 fw-bold">
+                        {% if notification.is_important %}
+                            <span class="badge bg-danger me-2">重要</span>
+                        {% endif %}
+                        {{ notification.title }}
+                    </h3>
+                    <div class="text-muted">
+                        <div class="mb-3">
+                            <small>发布时间: {{ display_datetime(notification.created_at) }}</small>
+                            {% if notification.expiry_date %}
+                            <small class="ms-3">过期时间: {{ display_datetime(notification.expiry_date, None, '%Y-%m-%d') }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-4">
+            <div class="notification-content mb-4">
+                <div class="bg-light p-4 rounded">
+                    {{ notification.content|safe }}
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('student.notifications') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>返回通知列表
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

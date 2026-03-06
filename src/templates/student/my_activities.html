@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}我的活动 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">我的活动</h2>
+    
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <ul class="nav nav-tabs card-header-tabs">
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'all' %}active{% endif %}" href="{{ url_for('student.my_activities', status='all') }}">全部活动</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'active' %}active{% endif %}" href="{{ url_for('student.my_activities', status='active') }}">进行中</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'completed' %}active{% endif %}" href="{{ url_for('student.my_activities', status='completed') }}">已结束</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'cancelled' %}active{% endif %}" href="{{ url_for('student.my_activities', status='cancelled') }}">已取消报名</a>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body">
+            {% if registrations and registrations.items %}
+                <div class="list-group">
+                    {% for registration in registrations.items %}
+                        {% set activity = registration.activity %}
+                        <div class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ activity.title if activity else '未知活动' }}</h5>
+                                <small>
+                                    {% if registration.status == 'registered' %}
+                                        <span class="badge bg-transparent">已报名</span>
+                                    {% elif registration.status == 'attended' %}
+                                        <span class="badge bg-success">已参加</span>
+                                    {% elif registration.status == 'cancelled' %}
+                                        <span class="badge bg-secondary">已取消</span>
+                                    {% else %}
+                                        <span class="badge bg-info">{{ registration.status }}</span>
+                                    {% endif %}
+                                </small>
+                            </div>
+                            {% if activity %}
+                            <p class="mb-1">
+                                <i class="bi bi-geo-alt"></i> {{ activity.location }}<br>
+                                <i class="bi bi-calendar-event"></i> {{ display_datetime(activity.start_time) }} 至 {{ display_datetime(activity.end_time) }}
+                            </p>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <small class="text-muted">报名时间: {{ display_datetime(registration.register_time) }}</small>
+                                <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary">查看详情</a>
+                            </div>
+                            {% else %}
+                            <p class="mb-1 text-muted">
+                                <i class="bi bi-exclamation-circle"></i> 活动信息不可用
+                            </p>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- 分页 -->
+                {% if registrations.pages > 1 %}
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        {% if registrations.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.prev_num, status=current_status) }}" aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <a class="page-link" href="#" aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for page_num in registrations.iter_pages() %}
+                            {% if page_num %}
+                                <li class="page-item {% if page_num == registrations.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('student.my_activities', page=page_num, status=current_status) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <a class="page-link" href="#">...</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if registrations.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.next_num, status=current_status) }}" aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <a class="page-link" href="#" aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-calendar-x" style="font-size: 3rem;"></i>
+                    <p class="mt-3">您还没有报名任何活动</p>
+                    <a href="{{ url_for('student.activities') }}" class="btn btn-primary mt-2">浏览活动</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

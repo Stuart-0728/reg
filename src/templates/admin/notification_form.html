@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.notifications') }}">通知管理</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-transparent text-dark">
+            <h4 class="mb-0">{{ title }}</h4>
+        </div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data" data-no-loading>
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    <label for="title" class="form-label">通知标题 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="title" name="title" required 
+                           value="{{ notification.title if notification else '' }}">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="content" class="form-label">通知内容 <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="content" name="content" rows="5" required>{{ notification.content if notification else '' }}</textarea>
+                    <div class="form-text">支持基本HTML标签，如&lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;a&gt;等</div>
+                </div>
+                
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="is_important" name="is_important" 
+                           {% if notification and notification.is_important %}checked{% endif %}>
+                    <label class="form-check-label" for="is_important">
+                        <span class="badge bg-danger">重要</span> 
+                        标记为重要通知（将在网站顶部滚动显示）
+                    </label>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="expiry_date" class="form-label">过期时间</label>
+                    <input type="date" class="form-control" id="expiry_date" name="expiry_date" 
+                           value="{{ expiry_date if expiry_date else '' }}">
+                    <div class="form-text">可选，留空表示永不过期</div>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('admin.notifications') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>返回
+                    </a>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="fas fa-save me-1"></i><span id="submitText">保存</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    const submitBtn = document.getElementById('submitBtn');
+    const submitText = document.getElementById('submitText');
+    
+    if (form && submitBtn) {
+        form.addEventListener('submit', function(e) {
+            // 验证表单
+            const title = document.getElementById('title').value.trim();
+            const content = document.getElementById('content').value.trim();
+            
+            if (!title || !content) {
+                e.preventDefault();
+                alert('请填写标题和内容');
+                return;
+            }
+            
+            // 显示加载状态
+            submitBtn.disabled = true;
+            submitText.innerHTML = '保存中...';
+            
+            console.log('通知表单正在提交');
+        });
+    }
+});
+</script>
+
+{% endblock %}

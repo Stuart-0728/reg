@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block title %}统计分析 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h2 class="mb-3 fw-bold">统计分析</h2>
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-transparent bg-opacity-10 rounded-circle p-3 me-3">
+                            <i class="fas fa-chart-line text-primary fs-3"></i>
+                        </div>
+                        <div>
+                            <h5 class="card-title mb-1">数据概览</h5>
+                            <p class="card-text text-muted mb-0">查看活动报名和学生参与的统计数据。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6 mb-4 mb-md-0">
+            <div class="card border-0 shadow-sm h-100 rounded-3 hover-shadow">
+                <div class="card-header bg-white border-0 py-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-chart-pie text-primary me-2"></i>
+                        <h5 class="mb-0 fw-semibold">活动报名统计</h5>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <canvas id="registrationChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100 rounded-3 hover-shadow">
+                <div class="card-header bg-white border-0 py-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-users text-success me-2"></i>
+                        <h5 class="mb-0 fw-semibold">学生参与度</h5>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <canvas id="participationChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card border-0 shadow-sm rounded-3 hover-shadow">
+                <div class="card-header bg-white border-0 py-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-chart-bar text-info me-2"></i>
+                        <h5 class="mb-0 fw-semibold">月度活动统计</h5>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <canvas id="monthlyChart" width="800" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6 mb-4 mb-md-0">
+            <div class="card border-0 shadow-sm h-100 rounded-3 hover-shadow">
+                <div class="card-header bg-white border-0 py-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-tags text-warning me-2"></i>
+                        <h5 class="mb-0 fw-semibold">标签热度</h5>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <canvas id="tagHeatChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100 rounded-3 hover-shadow">
+                <div class="card-header bg-white border-0 py-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-star text-danger me-2"></i>
+                        <h5 class="mb-0 fw-semibold">积分分布</h5>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <canvas id="pointsDistChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .hover-shadow {
+        transition: all 0.3s ease;
+    }
+    .hover-shadow:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    }
+    .card {
+        overflow: hidden;
+    }
+    .card-header {
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+<script src="{{ url_for('static', filename='js/statistics.js') }}"></script>
+{% endblock %}

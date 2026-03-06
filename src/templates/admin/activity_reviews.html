@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+
+{% block title %}活动评价详情 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}" class="text-decoration-none">管理面板</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.activities') }}" class="text-decoration-none">活动管理</a></li>
+            <li class="breadcrumb-item active fw-medium" aria-current="page">活动评价</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div class="d-flex align-items-center">
+            <div class="bg-warning bg-opacity-10 rounded-circle p-3 me-3">
+                <i class="fas fa-star text-warning fs-4"></i>
+            </div>
+            <h2 class="mb-0 fw-bold">活动评价详情</h2>
+        </div>
+        <a href="{{ url_for('admin.activity_view', id=activity.id) }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> 返回活动详情
+        </a>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent text-dark">
+            <h5 class="mb-0 fw-bold">{{ activity.title }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-2">
+                        <i class="fas fa-calendar-alt text-primary me-2"></i>
+                        <strong>活动时间：</strong>{{ display_datetime(activity.start_time) }} 至 {{ display_datetime(activity.end_time) }}
+                    </p>
+                    <p class="mb-2">
+                        <i class="fas fa-map-marker-alt text-danger me-2"></i>
+                        <strong>活动地点：</strong>{{ activity.location }}
+                    </p>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-light rounded-circle p-3 me-3 text-center">
+                            <h3 class="mb-0 text-primary fw-bold">{{ average_rating|round(1) }}</h3>
+                        </div>
+                        <div>
+                            <div class="text-warning mb-1">
+                                {% for i in range(5) %}
+                                    {% if i < average_rating|round(0, 'floor') %}
+                                        <i class="fas fa-star"></i>
+                                    {% elif i < average_rating %}
+                                        <i class="fas fa-star-half-alt"></i>
+                                    {% else %}
+                                        <i class="far fa-star"></i>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                            <p class="mb-0"><strong>{{ reviews|length }}</strong> 条评价</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <hr class="my-4">
+            
+            {% if reviews %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>评价者</th>
+                                <th>评分</th>
+                                <th>内容质量</th>
+                                <th>组织安排</th>
+                                <th>场地设施</th>
+                                <th>评价时间</th>
+                                <th>评价内容</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for review in reviews %}
+                                <tr>
+                                    <td>{{ review.reviewer_name }}</td>
+                                    <td>
+                                        <div class="text-warning">
+                                            {% for i in range(review.rating) %}
+                                                <i class="fas fa-star"></i>
+                                            {% endfor %}
+                                            {% for i in range(5 - review.rating) %}
+                                                <i class="far fa-star"></i>
+                                            {% endfor %}
+                                        </div>
+                                    </td>
+                                    <td>{{ review.content_quality or '-' }}</td>
+                                    <td>{{ review.organization or '-' }}</td>
+                                    <td>{{ review.facility or '-' }}</td>
+                                    <td>{{ display_datetime(review.created_at) }}</td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reviewModal{{ review.id }}">
+                                            查看详情
+                                        </button>
+                                        
+                                        <!-- 评价详情模态框 -->
+                                        <div class="modal fade" id="reviewModal{{ review.id }}" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">评价详情</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <p><strong>评价者：</strong>{{ review.reviewer_name }}</p>
+                                                        <p><strong>评价时间：</strong>{{ display_datetime(review.created_at) }}</p>
+                                                        <p><strong>评分：</strong>
+                                                            <span class="text-warning">
+                                                                {% for i in range(review.rating) %}
+                                                                    <i class="fas fa-star"></i>
+                                                                {% endfor %}
+                                                                {% for i in range(5 - review.rating) %}
+                                                                    <i class="far fa-star"></i>
+                                                                {% endfor %}
+                                                            </span>
+                                                        </p>
+                                                        <div class="card bg-light">
+                                                            <div class="card-body">
+                                                                {{ review.review }}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <div class="mb-3">
+                        <i class="fas fa-comment-slash fa-4x text-muted"></i>
+                    </div>
+                    <h5 class="text-muted">暂无评价</h5>
+                    <p class="text-muted">该活动尚未收到任何评价</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

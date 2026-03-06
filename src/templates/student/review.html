@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}活动评价 - {{ activity.title }} - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('student.dashboard') }}">个人面板</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('student.my_activities') }}">我的活动</a></li>
+            <li class="breadcrumb-item active" aria-current="page">活动评价</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-transparent text-dark">
+            <h5 class="mb-0">为 "{{ activity.title }}" 评分</h5>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('student.submit_review', activity_id=activity.id) }}" id="reviewForm" data-no-loading>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-4">
+                    <label class="form-label">活动体验评分</label>
+                    <div class="star-rating">
+                        <div class="rating-group">
+                            {% for i in range(1, 6) %}
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="rating" id="rating{{ i }}" value="{{ i }}" required>
+                                <label class="form-check-label" for="rating{{ i }}">
+                                    <i class="far fa-star"></i>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">评价维度</label>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>内容质量</label>
+                                <input type="range" class="form-range" name="content_quality" min="1" max="5" value="5">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>组织安排</label>
+                                <input type="range" class="form-range" name="organization" min="1" max="5" value="5">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>场地设施</label>
+                                <input type="range" class="form-range" name="facility" min="1" max="5" value="5">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="review" class="form-label">详细评价</label>
+                    <textarea class="form-control" id="review" name="review" rows="4" placeholder="请分享你对本次活动的感受和建议..." required></textarea>
+                </div>
+
+                <div class="mb-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="anonymous" name="anonymous">
+                        <label class="form-check-label" for="anonymous">
+                            匿名评价
+                        </label>
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <button type="button" class="btn btn-outline-secondary" onclick="history.back()">返回</button>
+                    <button type="submit" class="btn btn-primary">提交评价</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.star-rating .rating-group {
+    display: flex;
+    justify-content: flex-start;
+    gap: 1rem;
+}
+
+.star-rating .form-check-input {
+    display: none;
+}
+
+.star-rating .form-check-label {
+    cursor: pointer;
+    font-size: 1.5rem;
+    color: #ffc107;
+}
+
+.star-rating .form-check-input:checked ~ .form-check-label i {
+    font-weight: 900;
+}
+
+.form-range {
+    width: 100%;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 星级评分交互
+    const ratingInputs = document.querySelectorAll('input[name="rating"]');
+    const ratingLabels = document.querySelectorAll('.star-rating .form-check-label');
+
+    ratingInputs.forEach((input, index) => {
+        input.addEventListener('change', function() {
+            ratingLabels.forEach((label, i) => {
+                const star = label.querySelector('i');
+                if (i <= index) {
+                    star.classList.remove('far');
+                    star.classList.add('fas');
+                } else {
+                    star.classList.remove('fas');
+                    star.classList.add('far');
+                }
+            });
+        });
+    });
+
+    // 表单验证
+    document.getElementById('reviewForm').addEventListener('submit', function(e) {
+        const rating = document.querySelector('input[name="rating"]:checked');
+        const review = document.getElementById('review').value.trim();
+
+        if (!rating) {
+            e.preventDefault();
+            alert('请为活动评分');
+            return;
+        }
+
+        if (review.length < 10) {
+            e.preventDefault();
+            alert('请至少输入10个字的评价内容');
+            return;
+        }
+    });
+});
+</script>
+{% endblock %}

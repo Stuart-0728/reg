@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+
+{% block title %}系统重置 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
+            <li class="breadcrumb-item active" aria-current="page">系统重置</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">系统重置</h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-danger">
+                <h5 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>警告！</h5>
+                <p>系统重置是一项危险操作，将会永久删除所选数据且无法恢复。请确保您已经理解此操作的后果。</p>
+                <p>系统会在执行重置前自动创建备份，但仍建议您手动创建一份备份以防万一。</p>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">重置选项</h6>
+                        </div>
+                        <div class="card-body">
+                            <form method="post" action="{{ url_for('admin.reset_system') }}" id="resetForm" data-no-loading>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="reset_users" name="reset_users">
+                                        <label class="form-check-label" for="reset_users">
+                                            <strong>重置用户数据</strong> - 删除所有学生账号和信息（保留当前管理员账号）
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="reset_activities" name="reset_activities">
+                                        <label class="form-check-label" for="reset_activities">
+                                            <strong>重置活动数据</strong> - 删除所有活动记录
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="reset_registrations" name="reset_registrations">
+                                        <label class="form-check-label" for="reset_registrations">
+                                            <strong>重置报名数据</strong> - 删除所有报名记录
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="reset_tags" name="reset_tags">
+                                        <label class="form-check-label" for="reset_tags">
+                                            <strong>重置标签数据</strong> - 删除所有标签并重新创建默认标签
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="reset_logs" name="reset_logs">
+                                        <label class="form-check-label" for="reset_logs">
+                                            <strong>重置系统日志</strong> - 清空所有系统日志记录
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="admin_password" class="form-label">请输入管理员密码确认操作</label>
+                                    <input type="password" class="form-control" id="admin_password" name="admin_password" required>
+                                    <div class="form-text text-muted">
+                                        为确保安全，请输入当前管理员账号的密码以确认重置操作。
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-danger" id="resetButton" disabled data-show-global-loading="true">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>执行系统重置
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">操作说明</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>重置用户数据：</strong>将删除所有学生账号和个人信息，但会保留当前管理员账号。</p>
+                            <p><strong>重置活动数据：</strong>将删除所有活动记录，包括活动详情、时间、地点等信息。</p>
+                            <p><strong>重置报名数据：</strong>将删除所有学生的活动报名记录和签到记录。</p>
+                            <p><strong>重置标签数据：</strong>将删除所有自定义标签，并重新创建默认的活动标签。</p>
+                            <p><strong>重置系统日志：</strong>将清空所有系统操作日志记录。</p>
+                            <div class="alert alert-info mt-3">
+                                <i class="fas fa-info-circle me-2"></i>提示：重置前系统会自动创建一份完整的数据备份，您可以在备份页面找到并在需要时恢复。
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-end">
+                <a href="{{ url_for('admin.backup_system') }}" class="btn btn-primary me-2">
+                    <i class="fas fa-save me-1"></i>先创建备份
+                </a>
+                <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>返回管理面板
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 检查是否选中了至少一个重置选项
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        const resetButton = document.getElementById('resetButton');
+        const adminPassword = document.getElementById('admin_password');
+        
+        function updateButtonState() {
+            let atLeastOneChecked = false;
+            checkboxes.forEach(function(checkbox) {
+                if (checkbox.checked) {
+                    atLeastOneChecked = true;
+                }
+            });
+            
+            resetButton.disabled = !atLeastOneChecked || !adminPassword.value;
+        }
+        
+        checkboxes.forEach(function(checkbox) {
+            checkbox.addEventListener('change', updateButtonState);
+        });
+        
+        adminPassword.addEventListener('input', updateButtonState);
+        
+        // 表单提交前再次确认
+        document.getElementById('resetForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            if (confirm('警告：您确定要执行系统重置操作吗？此操作不可撤销！')) {
+                this.submit();
+            }
+        });
+    });
+</script>
+{% endblock %}

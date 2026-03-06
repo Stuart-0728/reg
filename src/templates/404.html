@@ -1,35 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>页面未找到 - 404</title>
-    <style>
-        body {
-            background-color: #f8f9fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            text-align: center;
-            padding-top: 100px;
-        }
-        h1 {
-            font-size: 80px;
-            color: #dc3545;
-        }
-        p {
-            font-size: 20px;
-            color: #6c757d;
-        }
-        a {
-            color: #007bff;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <h1>404</h1>
-    <p>抱歉，您访问的页面不存在。</p>
-    <p><a href="{{ url_for('index') }}">返回首页</a></p>
-</body>
-</html>
+{% extends 'base.html' %}
+
+{% block title %}404 - 页面未找到 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow-sm">
+                <div class="card-body p-5">
+                    <h1 class="display-1 text-muted">404</h1>
+                    <h2 class="mb-4">页面未找到</h2>
+                    <p class="lead mb-4">抱歉，您访问的页面不存在或已被移除。</p>
+                    <div class="mb-4">
+                        <img src="https://http.cat/404" alt="404 Cat" class="img-fluid rounded" style="max-height: 300px;">
+                    </div>
+                    <div>
+                        <a href="{{ url_for('main.index') }}" class="btn btn-primary">
+                            <i class="fas fa-home me-2"></i>返回首页
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -88,9 +88,6 @@ flask create-admin
 flask run --host=0.0.0.0
 ```
 
-### 默认管理员账户
-- 用户名：admin
-- 密码：admin123（建议首次登录后立即修改）
 
 ## 系统维护
 

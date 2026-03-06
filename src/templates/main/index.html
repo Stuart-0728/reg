@@ -1,53 +1,56 @@
 {% extends 'base.html' %}
 
-{% block title %}首页 - 重庆师范大学师能素质协会{% endblock %}
+{% block title %}首页 - 重庆师范大学智能社团+{% endblock %}
 
 {% block content %}
 <div class="container">
-    <!-- 轮播图 -->
-    <div id="mainCarousel" class="carousel slide mb-4" data-bs-ride="carousel">
-        <div class="carousel-indicators">
-            <button type="button" data-bs-target="#mainCarousel" data-bs-slide-to="0" class="active"></button>
-            <button type="button" data-bs-target="#mainCarousel" data-bs-slide-to="1"></button>
-            <button type="button" data-bs-target="#mainCarousel" data-bs-slide-to="2"></button>
+    <!-- Modern Hero Section -->
+<div class="row mb-5 justify-content-center" style="margin-top: 20px;">
+    <div class="col-12">
+        <style>
+        /* 动态流动颜色背景 */
+        @keyframes fluidGradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .hero-glass.dynamic-bg {
+            background: linear-gradient(-45deg, rgba(79, 70, 229, 0.15), rgba(14, 165, 233, 0.15), rgba(16, 185, 129, 0.15), rgba(236, 72, 153, 0.15));
+            background-size: 400% 400%;
+            animation: fluidGradient 15s ease infinite;
+            position: relative;
+            overflow: hidden;
+        }
+        </style>
+        <div class="hero-glass dynamic-bg" style="margin-bottom: 20px; border-radius: 30px; padding: 80px 20px;">
+            <div class="row align-items-center justify-content-center">
+                <div class="col-md-9 text-center px-4">
+                    <div class="hero-glass-content mb-0" style="background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); border-radius: 30px; padding: 50px; box-shadow: 0 20px 40px rgba(0,0,0,0.08); border: 1px solid rgba(255,255,255,0.6);">
+                        <span class="badge mb-3 px-3 py-2 rounded-pill shadow-sm" style="font-size: 0.9em; background: rgba(79, 70, 229, 0.1); color: #4f46e5;"><i class="fas fa-sparkles me-2"></i>智能社团+ 焕新升级</span>
+                        <h1 class="display-3 fw-bolder mb-4 text-dark" style="letter-spacing: -1px; text-shadow: 0 4px 10px rgba(0,0,0,0.02);">数智驱动<br><span style="background: linear-gradient(135deg, #4f46e5, #0ea5e9); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">智能社团+</span></h1>
+                        <p class="lead text-muted mb-5 fs-4" style="line-height: 1.8;">以数智驱动教育，以创新引领未来<br>提升教育技能，培养卓越教育者</p>
+                        <div class="d-flex justify-content-center gap-3 flex-wrap">
+                            <a href="{{ url_for('main.activities') }}" class="btn btn-primary btn-lg shadow-sm" style="padding: 15px 40px; border-radius: 50px;"><i class="fas fa-rocket me-2"></i>探索活动</a>
+                            {% if not current_user.is_authenticated %}
+                            <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary btn-lg bg-white" style="padding: 15px 40px; border-radius: 50px;"><i class="fas fa-user-plus me-2"></i>免费注册</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="carousel-inner rounded">
-            <div class="carousel-item active" style="background-image: url('https://picsum.photos/1200/400?random=1');">
-                <div class="carousel-caption d-none d-md-block">
-                    <h2>欢迎来到师能素质协会</h2>
-                    <p>提升师范生专业素养，培养卓越教育人才</p>
-                </div>
-            </div>
-            <div class="carousel-item" style="background-image: url('https://picsum.photos/1200/400?random=2');">
-                <div class="carousel-caption d-none d-md-block">
-                    <h2>丰富多彩的活动</h2>
-                    <p>教学技能培训、教育实践、学术讲座等多种活动</p>
-                </div>
-            </div>
-            <div class="carousel-item" style="background-image: url('https://picsum.photos/1200/400?random=3');">
-                <div class="carousel-caption d-none d-md-block">
-                    <h2>加入我们</h2>
-                    <p>注册账号，参与活动，提升自我</p>
-                </div>
-            </div>
-        </div>
-        <button class="carousel-control-prev" type="button" data-bs-target="#mainCarousel" data-bs-slide="prev">
-            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-            <span class="visually-hidden">Previous</span>
-        </button>
-        <button class="carousel-control-next" type="button" data-bs-target="#mainCarousel" data-bs-slide="next">
-            <span class="carousel-control-next-icon" aria-hidden="true"></span>
-            <span class="visually-hidden">Next</span>
-        </button>
     </div>
+</div>
+
+
 
     <!-- 协会介绍 -->
     <div class="row mb-4">
         <div class="col-md-8">
             <div class="card h-100">
                 <div class="card-body">
-                    <h3 class="card-title">关于师能素质协会</h3>
-                    <p class="card-text">重庆师范大学师能素质协会是一个致力于提升师范生专业素养和教学能力的学生组织。我们通过组织各类教育教学相关活动，帮助师范生提高教学技能，增强教育实践能力，为未来成为优秀教师奠定基础。</p>
+                    <h3 class="card-title">关于智能社团+</h3>
+                    <p class="card-text">重庆师范大学智能社团+是一个致力于提升师范生专业素养和教学能力的学生组织。我们通过组织各类教育教学相关活动，帮助师范生提高教学技能，增强教育实践能力，为未来成为优秀教师奠定基础。</p>
                     <p class="card-text">协会定期举办教学技能培训、教育实践活动、学术讲座、教学比赛等多种形式的活动，为师范生提供展示自我、锻炼能力的平台。</p>
                     <a href="{{ url_for('main.about') }}" class="btn btn-outline-primary">了解更多</a>
                 </div>
@@ -88,97 +91,82 @@
         </div>
     </div>
 
-    <!-- 最新活动 -->
-    <h3 class="mb-3">最新活动</h3>
-    <div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
-        {% for activity in latest_activities %}
-            <div class="col">
-                <div class="card h-100 activity-card">
-                    {% if activity.registration_deadline < now %}
-                        <div class="activity-badge bg-danger text-white">已截止</div>
-                    {% elif activity.start_time < now %}
-                        <div class="activity-badge bg-warning text-dark">进行中</div>
-                    {% else %}
-                        <div class="activity-badge bg-success text-white">可报名</div>
-                    {% endif %}
-                    <div class="card-body">
-                        <h5 class="card-title">{{ activity.title }}</h5>
-                        <p class="card-text text-muted">
-                            <i class="fas fa-map-marker-alt me-1"></i>{{ activity.location }}
-                        </p>
-                        <p class="card-text">{{ activity.description|truncate(100) }}</p>
-                    </div>
-                    <div class="card-footer">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">
-                                <i class="fas fa-clock me-1"></i>{{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}
-                            </small>
-                            <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary">查看详情</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        {% else %}
-            <div class="col-12">
-                <div class="alert alert-info">
-                    暂无活动，请稍后查看。
-                </div>
-            </div>
-        {% endfor %}
-    </div>
+    
 
-    <!-- 热门活动和即将截止 -->
+    <!-- 热门活动/活动预告 -->
     <div class="row">
-        <div class="col-md-6">
-            <h3 class="mb-3">热门活动</h3>
-            <div class="list-group mb-4">
+        <div class="col-md-12">
+            <h3 class="fw-bold text-center" style="margin-top: 3rem; margin-bottom: 2rem; color: #111827; letter-spacing: 0.5px;">活动预告</h3>
+            <div class="row row-cols-1 row-cols-md-3 g-4 mb-4 text-start">
                 {% for activity in popular_activities %}
-                    <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="list-group-item list-group-item-action">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h5 class="mb-1">{{ activity.title }}</h5>
-                            <small class="text-muted">{{ activity.registrations.count() }} 人已报名</small>
+                    <div class="col">
+                        <div class="card h-100 activity-card shadow-sm border border-1" style="border-radius: 12px; overflow: hidden; border-color: rgba(0,0,0,0.05) !important; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onclick="window.location.href='{{ url_for('student.activity_detail', id=activity.id) }}'">
+                            
+                                                                                                                                                                        <!-- Poster Image Area -->
+                            <div class="position-relative w-100" style="height: 200px; background-color: #f3f4f6; border-top-left-radius: 12px; border-top-right-radius: 12px; overflow: hidden;">
+                                {% if activity.poster_image %}
+                                    {% if 'banner' in activity.poster_image %}
+                                        <img src="{{ url_for('static', filename='uploads/posters/' ~ activity.poster_image) }}" class="w-100 h-100" style="object-fit: cover;" alt="{{ activity.title }}">
+                                    {% else %}
+                                        <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" class="w-100 h-100" style="object-fit: cover;" alt="{{ activity.title }}">
+                                    {% endif %}
+                                {% else %}
+                                    <div class="w-100 h-100 d-flex justify-content-center align-items-center text-muted">
+                                        <i class="fas fa-image fa-2x"></i>
+                                    </div>
+                                {% endif %}
+                                
+                                <!-- Category Badge Inside Image -->
+                                {% if activity.category %}
+                                    <span class="badge bg-primary position-absolute top-0 start-0 m-3">
+                                        {{ activity.category.name }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="card-body bg-white py-4 px-3 d-flex flex-column">
+                                <h5 class="card-title fw-bold text-dark mb-3" style="font-size: 1.15rem; line-height: 1.4;">{{ activity.title }}</h5>
+                                
+                                <div class="d-flex align-items-center mb-3" style="font-size: 0.85rem;">
+                                    {% if activity.registration_deadline < now %}
+                                        <span class="me-3 fw-normal" style="color:#6b7280;">已结束</span>
+                                    {% elif activity.start_time < now %}
+                                        <span class="me-3 fw-normal" style="color:#f59e0b;">进行中</span>
+                                    {% else %}
+                                        <span class="me-3 fw-normal" style="color:#10b981;">可报名</span>
+                                    {% endif %}
+                                    
+                                    <div class="d-flex align-items-center fw-normal" style="color:#111827;">
+                                        <i class="far fa-calendar me-2" style="color:#111827; font-weight: 500;"></i> 
+                                        {{ activity.start_time.strftime('%m月%d日 %H:%M') }}
+                                    </div>
+                                </div>
+                                
+                                <p class="card-text text-secondary mt-1 mb-4" style="font-size: 0.9rem; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex-grow: 1;">
+                                    {{ activity.description|striptags }}
+                                </p>
+                                
+                                <div class="mt-auto" style="font-size: 0.85rem; color: #111827;">
+                                    <i class="fas fa-map-marker-alt me-2" style="color:#111827;"></i> {{ activity.location }}
+                                </div>
+                            </div>
                         </div>
-                        <p class="mb-1">{{ activity.description|truncate(80) }}</p>
-                        <small class="text-muted">
-                            <i class="fas fa-calendar-alt me-1"></i>{{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}
-                        </small>
-                    </a>
+                    </div>
                 {% else %}
-                    <div class="list-group-item">
-                        暂无热门活动
+                    <div class="col-12 py-5">
+                        <div class="alert alert-info border-0 shadow-sm text-center" style="border-radius: 12px;">
+                            暂无活动预告
+                        </div>
                     </div>
                 {% endfor %}
             </div>
-        </div>
-        <div class="col-md-6">
-            <h3 class="mb-3">即将截止</h3>
-            <div class="list-group mb-4">
-                {% for activity in closing_soon %}
-                    <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="list-group-item list-group-item-action">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h5 class="mb-1">{{ activity.title }}</h5>
-                            <small class="text-danger">
-                                <i class="fas fa-hourglass-half me-1"></i>剩余
-                                <span id="countdown-{{ activity.id }}"></span>
-                            </small>
-                        </div>
-                        <p class="mb-1">{{ activity.description|truncate(80) }}</p>
-                        <small class="text-muted">
-                            <i class="fas fa-calendar-alt me-1"></i>{{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}
-                        </small>
-                    </a>
-                    <script>
-                        document.addEventListener('DOMContentLoaded', function() {
-                            startCountdown('countdown-{{ activity.id }}', '{{ activity.registration_deadline }}');
-                        });
-                    </script>
-                {% else %}
-                    <div class="list-group-item">
-                        暂无即将截止的活动
-                    </div>
-                {% endfor %}
+            
+            <!-- View More Button -->
+            <div class="text-center mt-4 mb-4">
+                <a href="{{ url_for('student.activities') }}" class="btn btn-white px-5 py-2 border shadow-sm" style="border-radius: 8px; font-weight: 500; font-size: 0.95rem; color: #111827; background-color: #fff; border-color: #e5e7eb;">查看更多活动</a>
             </div>
         </div>
-    </div>
+        
+                        
+
 </div>
 {% endblock %}

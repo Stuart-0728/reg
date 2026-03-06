@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+
+{% block title %}学生详情 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.students') }}">学生管理</a></li>
+            <li class="breadcrumb-item active">学生详情</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <!-- 学生基本信息 -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-transparent text-dark">
+                    <h5 class="mb-0">学生信息</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        <i class="fas fa-user-circle fa-5x text-primary"></i>
+                        <h4 class="mt-2">{{ student.real_name }}</h4>
+                        <p class="text-muted">{{ student.student_id }}</p>
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>用户名</span>
+                            <span class="text-primary">{{ user.username }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>年级</span>
+                            <span>{{ student.grade }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>学院</span>
+                            <span>{{ student.college }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>专业</span>
+                            <span>{{ student.major }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>手机号</span>
+                            <span>{{ student.phone }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>QQ</span>
+                            <span>{{ student.qq or '未设置' }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>标签选择状态</span>
+                            <span>
+                                {% if student.has_selected_tags %}
+                                <span class="badge bg-success">已选择</span>
+                                {% else %}
+                                <span class="badge bg-warning">未选择</span>
+                                {% endif %}
+                            </span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>注册时间</span>
+                            <span>{{ display_datetime(user.created_at, None, '%Y-%m-%d') }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>当前积分</span>
+                            <span class="badge bg-transparent rounded-pill">{{ student.points or 0 }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 标签管理 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-transparent text-dark">
+                    <h5 class="mb-0">学生兴趣标签</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('admin.update_student_tags', id=student.id) }}" data-no-global-loading="true">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label">选择标签</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for tag in all_tags %}
+                                <input type="checkbox" class="btn-check" name="tags" id="tag{{ tag.id }}" value="{{ tag.id }}" autocomplete="off"
+                                    {% if tag.id in selected_tag_ids %}checked{% endif %}>
+                                <label class="btn btn-outline-primary tag-btn" for="tag{{ tag.id }}">{{ tag.name }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">更新标签</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 积分调整 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-transparent text-dark">
+                    <h5 class="mb-0">积分调整</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ url_for('admin.adjust_student_points', id=student.id) }}" data-no-global-loading="true">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="points" class="form-label">积分值</label>
+                            <input type="number" class="form-control" id="points" name="points" required>
+                            <div class="form-text">正数增加积分，负数减少积分</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">调整原因</label>
+                            <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary" data-no-global-loading="true">提交调整</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <!-- 积分历史 -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-transparent text-dark">
+                    <h5 class="mb-0">积分历史</h5>
+                </div>
+                <div class="card-body">
+                    {% if points_history %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>时间</th>
+                                        <th>积分变动</th>
+                                        <th>原因</th>
+                                        <th>相关活动</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for history in points_history %}
+                                    <tr>
+                                        <td>{{ display_datetime(history.created_at) }}</td>
+                                        <td>
+                                            {% if history.points > 0 %}
+                                                <span class="text-success">+{{ history.points }}</span>
+                                            {% else %}
+                                                <span class="text-danger">{{ history.points }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ history.reason }}</td>
+                                        <td>
+                                            {% if history.activity_id %}
+                                                <a href="{{ url_for('admin.activity_view', id=history.activity_id) }}">查看活动</a>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-center text-muted py-3">暂无积分记录</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 参加的活动 -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-transparent text-dark">
+                    <h5 class="mb-0">参加的活动</h5>
+                </div>
+                <div class="card-body">
+                    {% if registrations %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>活动名称</th>
+                                        <th>报名时间</th>
+                                        <th>签到时间</th>
+                                        <th>状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for reg in registrations %}
+                                    <tr>
+                                        <td>
+                                            {% if reg.activity %}
+                                                <a href="{{ url_for('admin.activity_view', id=reg.activity.id) }}">{{ reg.activity.title }}</a>
+                                            {% else %}
+                                                <span class="text-muted">活动已删除</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ display_datetime(reg.register_time) }}</td>
+                                        <td>
+                                            {% if reg.check_in_time %}
+                                                {{ display_datetime(reg.check_in_time) }}
+                                            {% else %}
+                                                未签到
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if reg.status == 'registered' %}
+                                                <span class="badge bg-transparent">已报名</span>
+                                            {% elif reg.status == 'attended' %}
+                                                <span class="badge bg-success">已参加</span>
+                                            {% elif reg.status == 'cancelled' %}
+                                                <span class="badge bg-secondary">已取消</span>
+                                            {% else %}
+                                                <span class="badge bg-info">{{ reg.status }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('admin.activity_view', id=reg.activity_id) }}" class="btn btn-sm btn-outline-primary">查看活动</a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-center text-muted py-3">暂无参加的活动</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.tag-btn {
+    border-radius: 20px;
+    padding: 0.5rem 1.2rem;
+    font-size: 1rem;
+    transition: background 0.2s, color 0.2s;
+}
+.btn-check:checked + .tag-btn {
+    background: var(--gradient-primary);
+    color: #fff;
+    border-color: transparent;
+}
+</style>
+{% endblock %}

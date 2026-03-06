@@ -1,35 +1,27 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>服务器错误 - 500</title>
-    <style>
-        body {
-            background-color: #fff3cd;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            text-align: center;
-            padding-top: 100px;
-        }
-        h1 {
-            font-size: 80px;
-            color: #fd7e14;
-        }
-        p {
-            font-size: 20px;
-            color: #856404;
-        }
-        a {
-            color: #fd7e14;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <h1>500</h1>
-    <p>服务器出错了，请稍后再试。</p>
-    <p><a href="{{ url_for('index') }}">返回首页</a></p>
-</body>
-</html>
+{% extends 'base.html' %}
+
+{% block title %}500 - 服务器错误 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card shadow-sm">
+                <div class="card-body p-5">
+                    <h1 class="display-1 text-muted">500</h1>
+                    <h2 class="mb-4">服务器内部错误</h2>
+                    <p class="lead mb-4">抱歉，服务器遇到了一些问题。我们正在努力修复中。</p>
+                    <div class="mb-4">
+                        <img src="https://http.cat/500" alt="500 Cat" class="img-fluid rounded" style="max-height: 300px;">
+                    </div>
+                    <div>
+                        <a href="{{ url_for('main.index') }}" class="btn btn-primary">
+                            <i class="fas fa-home me-2"></i>返回首页
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

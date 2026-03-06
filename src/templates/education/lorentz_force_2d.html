@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>洛伦兹力2D横截面仿真</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body { height: 100%; margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
+        #container { height: 100%; min-height: 100vh; display: flex; flex-direction: column; } /* Ensure container takes full height */
+        @media (min-width: 1024px) {
+            #container { flex-direction: row; }
+        }
+
+        .control-group { margin-bottom: 1rem; }
+        label { display: block; font-weight: bold; margin-bottom: 0.5rem; color: #374151; }
+        input[type="range"] { width: 100%; }
+        input[type="number"] { width: 6rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; }
+        .value-display { font-weight: 600; color: #1f2937; }
+        /* Custom styles for rounded corners and shadows */
+        .rounded-lg { border-radius: 0.75rem; }
+        .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .bg-white { background-color: #ffffff; }
+        .p-6 { padding: 1.5rem; }
+        .grid { display: grid; }
+        .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+        .lg\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .gap-6 { gap: 1.5rem; }
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .flex-col { flex-direction: column; }
+        .mt-4 { margin-top: 1rem; }
+        .text-center { text-align: center; }
+        .bg-blue-500 { background-color: #3b82f6; }
+        .hover\:bg-blue-600:hover { background-color: #2563eb; }
+        .text-white { color: #ffffff; }
+        .font-bold { font-weight: 700; }
+        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+        .px-4 { padding-left: 1rem; padding-right: 1rem; }
+        .focus\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }
+        .focus\:ring-2:focus { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5); }
+        .focus\:ring-blue-500:focus { --tw-ring-color: #3b82f6; }
+        
+        /* Canvas specific styling */
+        canvas {
+            background-color: #e2e8f0; /* Light blue-gray for the canvas background */
+            display: block;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            /* Make canvas fill container while maintaining aspect ratio */
+            width: 100%;
+            height: 100%; /* Changed to 100% to fill container */
+            object-fit: contain; /* Ensures content scales nicely within the given dimensions */
+            /* Removed max-width and max-height to allow it to grow */
+        }
+
+        /* Canvas container responsiveness */
+        #canvas-container {
+            width: 100%;
+            height: 50%; /* On small screens, canvas takes half height */
+            background-color: #f0f4f8; /* Match body background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem; /* Add some padding around the canvas */
+            box-sizing: border-box; /* Include padding in height calculation */
+        }
+        @media (min-width: 1024px) {
+            #canvas-container {
+                width: 30%; /* Take 30% width on large screens */
+                height: 100%; /* Take full height on large screens */
+            }
+        }
+        
+        /* Controls panel responsiveness */
+        #controls-panel {
+            width: 100%;
+            height: 50%; /* On small screens, controls take half height */
+            overflow-y: auto; /* Enable scrolling for controls */
+            padding: 1.5rem;
+            background-color: #ffffff;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border-radius: 0.75rem;
+            box-sizing: border-box; /* Include padding in height calculation */
+        }
+        @media (min-width: 1024px) {
+            #controls-panel {
+                width: 70%; /* Take 70% width on large screens */
+                height: 100%; /* Take full height on large screens */
+            }
+        }
+
+        #magneticFieldDirection {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+        .gemini-response {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1rem;
+            min-height: 100px;
+            white-space: pre-wrap;
+            line-height: 1.75;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+        <nav class="container mx-auto px-6 py-3">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center">
+                    <a href="{{ url_for('education.resources') }}" class="bg-blue-600 text-white px-3 py-1 rounded-md mr-4 hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-arrow-left mr-1"></i>返回资源页
+                    </a>
+                    <h1 class="text-xl font-bold text-slate-800">洛伦兹力2D仿真</h1>
+                </div>
+                <div class="hidden md:flex space-x-8 text-sm">
+                    <a href="#simulation" class="nav-link">模拟实验</a>
+                    <a href="#theory" class="nav-link">物理原理</a>
+                    <a href="#ai-assistant" class="nav-link font-bold">✨AI助教</a>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <div id="container">
+        <!-- Canvas for 2D simulation -->
+        <div id="canvas-container">
+            <canvas id="simulationCanvas"></canvas>
+        </div>
+
+        <!-- Controls and Information Panel -->
+        <div id="controls-panel"> <!-- Added ID for easier targeting in CSS -->
+            <h1 class="text-2xl font-bold mb-6 text-center text-gray-800">洛伦兹力2D仿真</h1>
+            <div class="control-group">
+                <label for="charge">电子电荷 (q): <span id="chargeValue" class="value-display">1.0</span></label>
+                <input type="range" id="charge" min="-2" max="2" value="1" step="0.1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="mass">电子质量 (m): <span id="massValue" class="value-display">1.0</span></label>
+                <input type="range" id="mass" min="0.1" max="5" value="1" step="0.1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="initialVelocityMagnitude">初始速度大小 (|v|): <span id="initialVelocityMagnitudeValue" class="value-display">5.0</span></label>
+                <input type="range" id="initialVelocityMagnitude" min="1" max="10" value="5" step="0.1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="magneticFieldMagnitude">磁场强度 (|B|): <span id="magneticFieldMagnitudeValue" class="value-display">2.0</span></label>
+                <input type="range" id="magneticFieldMagnitude" min="0" max="5" value="2" step="0.1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="initialVelocityAngle">初始速度方向 (角度): <span id="initialVelocityAngleValue" class="value-display">90°</span></label>
+                <input type="range" id="initialVelocityAngle" min="0" max="360" value="90" step="1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="magneticFieldDirectionRadio">磁场方向 (垂直于屏幕):</label>
+                <div id="magneticFieldDirection" class="flex items-center gap-4">
+                    <input type="radio" id="bIn" name="bDirection" value="in" checked>
+                    <label for="bIn" class="mb-0">⊗ (入屏)</label>
+                    <input type="radio" id="bOut" name="bDirection" value="out">
+                    <label for="bOut" class="mb-0">☉ (出屏)</label>
+                </div>
+            </div>
+
+            <div class="control-group mt-4">
+                <label class="text-gray-700">实时计算值:</label>
+                <p>洛伦兹力大小 (|F|): <span id="forceMagnitudeDisplay" class="value-display">0.00</span></p>
+                <p>理论偏转半径 (R): <span id="theoreticalRadiusDisplay" class="value-display">NaN</span></p>
+                <p>当前速度大小 (|v|): <span id="currentVelocityMagnitudeDisplay" class="value-display">0.00</span></p>
+                <p>当前位置 (x, y): <span id="currentPositionDisplay" class="value-display">(0.00, 0.00)</span></p>
+            </div>
+
+            <button id="resetButton" class="w-full mt-6 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md">
+                重置模拟
+            </button>
+
+            <!-- AI integration feature 1: Physics Insight -->
+            <h2 id="ai-assistant" class="text-xl font-semibold mt-8 mb-4 text-gray-800">物理洞察</h2>
+            <button id="getInsightButton" class="w-full mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-md">
+                ✨ 获取物理洞察 ✨
+            </button>
+            <div id="insightDisplay" class="gemini-response mt-4">
+                点击 "获取物理洞察" 按钮获取当前模拟的解释和影响分析。
+            </div>
+
+            <!-- AI integration feature 2: Q&A -->
+            <div class="control-group mt-6">
+                <label for="physicsQuestion">向AI助手提问:</label>
+                <textarea id="physicsQuestion" class="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" rows="3" placeholder="例如：为什么粒子会做圆周运动？"></textarea>
+            </div>
+            <button id="askQuestionButton" class="w-full mt-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 shadow-md">
+                ✨ 提交问题 ✨
+            </button>
+            <div id="answerDisplay" class="gemini-response mt-4">
+                在这里获取问题解答。
+            </div>
+
+            <div id="loadingModal" class="modal">
+                <div class="modal-content">
+                    <p class="text-lg">正在处理您的请求...</p>
+                    <div class="mt-4 flex justify-center">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Scaling factor for physics units to pixels
+        const PIXELS_PER_UNIT = 30;
+        let CANVAS_WIDTH = 0; // Will be set dynamically
+        let CANVAS_HEIGHT = 0; // Will be set dynamically
+        let CANVAS_CENTER_X = 0;
+        let CANVAS_CENTER_Y = 0;
+
+        // Physics parameters
+        let q = 1.0; // Charge (arbitrary units)
+        let m = 1.0; // Mass (arbitrary units)
+        let v_mag = 5.0; // Initial velocity magnitude
+        let B_mag = 2.0; // Magnetic field magnitude
+        let initialVelocityAngle = 90; // Angle in degrees (0 = right, 90 = up, 180 = left, 270 = down)
+        let B_direction = -1; // -1 for 'in' (⊗), 1 for 'out' (☉)
+
+        let electronPosition = { x: 0, y: 0 };
+        let electronVelocity = { x: 0, y: 0 };
+        let trajectoryPoints = [];
+
+        let currentForceMagnitude = 0;
+        let currentTheoreticalRadius = NaN;
+        let currentPeriod = NaN; // New variable for period
+
+        const dt = 0.01; // Time step for simulation
+
+        let animationFrameId; // To store the requestAnimationFrame ID
+
+        // Function to resize canvas dynamically
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            // Set canvas drawing buffer size to match its actual rendered size
+            canvas.width = container.offsetWidth;
+            canvas.height = container.offsetHeight;
+
+            // Use the actual canvas dimensions for calculations
+            CANVAS_WIDTH = canvas.width;
+            CANVAS_HEIGHT = canvas.height;
+            CANVAS_CENTER_X = CANVAS_WIDTH / 2;
+            CANVAS_CENTER_Y = CANVAS_HEIGHT / 2;
+            drawStaticElements(); // Redraw static elements on resize
+            if (animationFrameId) { // If animation is running, restart to update positions
+                cancelAnimationFrame(animationFrameId);
+                animate();
+            }
+        }
+
+        // Initialize simulation
+        function init() {
+            // Set initial canvas size
+            resizeCanvas();
+
+            // Add event listeners for UI controls
+            addEventListeners();
+
+            // Set initial parameters and reset simulation
+            resetSimulation();
+
+            // Handle window resizing
+            window.addEventListener('resize', resizeCanvas);
+
+            // Start animation loop
+            animate();
+        }
+
+        // Add event listeners for UI controls
+        function addEventListeners() {
+            document.getElementById('charge').addEventListener('input', updateParameters);
+            document.getElementById('mass').addEventListener('input', updateParameters);
+            document.getElementById('initialVelocityMagnitude').addEventListener('input', updateParameters);
+            document.getElementById('magneticFieldMagnitude').addEventListener('input', updateParameters);
+            document.getElementById('initialVelocityAngle').addEventListener('input', updateParameters);
+            document.querySelectorAll('input[name="bDirection"]').forEach(radio => {
+                radio.addEventListener('change', updateParameters);
+            });
+            document.getElementById('resetButton').addEventListener('click', resetSimulation);
+            document.getElementById('getInsightButton').addEventListener('click', getPhysicsInsight);
+            document.getElementById('askQuestionButton').addEventListener('click', askPhysicsQuestion);
+        }
+
+        // Update simulation parameters from UI and reset
+        function updateParameters() {
+            q = parseFloat(document.getElementById('charge').value);
+            m = parseFloat(document.getElementById('mass').value);
+            v_mag = parseFloat(document.getElementById('initialVelocityMagnitude').value);
+            B_mag = parseFloat(document.getElementById('magneticFieldMagnitude').value);
+            initialVelocityAngle = parseFloat(document.getElementById('initialVelocityAngle').value);
+            B_direction = document.getElementById('bIn').checked ? -1 : 1;
+
+            // Update display values in control panel
+            document.getElementById('chargeValue').textContent = q.toFixed(1);
+            document.getElementById('massValue').textContent = m.toFixed(1);
+            document.getElementById('initialVelocityMagnitudeValue').textContent = v_mag.toFixed(1);
+            document.getElementById('magneticFieldMagnitudeValue').textContent = B_mag.toFixed(1);
+            document.getElementById('initialVelocityAngleValue').textContent = initialVelocityAngle.toFixed(0) + '°';
+
+            resetSimulation();
+        }
+
+        // Reset the simulation state
+        function resetSimulation() {
+            electronPosition = { x: 0, y: 0 }; // Start at origin (canvas center)
+
+            // Calculate initial velocity components from magnitude and angle
+            const angleRadV = (initialVelocityAngle - 90) * Math.PI / 180; // Adjust for canvas Y-up
+            electronVelocity.x = v_mag * Math.cos(angleRadV);
+            electronVelocity.y = v_mag * Math.sin(angleRadV);
+
+            trajectoryPoints = []; // Clear trajectory
+            trajectoryPoints.push({ x: electronPosition.x, y: electronPosition.y }); // Add initial point
+
+            // Update displays, including period calculation during reset
+            updateDisplays(0, 0);
+        }
+
+        // Update display values in the UI panel and internal variables
+        function updateDisplays(forceMagnitude, theoreticalRadius) {
+            currentForceMagnitude = forceMagnitude;
+            currentTheoreticalRadius = theoreticalRadius;
+
+            // Calculate period T = 2πm / (|q|B)
+            currentPeriod = (Math.abs(q) * B_mag === 0) ? NaN : (2 * Math.PI * m) / (Math.abs(q) * B_mag);
+
+            document.getElementById('forceMagnitudeDisplay').textContent = forceMagnitude.toFixed(2);
+            document.getElementById('theoreticalRadiusDisplay').textContent = isNaN(theoreticalRadius) || !isFinite(theoreticalRadius) ? '无限' : theoreticalRadius.toFixed(2);
+            document.getElementById('currentVelocityMagnitudeDisplay').textContent = Math.sqrt(electronVelocity.x**2 + electronVelocity.y**2).toFixed(2);
+            document.getElementById('currentPositionDisplay').textContent = `(${electronPosition.x.toFixed(2)}, ${electronPosition.y.toFixed(2)})`;
+            // Period is now displayed on canvas, no need for a separate panel element
+        }
+
+        // Main animation loop
+        function animate() {
+            animationFrameId = requestAnimationFrame(animate);
+            updatePhysics();
+            draw();
+        }
+
+        // Physics simulation update (2D)
+        function updatePhysics() {
+            // Calculate Lorentz force F = q(v x B)
+            // In 2D, v is (vx, vy, 0), B is (0, 0, Bz)
+            // v x B = (vy*Bz - 0, 0 - vx*Bz, 0) = (vy*Bz, -vx*Bz, 0)
+            // So Fx = q * vy * Bz, Fy = q * (-vx * Bz)
+            // Here Bz = B_mag * B_direction
+            const Bz = B_mag * B_direction;
+            const Fx = q * electronVelocity.y * Bz;
+            const Fy = q * (-electronVelocity.x * Bz);
+
+            // Calculate acceleration a = F / m
+            const ax = Fx / m;
+            const ay = Fy / m;
+
+            // Update velocity v_new = v_old + a * dt
+            electronVelocity.x += ax * dt;
+            electronVelocity.y += ay * dt;
+
+            // --- FIX: Normalize velocity to maintain constant speed ---
+            const currentSpeed = Math.sqrt(electronVelocity.x**2 + electronVelocity.y**2);
+            // Only normalize if currentSpeed is meaningfully greater than zero to avoid division by zero
+            if (currentSpeed > 0.001) {
+                const scaleFactor = v_mag / currentSpeed; // Normalize to initial magnitude (v_mag)
+                electronVelocity.x *= scaleFactor;
+                electronVelocity.y *= scaleFactor;
+            }
+            // --- End FIX ---
+
+            // Update position p_new = p_old + v_new * dt
+            electronPosition.x += electronVelocity.x * dt;
+            electronPosition.y += electronVelocity.y * dt;
+
+            // Add current position to trajectory
+            trajectoryPoints.push({ x: electronPosition.x, y: electronPosition.y });
+
+            // Limit trajectory points for performance
+            if (trajectoryPoints.length > 1000) {
+                trajectoryPoints.shift();
+            }
+
+            // Calculate theoretical radius of curvature R = mv / (|q|B)
+            // Use the *enforced* constant speed (v_mag) for theoretical radius calculation
+            const theoreticalRadius = (Math.abs(q) * B_mag === 0 || v_mag === 0) ? NaN : (m * v_mag) / (Math.abs(q) * B_mag);
+
+            updateDisplays(Math.sqrt(Fx**2 + Fy**2), theoreticalRadius);
+
+            // Reset if electron goes too far (out of bounds).
+            // Consider the worst case scenario, where the electron might escape the canvas.
+            // maxDistance is based on the canvas dimensions
+            const maxDistance = Math.max(CANVAS_WIDTH, CANVAS_HEIGHT) / (2 * PIXELS_PER_UNIT) * 1.5;
+            if (Math.abs(electronPosition.x) > maxDistance || Math.abs(electronPosition.y) > maxDistance) {
+                resetSimulation();
+            }
+        }
+
+        // Draw static elements (grid, magnetic field symbols)
+        function drawStaticElements() {
+            // Clear canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // Draw grid lines
+            ctx.strokeStyle = '#cbd5e1'; // Light gray
+            ctx.lineWidth = 0.5;
+            const gridSize = 5 * PIXELS_PER_UNIT; // 5 units grid spacing
+            for (let x = -CANVAS_CENTER_X; x <= CANVAS_CENTER_X; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(CANVAS_CENTER_X + x, 0);
+                ctx.lineTo(CANVAS_CENTER_X + x, CANVAS_HEIGHT);
+                ctx.stroke();
+            }
+            for (let y = -CANVAS_CENTER_Y; y <= CANVAS_CENTER_Y; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, CANVAS_CENTER_Y + y);
+                ctx.lineTo(CANVAS_WIDTH, CANVAS_CENTER_Y + y);
+                ctx.stroke();
+            }
+
+            // Draw X and Y axes
+            ctx.strokeStyle = '#64748b'; // Darker gray
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(CANVAS_CENTER_X, 0); ctx.lineTo(CANVAS_CENTER_X, CANVAS_HEIGHT); ctx.stroke(); // Y-axis
+            ctx.beginPath();
+            ctx.moveTo(0, CANVAS_CENTER_Y); ctx.lineTo(CANVAS_WIDTH, CANVAS_CENTER_Y); ctx.stroke(); // X-axis
+
+            // Draw magnetic field symbols (dots or crosses)
+            const symbolSize = 10;
+            const symbolSpacing = 50; // Pixels
+            ctx.fillStyle = '#00c000'; // Green for magnetic field
+            ctx.strokeStyle = '#00c000'; // Green for magnetic field outline
+
+            for (let i = 0; i < CANVAS_WIDTH; i += symbolSpacing) {
+                for (let j = 0; j < CANVAS_HEIGHT; j += symbolSpacing) {
+                    ctx.save();
+                    ctx.translate(i + symbolSpacing / 2, j + symbolSpacing / 2);
+                    if (B_direction === -1) { // In (⊗)
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(-symbolSize / 2, -symbolSize / 2);
+                        ctx.lineTo(symbolSize / 2, symbolSize / 2);
+                        ctx.moveTo(symbolSize / 2, -symbolSize / 2);
+                        ctx.lineTo(-symbolSize / 2, symbolSize / 2);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(0, 0, symbolSize / 2 + 3, 0, Math.PI * 2);
+                        ctx.stroke();
+                    } else { // Out (☉)
+                        ctx.beginPath();
+                        ctx.arc(0, 0, symbolSize / 2, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.beginPath();
+                        ctx.arc(0, 0, symbolSize / 2 + 3, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Draw all dynamic elements
+        function draw() {
+            drawStaticElements(); // Redraw background and grid
+
+            // Draw trajectory
+            ctx.strokeStyle = '#8800ff'; // Purple for trajectory
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            if (trajectoryPoints.length > 0) {
+                ctx.moveTo(CANVAS_CENTER_X + trajectoryPoints[0].x * PIXELS_PER_UNIT, CANVAS_CENTER_Y - trajectoryPoints[0].y * PIXELS_PER_UNIT);
+                for (let i = 1; i < trajectoryPoints.length; i++) {
+                    ctx.lineTo(CANVAS_CENTER_X + trajectoryPoints[i].x * PIXELS_PER_UNIT, CANVAS_CENTER_Y - trajectoryPoints[i].y * PIXELS_PER_UNIT);
+                }
+            }
+            ctx.stroke();
+
+            // Draw electron
+            ctx.fillStyle = '#007bff'; // Blue for electron
+            ctx.beginPath();
+            ctx.arc(CANVAS_CENTER_X + electronPosition.x * PIXELS_PER_UNIT, CANVAS_CENTER_Y - electronPosition.y * PIXELS_PER_UNIT, 0.5 * PIXELS_PER_UNIT, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw velocity vector (orange)
+            const v_len = Math.sqrt(electronVelocity.x**2 + electronVelocity.y**2);
+            if (v_len > 0.01) { // Avoid drawing tiny arrows
+                ctx.strokeStyle = '#ffa500'; // Orange
+                ctx.fillStyle = '#ffa500';
+                ctx.lineWidth = 2;
+                const arrowLength = v_len * PIXELS_PER_UNIT * 0.5; // Scale velocity arrow
+                const arrowAngle = Math.atan2(electronVelocity.y, electronVelocity.x);
+
+                ctx.save();
+                ctx.translate(CANVAS_CENTER_X + electronPosition.x * PIXELS_PER_UNIT, CANVAS_CENTER_Y - electronPosition.y * PIXELS_PER_UNIT);
+                ctx.rotate(-arrowAngle); // Rotate to align with velocity (canvas Y is inverted)
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(arrowLength, 0);
+                ctx.stroke();
+
+                // Draw arrowhead
+                ctx.beginPath();
+                ctx.moveTo(arrowLength, 0);
+                ctx.lineTo(arrowLength - 10, 5);
+                ctx.lineTo(arrowLength - 10, -5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw Lorentz force vector (red)
+            const Bz = B_mag * B_direction;
+            const Fx = q * electronVelocity.y * Bz;
+            const Fy = q * (-electronVelocity.x * Bz);
+            const F_len = Math.sqrt(Fx**2 + Fy**2);
+
+            if (F_len > 0.01) { // Avoid drawing tiny arrows
+                ctx.strokeStyle = '#ff0000'; // Red
+                ctx.fillStyle = '#ff0000';
+                ctx.lineWidth = 2;
+                const forceArrowLength = F_len * PIXELS_PER_UNIT * 0.2; // Scale force arrow
+                const forceArrowAngle = Math.atan2(Fy, Fx);
+
+                ctx.save();
+                ctx.translate(CANVAS_CENTER_X + electronPosition.x * PIXELS_PER_UNIT, CANVAS_CENTER_Y - electronPosition.y * PIXELS_PER_UNIT);
+                ctx.rotate(-forceArrowAngle); // Rotate to align with force (canvas Y is inverted)
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(forceArrowLength, 0);
+                ctx.stroke();
+
+                // Draw arrowhead
+                ctx.beginPath();
+                ctx.moveTo(forceArrowLength, 0);
+                ctx.lineTo(forceArrowLength - 10, 5);
+                ctx.lineTo(forceArrowLength - 10, -5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw R and T in the top right corner of the canvas
+            ctx.fillStyle = '#1f2937'; // Dark gray text
+            ctx.font = '16px Inter';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+
+            const padding = 10;
+            let currentY = padding;
+
+            const radiusText = `R: ${isNaN(currentTheoreticalRadius) ? '无限' : currentTheoreticalRadius.toFixed(2)}`;
+            ctx.fillText(radiusText, CANVAS_WIDTH - padding, currentY);
+            currentY += 20; // Move down for the next line
+
+            const periodText = `T: ${isNaN(currentPeriod) ? '无限' : currentPeriod.toFixed(2)}`;
+            ctx.fillText(periodText, CANVAS_WIDTH - padding, currentY);
+        }
+
+        // Function to show loading modal
+        function showLoadingModal() {
+            document.getElementById('loadingModal').style.display = 'block';
+        }
+
+        // Function to hide loading modal
+        function hideLoadingModal() {
+            document.getElementById('loadingModal').style.display = 'none';
+        }
+
+        // Function to call API for physics insight
+        async function getPhysicsInsight() {
+            const insightDisplay = document.getElementById('insightDisplay');
+            insightDisplay.textContent = "正在生成洞察中，请稍候..."; // Loading message
+            showLoadingModal();
+
+            const prompt = `
+                一个带电粒子在二维平面磁场中运动。
+                粒子电荷 (q): ${q.toFixed(1)}
+                粒子质量 (m): ${m.toFixed(1)}
+                初始速度大小 (|v|): ${v_mag.toFixed(1)}
+                磁场强度 (|B|): ${B_mag.toFixed(1)}
+                初始速度方向 (角度): ${initialVelocityAngle.toFixed(0)}度 (0度为X轴正向，90度为Y轴正向)
+                磁场方向: ${B_direction === -1 ? '垂直入屏 (⊗)' : '垂直出屏 (☉)'}
+                当前洛伦兹力大小 (|F|): ${currentForceMagnitude.toFixed(2)}
+                理论偏转半径 (R): ${isNaN(currentTheoreticalRadius) ? '无限或不适用' : currentTheoreticalRadius.toFixed(2)}
+                理论周期 (T): ${isNaN(currentPeriod) ? '无限或不适用' : currentPeriod.toFixed(2)}
+
+                请根据这些参数，用中文解释粒子当前的运动轨迹（例如，是直线、圆周或无运动），并简要说明如果磁场强度加倍，粒子的运动会如何变化。请只在解释中提及2D的上下文。
+            `;
+
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                const response = await fetch('/education/api/gemini', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+
+                hideLoadingModal();
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    insightDisplay.textContent = result.content;
+                } else {
+                    insightDisplay.textContent = "获取洞察失败：" + (result.content || "未知错误");
+                    console.error("API error:", result);
+                }
+            } catch (error) {
+                hideLoadingModal();
+                insightDisplay.textContent = "获取洞察失败。请检查网络连接或稍后再试。";
+                console.error("Error calling API:", error);
+            }
+        }
+
+        // Function to call API for answering physics questions
+        async function askPhysicsQuestion() {
+            const physicsQuestionInput = document.getElementById('physicsQuestion');
+            const answerDisplay = document.getElementById('answerDisplay');
+            const userQuestion = physicsQuestionInput.value.trim();
+
+            if (!userQuestion) {
+                answerDisplay.textContent = "请输入您的问题。";
+                return;
+            }
+
+            answerDisplay.textContent = "正在获取解答中，请稍候..."; // Loading message
+            showLoadingModal();
+
+            const prompt = `
+                用户问题: ${userQuestion}
+
+                当前洛伦兹力2D仿真实验的参数如下：
+                粒子电荷 (q): ${q.toFixed(1)}
+                粒子质量 (m): ${m.toFixed(1)}
+                初始速度大小 (|v|): ${v_mag.toFixed(1)}
+                磁场强度 (|B|): ${B_mag.toFixed(1)}
+                初始速度方向 (角度): ${initialVelocityAngle.toFixed(0)}度 (0度为X轴正向，90度为Y轴正向)
+                磁场方向: ${B_direction === -1 ? '垂直入屏 (⊗)' : '垂直出屏 (☉)'}
+                当前洛伦兹力大小 (|F|): ${currentForceMagnitude.toFixed(2)}
+                理论偏转半径 (R): ${isNaN(currentTheoreticalRadius) ? '无限或不适用' : currentTheoreticalRadius.toFixed(2)}
+                理论周期 (T): ${isNaN(currentPeriod) ? '无限或不适用' : currentPeriod.toFixed(2)}
+
+                请根据这些参数和洛伦兹力相关的物理知识，用中文详细地回答用户的问题。请确保答案与2D模拟的上下文相关。
+            `;
+
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                const response = await fetch('/education/api/gemini', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+                
+                hideLoadingModal();
+
+                const result = await response.json();
+
+                if (result.success) {
+                    answerDisplay.textContent = result.content;
+                } else {
+                    answerDisplay.textContent = "获取解答失败：" + (result.content || "未知错误");
+                    console.error("API error:", result);
+                }
+            } catch (error) {
+                hideLoadingModal();
+                answerDisplay.textContent = "获取解答失败。请检查网络连接或稍后再试。";
+                console.error("Error calling API:", error);
+            }
+        }
+
+        // Start the simulation on window load.
+        window.onload = init;
+    </script>
+</body>
+</html> 

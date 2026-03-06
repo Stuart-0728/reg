@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block title %}搜索结果 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">首页</a></li>
+            <li class="breadcrumb-item active" aria-current="page">搜索结果</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-transparent text-dark">
+            <h5 class="mb-0">高级搜索</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-4">
+                <form method="GET" action="{{ url_for('main.search') }}" class="d-flex">
+                    <input type="text" name="q" class="form-control me-2" value="{{ query }}" placeholder="搜索活动、地点...">
+                    <button type="submit" class="btn btn-primary" data-no-loading>搜索</button>
+                </form>
+            </div>
+
+            {% if activities %}
+                <h6 class="border-bottom pb-2 mb-3">找到 {{ activities|length }} 个相关活动</h6>
+                <div class="row">
+                    {% for activity in activities %}
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">{{ activity.title }}</h6>
+                                    <span class="badge {% if activity.status == 'active' %}bg-success{% elif activity.status == 'completed' %}bg-secondary{% else %}bg-danger{% endif %}">
+                                        {% if activity.status == 'active' %}进行中{% elif activity.status == 'completed' %}已结束{% else %}已取消{% endif %}
+                                    </span>
+                                </div>
+                                <div class="card-body">
+                                    <p class="card-text text-truncate">{{ activity.description|striptags }}</p>
+                                    <p class="mb-1"><i class="bi bi-geo-alt-fill text-primary"></i> {{ activity.location }}</p>
+                                    <p class="mb-1"><i class="bi bi-calendar-event-fill text-primary"></i> {{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}</p>
+                                    <p class="mb-1"><i class="bi bi-clock-fill text-primary"></i> 报名截止: {{ activity.registration_deadline.strftime('%Y-%m-%d %H:%M') }}</p>
+                                </div>
+                                <div class="card-footer bg-transparent">
+                                    {% if current_user.is_authenticated %}
+                                        {% if current_user.role.name == 'Admin' %}
+                                            <a href="{{ url_for('admin.edit_activity', id=activity.id) }}" class="btn btn-sm btn-primary">查看详情</a>
+                                        {% else %}
+                                            <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-primary">查看详情</a>
+                                        {% endif %}
+                                    {% else %}
+                                        <a href="{{ url_for('auth.login') }}" class="btn btn-sm btn-outline-primary">登录后查看</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill me-2"></i> 未找到与 "{{ query }}" 相关的活动。
+                </div>
+                <div class="text-center my-4">
+                    <p>您可以尝试：</p>
+                    <ul class="list-unstyled">
+                        <li>检查搜索关键词拼写</li>
+                        <li>使用更简短、更一般的关键词</li>
+                        <li>浏览<a href="{{ url_for('student.activities') if current_user.is_authenticated and current_user.role.name == 'Student' else url_for('main.index') }}">所有活动</a></li>
+                    </ul>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

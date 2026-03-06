@@ -1,73 +1,59 @@
+import sys
 import os
-from datetime import datetime
-from flask import Flask, render_template
-from flask_login import LoginManager
-from .models import db, User
-from . import register_blueprints
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # DON'T CHANGE THIS !!!
 
-def create_app():
-    app = Flask(__name__)
+import logging
+import argparse
+from src import create_app
 
-    # —— 应用配置 —— #
-    app.config['SECRET_KEY'] = os.environ.get(
-        'SECRET_KEY',
-        'bad4147d0e436553811dc682a3c25822'
-    )
+# 导入自动备份服务
+try:
+    from src.auto_backup import start_auto_backup_thread
+    AUTO_BACKUP_AVAILABLE = True
+except ImportError as e:
+    print(f"自动备份功能不可用: {e}")
+    AUTO_BACKUP_AVAILABLE = False
 
-    database_url = os.environ.get(
-        'DATABASE_URL',
-        'postgresql://virtual_event_db_user:Yyqhn8GDTloyPZmeIC3R4ZcuRimS15JF@dpg-d0qt6djuibrs73eu5mjg-a.singapore-postgres.render.com/virtual_event_db'
-    )
-    if database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql://', 1)
-    elif database_url.startswith('mysql://'):
-        database_url = database_url.replace('mysql://', 'mysql+pymysql://', 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# 获取当前文件目录的绝对路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 设置日志文件的绝对路径
+log_file_path = os.path.join(current_dir, 'logs', 'cqnu_association.log')
 
-    # —— 初始化数据库，并自动创建所有表 —— #
-    db.init_app(app)
-    with app.app_context():
-        db.create_all()
+# 确保日志目录存在
+os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
-    # —— 登录管理 —— #
-    login_manager = LoginManager()
-    login_manager.login_view = 'auth.login'
-    login_manager.init_app(app)
+# 设置日志记录
+logging.basicConfig(level=logging.INFO,
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                   handlers=[
+                       logging.FileHandler(os.path.join(current_dir, 'logs', 'cqnu_association.log')),
+                       logging.StreamHandler()
+                   ])
 
-    @login_manager.user_loader
-    def load_user(user_id):
-        return User.query.get(int(user_id))
-
-    # —— 注册蓝图 —— #
-    register_blueprints(app)
-
-    # —— 模板全局注入 now —— #
-    @app.context_processor
-    def inject_now():
-        return {'now': datetime.utcnow()}
-
-    # —— 别名 endpoint：让 url_for('index') 指向 main.index —— #
-    # 必须在 register_blueprints 之后才有 view_functions['main.index']
-    app.add_url_rule(
-        '/',
-        endpoint='index',
-        view_func=app.view_functions['main.index']
-    )
-
-    # —— 自定义错误页 —— #
-    @app.errorhandler(404)
-    def not_found_error(error):
-        return render_template('404.html'), 404
-
-    @app.errorhandler(500)
-    def internal_error(error):
-        return render_template('500.html'), 500
-
-    return app
-
-# Gunicorn/Flask CLI 入口
-app = create_app()
+logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # 创建命令行参数解析器
+    parser = argparse.ArgumentParser(description='启动CQNU智能社团+管理系统')
+    parser.add_argument('--port', type=int, default=8082, help='服务器端口号(默认: 8082)')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='服务器主机地址(默认: 0.0.0.0)')
+    args = parser.parse_args()
+    
+    # 使用命令行参数设置端口
+    port = args.port
+    host = args.host
+    
+    print(f"启动服务器: {host}:{port}")
+    app = create_app()
+
+    # 启动自动备份服务
+    if AUTO_BACKUP_AVAILABLE:
+        try:
+            backup_service = start_auto_backup_thread()
+            logger.info("自动备份服务已启动（每6小时备份一次）")
+        except Exception as e:
+            logger.error(f"启动自动备份服务失败: {e}")
+    else:
+        logger.warning("自动备份服务不可用")
+
+    app.run(host=host, port=port)

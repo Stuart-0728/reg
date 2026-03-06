@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}创建管理员账户 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-transparent text-dark">
+                    <h4 class="mb-0">创建管理员账户</h4>
+                </div>
+                <div class="card-body">
+                    <p class="alert alert-info">
+                        这是初始化页面，用于创建系统的第一个管理员账户。创建后，此页面将不再可用。
+                    </p>
+                    
+                    <form method="post" class="needs-validation" novalidate>
+                        {{ form.csrf_token }}
+                        
+                        <div class="mb-3">
+                            <label for="username" class="form-label">管理员用户名</label>
+                            {{ form.username(class="form-control", id="username", placeholder="请输入管理员用户名") }}
+                            {% if form.username.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.username.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="email" class="form-label">管理员邮箱</label>
+                            {{ form.email(class="form-control", id="email", placeholder="请输入管理员邮箱") }}
+                            {% if form.email.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.email.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="password" class="form-label">密码</label>
+                            {{ form.password(class="form-control", id="password", placeholder="请输入密码") }}
+                            {% if form.password.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.password.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label">确认密码</label>
+                            {{ form.confirm_password(class="form-control", id="confirm_password", placeholder="请再次输入密码") }}
+                            {% if form.confirm_password.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.confirm_password.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

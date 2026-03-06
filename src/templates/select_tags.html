@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}选择兴趣标签 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-transparent text-dark">
+                    <h4 class="mb-0">请选择你的兴趣标签</h4>
+                </div>
+                <div class="card-body">
+                    <form id="tagsForm" method="post">
+                        <div class="mb-4">
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for tag in tags %}
+                                <input type="checkbox" class="btn-check" name="tags" id="tag{{ tag.id }}" value="{{ tag.id }}" autocomplete="off"
+                                    {% if tag.id in selected_tag_ids %}checked{% endif %}>
+                                <label class="btn btn-outline-primary tag-btn" for="tag{{ tag.id }}">{{ tag.name }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" id="submitBtn" disabled>保存兴趣标签</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.tag-btn {
+    border-radius: 20px;
+    padding: 0.5rem 1.2rem;
+    font-size: 1rem;
+    transition: background 0.2s, color 0.2s;
+}
+.btn-check:checked + .tag-btn {
+    background: #2196F3;
+    color: #fff;
+    border-color: #2196F3;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('input[name="tags"]');
+    const submitBtn = document.getElementById('submitBtn');
+    function updateBtn() {
+        let checked = Array.from(checkboxes).some(cb => cb.checked);
+        submitBtn.disabled = !checked;
+    }
+    checkboxes.forEach(cb => cb.addEventListener('change', updateBtn));
+    updateBtn();
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}查看消息 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.messages') }}">站内信</a></li>
+            <li class="breadcrumb-item active" aria-current="page">查看消息</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-transparent text-dark d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">查看消息</h4>
+            <a href="{{ url_for('admin.messages') }}" class="btn btn-light btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>返回列表
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="mb-4">
+                <h5 class="fw-bold mb-3">{{ message.subject }}</h5>
+                
+                <div class="d-flex justify-content-between text-muted mb-3">
+                    <div>
+                        <strong>发件人:</strong> 
+                        {% if sender %}
+                            {{ sender.username }}
+                            {% if sender_info %}
+                                ({{ sender_info.real_name }})
+                            {% endif %}
+                        {% else %}
+                            未知用户
+                        {% endif %}
+                    </div>
+                    <div>
+                        <strong>时间:</strong> {{ display_datetime(message.created_at, None, '%Y-%m-%d %H:%M:%S') if message.created_at else '未知时间' }}
+                    </div>
+                </div>
+                
+                <div class="text-muted mb-3">
+                    <strong>收件人:</strong> 
+                    {% if receiver %}
+                        {{ receiver.username }}
+                        {% if receiver_info %}
+                            ({{ receiver_info.real_name }})
+                        {% endif %}
+                    {% else %}
+                        未知用户
+                    {% endif %}
+                </div>
+                
+                <div class="card">
+                    <div class="card-body">
+                        <div class="message-content">
+                            {% if message.content %}
+                                <pre class="message-text" style="white-space: pre-wrap; font-family: inherit;">{{ message.content }}</pre>
+                            {% else %}
+                                <em>（无内容）</em>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="d-flex justify-content-between mt-4">
+                <a href="{{ url_for('admin.messages') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>返回
+                </a>
+                
+                <div>
+                    {% if message.receiver_id == current_user.id %}
+                    <a href="{{ url_for('admin.create_message') }}" class="btn btn-primary">
+                        <i class="fas fa-reply me-1"></i>回复
+                    </a>
+                    {% endif %}
+                    
+                    <form method="post" action="{{ url_for('admin.delete_message', id=message.id) }}" class="d-inline" onsubmit="return confirm('确定要删除此消息吗？');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash-alt me-1"></i>删除
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
