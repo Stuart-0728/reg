@@ -143,7 +143,7 @@
                         <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                             <div>
                                 <h5 class="mb-0 fw-semibold">签到记录</h5>
-                                <small class="text-muted">最后刷新：<span id="last-refresh-time">{{ now.strftime('%H:%M:%S') }}</span></small>
+                                <small class="text-muted">最后刷新：<span id="last-refresh-time">{{ display_datetime(now, 'Asia/Shanghai', '%H:%M:%S') }}</span></small>
                             </div>
                             <button id="manual-refresh-btn" class="btn btn-outline-primary btn-sm">
                                 <i class="fas fa-sync-alt me-1"></i> 刷新
@@ -288,7 +288,8 @@
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: false
+            hour12: false,
+            timeZone: 'Asia/Shanghai'
         }).replace(/\//g, '年').replace(/,/g, '日 ').replace(/:/g, ':');
         
         var serverTimeElement = document.getElementById('server-time');
@@ -334,7 +335,10 @@
             var lastRefreshElement = document.getElementById('last-refresh-time');
             if (lastRefreshElement) {
                 var now = new Date();
-                lastRefreshElement.textContent = now.toLocaleTimeString('zh-CN');
+                lastRefreshElement.textContent = now.toLocaleTimeString('zh-CN', {
+                    hour12: false,
+                    timeZone: 'Asia/Shanghai'
+                });
             }
         })
         .catch(function(error) {
