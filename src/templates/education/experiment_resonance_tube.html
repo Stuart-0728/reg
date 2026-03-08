@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>共鸣管测声速（扬声器+麦克风）</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs/%3E%3Crect width='64' height='64' rx='12' fill='%23121a2b'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%238ab4ff' opacity='0.15'/%3E%3Ctext x='32' y='38' font-size='22' text-anchor='middle' fill='%237af0b9' font-family='system-ui, -apple-system, Segoe UI, Roboto, Arial' font-weight='700'%3EAI%3C/text%3E%3C/svg%3E"/>
+  <link rel="stylesheet" href="assets/ui.css" />
+  <style>
+    canvas.display { height: 320px; }
+    .legend { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="{{ url_for('education.resources') }}" class="btn secondary" style="margin-right:8px;">← 返回资源页</a>
+      <div class="title">共鸣管测声速（扬声器+麦克风）</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <section class="card">
+        <h2>实验控制</h2>
+        <p class="subtle">利用外置扬声器发声，麦克风采集，观察窄带能量在共振处显著增强。</p>
+
+        <div class="panel-row">
+          <div>
+            <label>发声频率 (Hz)</label>
+            <input id="freq" type="range" min="100" max="2000" step="1" value="440" class="range" />
+            <input id="freqNum" type="number" class="input" value="440" min="50" max="5000" step="1" />
+          </div>
+          <div>
+            <label>音量 (0~1)</label>
+            <input id="gain" type="range" min="0" max="1" step="0.01" value="0.5" class="range" />
+            <input id="gainNum" type="number" class="input" value="0.5" min="0" max="1" step="0.01" />
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <div>
+            <label>管长 L (cm)</label>
+            <input id="length" type="range" min="20" max="120" step="1" value="60" class="range" />
+            <input id="lengthNum" type="number" class="input" value="60" min="10" max="200" step="1" />
+          </div>
+          <div>
+            <label>分析 FFT 大小</label>
+            <select id="fftSize" class="input">
+              <option value="4096">4096</option>
+              <option value="8192" selected>8192</option>
+              <option value="16384">16384</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <button id="start" class="btn">开始实验</button>
+          <button id="stop" class="btn danger">停止实验</button>
+        </div>
+
+        <div class="panel-row" style="margin-top: 10px;">
+          <button id="scan" class="btn secondary" title="在频率范围内扫频绘制响应曲线">扫描共振</button>
+          <button id="clearResp" class="btn secondary">清空响应曲线</button>
+        </div>
+
+        <div class="kpi" style="margin-top: 14px;">
+          <div class="item">
+            <div class="val" id="k-current-f">-- Hz</div>
+            <div class="lab">当前频率</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-current-l">-- cm</div>
+            <div class="lab">当前管长</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-energy">-- dB</div>
+            <div class="lab">窄带能量</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 14px;">
+          <h3>理论共振频率 (闭管：f_n = (2n+1) v / (4L))</h3>
+          <p class="subtle">取 v≈343 m/s，仅展示前5个模态。实测峰值应接近这些位置。</p>
+          <div id="modes" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+        </div>
+
+        <div class="card" style="margin-top: 14px;">
+          <h3>实时窄带能量</h3>
+          <canvas id="rtEnergy" class="display"></canvas>
+        </div>
+
+        <div class="card" style="margin-top: 14px;">
+          <h3>扫描频率响应</h3>
+          <canvas id="resp" class="display"></canvas>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3>实验原理</h3>
+        <ol>
+          <li>闭管共振基频 f0 ≈ v / (4L)。当激励频率接近 (2n+1)f0 时，管内驻波形成，麦克风接收的窄带能量显著增大。</li>
+          <li>共振频率与管长呈反比，与声速成正比。通过测量共振频率，可以反推声速。</li>
+          <li>闭管中，基频 f0 及其奇次谐波 (2n+1)f0 会产生共振，表现为能量峰值。</li>
+        </ol>
+        <h3 style="margin-top:10px;">实验步骤</h3>
+        <ol>
+          <li>准备一个一端封闭的管子（如试管、量筒等），测量并设置管长 L。</li>
+          <li>点击"开始实验"，授予麦克风权限，将外置扬声器放在管口附近。</li>
+          <li>调整发声频率，观察窄带能量变化；或点击"扫描共振"自动寻找共振峰。</li>
+          <li>记录共振频率，与理论值比较；可通过改变管长验证 f ∝ 1/L 关系。</li>
+          <li>根据测量的共振频率和管长，计算声速 v = 4Lf0。</li>
+        </ol>
+        <h3 style="margin-top:10px;">实验建议</h3>
+        <ol>
+          <li>尽量使用外置扬声器播放纯音，并将麦克风靠近管口。室内回声会影响测量，尽量靠近吸声材料。</li>
+          <li>点击"扫描共振"自动扫频，可观察峰值位置；也可手动拖动频率滑块对准峰值。</li>
+          <li>如果峰值不明显，可尝试调整管长或增大音量，确保环境安静。</li>
+        </ol>
+        <h3 style="margin-top:10px;">AI 实验助手</h3>
+        <p class="subtle">右下角"AI"按钮可打开问答面板。</p>
+      </aside>
+    </div>
+  </main>
+
+  <script src="assets/ai.js"></script>
+  <script src="assets/chat-widget.js"></script>
+  <script>
+    // 常量
+    const V_SOUND = 343; // m/s
+    const ENERGY_HISTORY = 300;
+
+    // DOM
+    const el = (id) => document.getElementById(id);
+    const freq = el('freq'), freqNum = el('freqNum');
+    const gain = el('gain'), gainNum = el('gainNum');
+    const lengthR = el('length'), lengthNum = el('lengthNum');
+    const fftSel = el('fftSize');
+    const startBtn = el('start'), stopBtn = el('stop');
+    const scanBtn = el('scan'), clearRespBtn = el('clearResp');
+    const kF = el('k-current-f'), kL = el('k-current-l'), kE = el('k-energy');
+    const modesDiv = el('modes');
+    const rtCanvas = el('rtEnergy'), respCanvas = el('resp');
+
+    // 状态
+    let audioCtx = null, osc = null, gnode = null, analyser = null, micStream = null;
+    let rafId = null;
+    let energyHist = [];
+    let respData = [];
+    let scanning = false;
+
+    // 画布
+    const rtCtx = rtCanvas.getContext('2d');
+    const respCtx = respCanvas.getContext('2d');
+
+    function syncInputs(ranger, number) {
+      ranger.addEventListener('input', () => number.value = ranger.value);
+      number.addEventListener('change', () => {
+        ranger.value = number.value;
+        number.value = ranger.value;
+      });
+    }
+    syncInputs(freq, freqNum);
+    syncInputs(gain, gainNum);
+    syncInputs(lengthR, lengthNum);
+
+    function calcModes() {
+      modesDiv.innerHTML = '';
+      const Lm = parseFloat(lengthNum.value) / 100; // m
+      const f0 = V_SOUND / (4 * Lm);
+      for (let i = 0; i < 5; i++) {
+        const fi = (2 * i + 1) * f0;
+        const chip = document.createElement('span');
+        chip.className = 'cb-chip';
+        chip.textContent = `${(fi).toFixed(1)} Hz`;
+        modesDiv.appendChild(chip);
+      }
+    }
+    calcModes();
+    lengthNum.addEventListener('change', calcModes);
+    lengthR.addEventListener('input', calcModes);
+
+    async function initAudio() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      osc = audioCtx.createOscillator();
+      gnode = audioCtx.createGain();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = parseInt(fftSel.value);
+      osc.type = 'sine';
+      osc.frequency.value = parseFloat(freqNum.value);
+      gnode.gain.value = parseFloat(gainNum.value);
+
+      // 麦克风
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      const micSrc = audioCtx.createMediaStreamSource(micStream);
+      micSrc.connect(analyser);
+
+      // 扬声器播放
+      osc.connect(gnode).connect(audioCtx.destination);
+      osc.start();
+    }
+
+    function cleanup() {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      if (osc) { try { osc.stop(); } catch (e) {} osc.disconnect(); osc = null; }
+      if (gnode) { gnode.disconnect(); gnode = null; }
+      if (analyser) { analyser.disconnect(); analyser = null; }
+      if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+      if (audioCtx && audioCtx.state !== 'closed') { audioCtx.close(); }
+      audioCtx = null;
+    }
+
+    function getNarrowbandEnergy(targetHz) {
+      if (!analyser || !audioCtx) return -120;
+      const bins = analyser.frequencyBinCount;
+      const freqData = new Float32Array(bins);
+      analyser.getFloatFrequencyData(freqData);
+      const binHz = audioCtx.sampleRate / analyser.fftSize;
+      const center = Math.round(targetHz / binHz);
+      const radius = Math.max(1, Math.round(3 / binHz)); // 约 ±3Hz
+      let max = -Infinity;
+      for (let i = Math.max(0, center - radius); i < Math.min(bins, center + radius); i++) {
+        if (freqData[i] > max) max = freqData[i];
+      }
+      return max; // dBFS
+    }
+
+    function loop() {
+      rafId = requestAnimationFrame(loop);
+      const f = parseFloat(freqNum.value);
+      const L = parseFloat(lengthNum.value);
+      const e = getNarrowbandEnergy(f);
+      kF.textContent = `${f.toFixed(1)} Hz`;
+      kL.textContent = `${L.toFixed(0)} cm`;
+      kE.textContent = isFinite(e) ? `${e.toFixed(1)} dB` : '-- dB';
+      energyHist.push(e);
+      if (energyHist.length > ENERGY_HISTORY) energyHist.shift();
+      drawRealtime();
+    }
+
+    function drawRealtime() {
+      const w = rtCanvas.clientWidth, h = rtCanvas.clientHeight;
+      rtCanvas.width = w; rtCanvas.height = h;
+      rtCtx.clearRect(0, 0, w, h);
+      rtCtx.strokeStyle = '#8ab4ff';
+      rtCtx.lineWidth = 2;
+      rtCtx.beginPath();
+      const min = -120, max = 0;
+      for (let i = 0; i < energyHist.length; i++) {
+        const x = (i / (ENERGY_HISTORY - 1)) * (w - 20) + 10;
+        const norm = (energyHist[i] - min) / (max - min);
+        const y = h - 10 - norm * (h - 20);
+        if (i === 0) rtCtx.moveTo(x, y);
+        else rtCtx.lineTo(x, y);
+      }
+      rtCtx.stroke();
+
+      // 中线刻度
+      rtCtx.fillStyle = 'rgba(255,255,255,0.5)';
+      rtCtx.font = '12px system-ui';
+      rtCtx.fillText('0 dB', 10, 14);
+      rtCtx.fillText('-60 dB', 60, h / 2);
+      rtCtx.fillText('-120 dB', 10, h - 10);
+    }
+
+    function drawResp() {
+      const w = respCanvas.clientWidth, h = respCanvas.clientHeight;
+      respCanvas.width = w; respCanvas.height = h;
+      respCtx.clearRect(0, 0, w, h);
+
+      if (respData.length === 0) return;
+
+      const xs = respData.map(d => d.f);
+      const ys = respData.map(d => d.e);
+      const fmin = Math.min(...xs), fmax = Math.max(...xs);
+      const emin = Math.min(-120, Math.min(...ys)), emax = Math.max(0, Math.max(...ys));
+
+      function scaleX(f) { return 10 + ((f - fmin) / (fmax - fmin)) * (w - 20); }
+      function scaleY(e) { return h - 10 - ((e - emin) / (emax - emin)) * (h - 20); }
+
+      // 轴
+      respCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+      respCtx.strokeRect(10, 10, w - 20, h - 20);
+
+      // 曲线
+      respCtx.strokeStyle = '#7af0b9';
+      respCtx.lineWidth = 2;
+      respCtx.beginPath();
+      respData.forEach((p, i) => {
+        const x = scaleX(p.f), y = scaleY(p.e);
+        if (i === 0) respCtx.moveTo(x, y);
+        else respCtx.lineTo(x, y);
+      });
+      respCtx.stroke();
+
+      // 标注理论峰位
+      const Lm = parseFloat(lengthNum.value) / 100;
+      const f0 = V_SOUND / (4 * Lm);
+      respCtx.fillStyle = 'rgba(255,255,255,0.8)';
+      respCtx.font = '12px system-ui';
+      for (let n = 0; n < 5; n++) {
+        const ff = (2 * n + 1) * f0;
+        if (ff >= fmin && ff <= fmax) {
+          const x = scaleX(ff);
+          respCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+          respCtx.beginPath();
+          respCtx.moveTo(x, 10); respCtx.lineTo(x, h - 10);
+          respCtx.stroke();
+          respCtx.fillText((ff).toFixed(0) + 'Hz', x + 4, 24 + 16 * (n % 2));
+        }
+      }
+    }
+
+    async function start() {
+      startBtn.disabled = true;
+      try {
+        await initAudio();
+        loop();
+      } catch (e) {
+        alert('启动失败：' + (e.message || e));
+        cleanup();
+      } finally {
+        stopBtn.disabled = false;
+      }
+    }
+    async function stop() {
+      stopBtn.disabled = true;
+      cleanup();
+      startBtn.disabled = false;
+    }
+
+    async function scanResponse() {
+      if (!audioCtx || !osc) {
+        alert('请先开始实验。'); return;
+      }
+      if (scanning) return;
+      scanning = true; scanBtn.disabled = true;
+
+      const Lm = parseFloat(lengthNum.value) / 100;
+      const f0 = V_SOUND / (4 * Lm);
+      const center = f0; // 围绕基频扫
+      const span = Math.max(100, center * 0.8);
+      const fStart = Math.max(60, center - span);
+      const fEnd = center + span;
+
+      const steps = 80;
+      const dwell = 80; // ms
+      const data = [];
+
+      for (let i = 0; i <= steps; i++) {
+        const f = fStart + (fEnd - fStart) * (i / steps);
+        osc.frequency.setValueAtTime(f, audioCtx.currentTime);
+        await new Promise(r => setTimeout(r, dwell));
+        const e = getNarrowbandEnergy(f);
+        data.push({ f, e });
+        respData = data.slice();
+        drawResp();
+      }
+
+      scanning = false; scanBtn.disabled = false;
+      // 扫描完成，已更新 respData。
+    }
+
+    // 事件
+    startBtn.addEventListener('click', start);
+    stopBtn.addEventListener('click', stop);
+    scanBtn.addEventListener('click', scanResponse);
+    clearRespBtn.addEventListener('click', () => { respData = []; drawResp(); });
+    freq.addEventListener('input', () => {
+      freqNum.value = freq.value;
+      if (osc) osc.frequency.setValueAtTime(parseFloat(freqNum.value), audioCtx.currentTime);
+    });
+    freqNum.addEventListener('change', () => {
+      freq.value = freqNum.value;
+      if (osc) osc.frequency.setValueAtTime(parseFloat(freqNum.value), audioCtx.currentTime);
+    });
+    gain.addEventListener('input', () => {
+      gainNum.value = gain.value;
+      if (gnode) gnode.gain.setValueAtTime(parseFloat(gainNum.value), audioCtx.currentTime);
+    });
+    gainNum.addEventListener('change', () => {
+      gain.value = gainNum.value;
+      if (gnode) gnode.gain.setValueAtTime(parseFloat(gainNum.value), audioCtx.currentTime);
+    });
+    fftSel.addEventListener('change', () => { if (analyser) analyser.fftSize = parseInt(fftSel.value); });
+    window.addEventListener('beforeunload', cleanup);
+
+    // 初始化 Chat Widget
+    ChatWidget.init({
+      title: '共鸣管 AI 助手',
+      tts: true,
+      stt: true,
+      systemPrompt: '你是高中物理实验助手，专长声学与共振测量。回答需简明，适度给出公式与注意事项。',
+      context: 'resonance_tube_education'
+    });
+
+    // 实验上下文：供聊天挂件读取
+    window.getExperimentContext = function () {
+      const f = parseFloat(freqNum.value);
+      const g = parseFloat(gainNum.value);
+      const Lcm = parseFloat(lengthNum.value);
+      const fft = parseInt(fftSel.value);
+      const lastEnergy = energyHist.length ? energyHist[energyHist.length - 1] : null;
+      let peakF = null, peakE = null;
+      if (respData && respData.length) {
+        const p = respData.reduce((a,b) => (b.e > a.e ? b : a), respData[0]);
+        peakF = +p.f.toFixed(2);
+        peakE = +p.e.toFixed(2);
+      }
+      const Lm = isFinite(Lcm) ? Lcm/100 : null;
+      const f0 = Lm ? (V_SOUND / (4*Lm)) : null;
+      return {
+        experiment: 'resonance_tube',
+        freq_Hz: isFinite(f) ? +f.toFixed(2) : null,
+        gain: isFinite(g) ? +g.toFixed(3) : null,
+        length_cm: isFinite(Lcm) ? +Lcm.toFixed(1) : null,
+        fftSize: isFinite(fft) ? fft : null,
+        energy_last_dB: (lastEnergy!=null && isFinite(lastEnergy)) ? +lastEnergy.toFixed(1) : null,
+        resp_points: respData ? respData.length : 0,
+        resp_peak_freq_Hz: peakF,
+        resp_peak_energy_dB: peakE,
+        f0_theory_Hz: f0 ? +f0.toFixed(1) : null
+      };
+    };
+  </script>
+</body>
+</html>

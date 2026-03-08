@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>洛伦兹力3D仿真 - 重庆市沙坪坝区人工智能科普基地</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #f0f4f8; transition: all 0.3s ease; }
+        .dark-mode {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e2e8f0;
+        }
+        .dark-mode .bg-white {
+            background-color: #2d3748 !important;
+            color: #e2e8f0 !important;
+        }
+        .dark-mode .text-gray-800 {
+            color: #e2e8f0 !important;
+        }
+        .dark-mode .text-gray-600 {
+            color: #a0aec0 !important;
+        }
+        .dark-mode .border-gray-200 {
+            border-color: #4a5568 !important;
+        }
+        .dark-mode input, .dark-mode select {
+            background-color: #4a5568 !important;
+            color: #e2e8f0 !important;
+            border-color: #718096 !important;
+        }
+        .dark-mode .shadow-lg {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2) !important;
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+        .control-group { margin-bottom: 1rem; }
+        label { display: block; font-weight: bold; margin-bottom: 0.5rem; color: #374151; }
+        input[type="range"] { width: 100%; }
+        input[type="number"] { width: 6rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; }
+        .value-display { font-weight: 600; color: #1f2937; }
+        /* Custom styles for rounded corners and shadows */
+        .rounded-lg { border-radius: 0.75rem; }
+        .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .bg-white { background-color: #ffffff; }
+        .p-6 { padding: 1.5rem; }
+        .grid { display: grid; }
+        .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+        .lg\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .gap-6 { gap: 1.5rem; }
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .flex-col { flex-direction: column; }
+        .mt-4 { margin-top: 1rem; }
+        .text-center { text-align: center; }
+        .bg-blue-500 { background-color: #3b82f6; }
+        .hover\:bg-blue-600:hover { background-color: #2563eb; }
+        .text-white { color: #ffffff; }
+        .font-bold { font-weight: 700; }
+        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+        .px-4 { padding-left: 1rem; padding-right: 1rem; }
+        .focus\:outline-none:focus { outline: 2px solid transparent; outline-offset: 2px; }
+        .focus\:ring-2:focus { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5); }
+        .focus\:ring-blue-500:focus { --tw-ring-color: #3b82f6; }
+    </style>
+</head>
+<body class="min-h-screen transition-all duration-300">
+    <!-- 暗色模式切换按钮 -->
+    <button id="darkModeToggle" class="fixed top-4 right-4 z-50 p-3 bg-gray-800 text-white rounded-full shadow-lg hover:bg-gray-700 transition-all duration-300">
+        <svg id="sunIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+        </svg>
+        <svg id="moonIcon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+        </svg>
+    </button>
+
+    <!-- 返回按钮 -->
+    <button onclick="window.location.href='{{ url_for('education.resources') }}'" class="fixed top-4 left-4 z-50 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+    </button>
+
+    <div id="container" class="relative w-screen h-screen flex flex-col lg:flex-row">
+        <!-- Canvas for 3D simulation -->
+        <div id="canvas-container" class="w-full lg:w-3/4 h-1/2 lg:h-full bg-gray-100 flex justify-center items-center">
+            <!-- Three.js will render here -->
+        </div>
+
+        <!-- Controls and Information Panel -->
+        <div class="w-full lg:w-1/4 h-1/2 lg:h-full overflow-y-auto p-6 bg-white shadow-md rounded-lg">
+            <h1 class="text-2xl font-bold mb-6 text-center text-gray-800">洛伦兹力3D仿真</h1>
+
+            <div class="control-group">
+                <label for="charge">电子电荷 (q): <span id="chargeValue" class="value-display">1.0</span></label>
+                <input type="range" id="charge" min="-2" max="2" value="1" step="0.1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="mass">电子质量 (m): <span id="massValue" class="value-display">1.0</span></label>
+                <input type="range" id="mass" min="0.1" max="5" value="1" step="0.1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="initialVelocityMagnitude">初始速度大小 (|v|): <span id="initialVelocityMagnitudeValue" class="value-display">5.0</span></label>
+                <input type="range" id="initialVelocityMagnitude" min="1" max="10" value="5" step="0.1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="magneticFieldMagnitude">磁场强度 (|B|): <span id="magneticFieldMagnitudeValue" class="value-display">2.0</span></label>
+                <input type="range" id="magneticFieldMagnitude" min="0" max="5" value="2" step="0.1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="initialVelocityAngleY">初始速度方向 (绕Y轴角度): <span id="initialVelocityAngleYValue" class="value-display">0°</span></label>
+                <input type="range" id="initialVelocityAngleY" min="0" max="360" value="0" step="1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group">
+                <label for="magneticFieldAngleY">磁场方向 (绕Y轴角度): <span id="magneticFieldAngleYValue" class="value-display">0°</span></label>
+                <input type="range" id="magneticFieldAngleY" min="0" max="360" value="0" step="1" class="accent-blue-500">
+            </div>
+
+            <div class="control-group mt-4">
+                <label class="text-gray-700">实时计算值:</label>
+                <p>洛伦兹力大小 (|F|): <span id="forceMagnitudeDisplay" class="value-display">0.00</span></p>
+                <p>理论偏转半径 (R): <span id="theoreticalRadiusDisplay" class="value-display">NaN</span></p>
+                <p>当前速度大小 (|v|): <span id="currentVelocityMagnitudeDisplay" class="value-display">0.00</span></p>
+                <p>当前位置 (x, y, z): <span id="currentPositionDisplay" class="value-display">(0.00, 0.00, 0.00)</span></p>
+            </div>
+
+            <button id="resetButton" class="w-full mt-6 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md">
+                重置模拟
+            </button>
+
+            <!-- AI功能区域 -->
+            <div class="mt-6 bg-gradient-to-r from-purple-50 to-blue-50 p-4 rounded-lg border border-purple-200">
+                <h3 class="text-lg font-semibold text-purple-800 mb-3">🤖 AI助手</h3>
+                
+                <!-- 物理洞察 -->
+                <button id="getInsightButton" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-md transition-all duration-300">
+                    ✨ 获取物理洞察 ✨
+                </button>
+                <div id="insightDisplay" class="mt-3 p-3 bg-white rounded-lg text-sm text-gray-700 border border-gray-200 min-h-[60px]">
+                    点击按钮获取当前3D模拟的物理解释和分析。
+                </div>
+
+                <!-- AI聊天 -->
+                <div class="mt-4">
+                    <div class="flex gap-2">
+                        <input type="text" id="userInput" placeholder="向AI助手提问..." 
+                               class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        <button id="sendBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-all duration-300">
+                            发送
+                        </button>
+                    </div>
+                    <div id="aiChat" class="mt-3 p-3 bg-white rounded-lg border border-gray-200 max-h-32 overflow-y-auto text-sm">
+                        <div class="text-gray-500">AI助手已准备好回答您关于洛伦兹力3D仿真的问题...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Scene setup
+        let scene, camera, renderer;
+        let electron, magneticFieldArrow, forceArrow, velocityArrow;
+        let trajectoryPoints = [];
+        let trajectoryLine;
+
+        // Physics parameters
+        let q = 1.0; // Charge of the electron (arbitrary units)
+        let m = 1.0; // Mass of the electron (arbitrary units)
+        let v_mag = 5.0; // Initial velocity magnitude
+        let B_mag = 2.0; // Magnetic field magnitude
+
+        let initialVelocityAngleY = 0; // Angle around Y-axis for initial velocity
+        let magneticFieldAngleY = 0; // Angle around Y-axis for magnetic field
+
+        let electronPosition = new THREE.Vector3(0, 0, 0);
+        let electronVelocity = new THREE.Vector3();
+        let magneticFieldVector = new THREE.Vector3();
+
+        let currentForceMagnitude = 0; // To store the latest force magnitude
+        let currentTheoreticalRadius = NaN; // To store the latest theoretical radius
+
+        // Time step for simulation - 减小时间步长以提高精度
+        const dt = 0.005;
+
+        // Initialize the 3D scene
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f4f8); // Light background
+
+            // Camera - 调整视角宽度，避免压缩感
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(15, 10, 15);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer - 优化显示质量
+            const canvasContainer = document.getElementById('canvas-container');
+            renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                alpha: true,
+                powerPreference: "high-performance"
+            });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            canvasContainer.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6); // Soft white light
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 50, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+
+            // Grid Helper
+            const gridHelper = new THREE.GridHelper(50, 50, 0x888888, 0xcccccc);
+            scene.add(gridHelper);
+
+            // 创建更粗的坐标轴箭头
+            // X轴 (红色渐变)
+            const xAxisArrow = new THREE.ArrowHelper(
+                new THREE.Vector3(1, 0, 0),
+                new THREE.Vector3(0, 0, 0),
+                12,
+                0xff3333,
+                2.0,
+                1.0
+            );
+            // 设置线条粗细
+            xAxisArrow.line.material.linewidth = 3;
+            scene.add(xAxisArrow);
+
+            // Y轴 (绿色渐变)
+            const yAxisArrow = new THREE.ArrowHelper(
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, 0, 0),
+                12,
+                0x33ff33,
+                2.0,
+                1.0
+            );
+            yAxisArrow.line.material.linewidth = 3;
+            scene.add(yAxisArrow);
+
+            // Z轴 (蓝色渐变)
+            const zAxisArrow = new THREE.ArrowHelper(
+                new THREE.Vector3(0, 0, 1),
+                new THREE.Vector3(0, 0, 0),
+                12,
+                0x3333ff,
+                2.0,
+                1.0
+            );
+            zAxisArrow.line.material.linewidth = 3;
+            scene.add(zAxisArrow);
+
+
+
+            // Electron (particle) - 更大更明显的粒子
+            const electronGeometry = new THREE.SphereGeometry(0.8, 32, 32);
+            const electronMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0x00aaff, 
+                emissive: 0x0066aa,
+                transparent: true,
+                opacity: 0.9,
+                shininess: 100
+            });
+            electron = new THREE.Mesh(electronGeometry, electronMaterial);
+            scene.add(electron);
+
+            // Magnetic Field Arrow - 减小箭头头部大小，加粗线条
+            // Initial direction assumed along positive Y-axis for visualization
+            const B_origin = new THREE.Vector3(0, 0, 0);
+            magneticFieldArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), B_origin, 8, 0x00dd00, 1.0, 0.5);
+            magneticFieldArrow.line.material.linewidth = 4;
+            scene.add(magneticFieldArrow);
+
+            // Force Arrow (starts hidden, updated in animate) - 加粗线条
+            const F_origin = new THREE.Vector3(0, 0, 0);
+            forceArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 0), F_origin, 5, 0xff4444, 1.2, 0.6);
+            forceArrow.line.material.linewidth = 4;
+            scene.add(forceArrow);
+
+            // Velocity Arrow (starts hidden, updated in animate) - 加粗线条
+            const V_origin = new THREE.Vector3(0, 0, 0);
+            velocityArrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), V_origin, 0.1, 0xffaa00, 1.2, 0.6);
+            velocityArrow.line.material.linewidth = 4;
+            velocityArrow.visible = false; // 初始时隐藏，避免显示异常
+            scene.add(velocityArrow);
+
+            // Trajectory line - 使用更粗的线条和更明显的颜色
+            const trajectoryMaterial = new THREE.LineBasicMaterial({
+                color: 0xff4444,
+                linewidth: 8,
+                transparent: true,
+                opacity: 0.95
+            });
+            const trajectoryGeometry = new THREE.BufferGeometry();
+            trajectoryLine = new THREE.Line(trajectoryGeometry, trajectoryMaterial);
+            scene.add(trajectoryLine);
+
+            // Add event listeners for UI controls
+            addEventListeners();
+
+            // Set initial parameters and reset simulation
+            resetSimulation();
+
+            // Handle window resizing
+            window.addEventListener('resize', onWindowResize, false);
+
+            // Mouse controls for camera (simplified, manual rotation)
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+
+                // Rotate camera around the scene center
+                const rotationSpeed = 0.01;
+                const angleY = deltaX * rotationSpeed;
+                const angleX = deltaY * rotationSpeed;
+
+                const currentPosition = camera.position.clone();
+                const currentTarget = new THREE.Vector3(0, 0, 0); // Always look at origin
+
+                // Rotate around Y-axis (horizontal drag)
+                const axisY = new THREE.Vector3(0, 1, 0);
+                currentPosition.applyAxisAngle(axisY, -angleY);
+
+                // Rotate around X-axis (vertical drag) relative to camera's right vector
+                camera.lookAt(currentTarget); // Ensure camera's up is correctly oriented for the right vector
+                const axisX = camera.getWorldDirection(new THREE.Vector3()).cross(camera.up).normalize();
+                currentPosition.applyAxisAngle(axisX, -angleX);
+
+
+                camera.position.copy(currentPosition);
+                camera.lookAt(currentTarget);
+
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+        }
+
+        // Handle window resizing
+        function onWindowResize() {
+            const canvasContainer = document.getElementById('canvas-container');
+            const width = canvasContainer.clientWidth;
+            const height = canvasContainer.clientHeight;
+
+            // 更新相机宽高比
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+
+            // 更新渲染器尺寸
+            renderer.setSize(width, height);
+
+            // 确保像素比正确，提升显示质量
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        }
+
+        // Add event listeners for UI controls
+        function addEventListeners() {
+            // Charge slider
+            document.getElementById('charge').addEventListener('input', (e) => {
+                q = parseFloat(e.target.value);
+                document.getElementById('chargeValue').textContent = q.toFixed(1);
+                resetSimulation();
+            });
+
+            // Mass slider
+            document.getElementById('mass').addEventListener('input', (e) => {
+                m = parseFloat(e.target.value);
+                document.getElementById('massValue').textContent = m.toFixed(1);
+                resetSimulation();
+            });
+
+            // Initial velocity magnitude slider
+            document.getElementById('initialVelocityMagnitude').addEventListener('input', (e) => {
+                v_mag = parseFloat(e.target.value);
+                document.getElementById('initialVelocityMagnitudeValue').textContent = v_mag.toFixed(1);
+                resetSimulation();
+            });
+
+            // Magnetic field magnitude slider
+            document.getElementById('magneticFieldMagnitude').addEventListener('input', (e) => {
+                B_mag = parseFloat(e.target.value);
+                document.getElementById('magneticFieldMagnitudeValue').textContent = B_mag.toFixed(1);
+                updateMagneticFieldArrow();
+                resetSimulation();
+            });
+
+            // Initial velocity angle Y slider
+            document.getElementById('initialVelocityAngleY').addEventListener('input', (e) => {
+                initialVelocityAngleY = parseFloat(e.target.value);
+                document.getElementById('initialVelocityAngleYValue').textContent = initialVelocityAngleY.toFixed(0) + '°';
+                resetSimulation();
+            });
+
+            // Magnetic field angle Y slider
+            document.getElementById('magneticFieldAngleY').addEventListener('input', (e) => {
+                magneticFieldAngleY = parseFloat(e.target.value);
+                document.getElementById('magneticFieldAngleYValue').textContent = magneticFieldAngleY.toFixed(0) + '°';
+                updateMagneticFieldArrow();
+                resetSimulation();
+            });
+
+            // Reset button
+            document.getElementById('resetButton').addEventListener('click', resetSimulation);
+        }
+
+        // Update magnetic field arrow direction
+        function updateMagneticFieldArrow() {
+            const angleRadY = (magneticFieldAngleY * Math.PI) / 180;
+            const direction = new THREE.Vector3(Math.sin(angleRadY), 0, Math.cos(angleRadY));
+            magneticFieldArrow.setDirection(direction);
+            // 只改变长度，棱锥大小保持恒定
+            magneticFieldArrow.setLength(B_mag * 4, 1.0, 0.5);
+        }
+
+        // Reset simulation
+        function resetSimulation() {
+            // Reset electron position
+            electronPosition.set(0, 0, 0);
+            electron.position.copy(electronPosition);
+
+            // Set initial velocity based on angle
+            const angleRadY = (initialVelocityAngleY * Math.PI) / 180;
+            electronVelocity.set(v_mag * Math.sin(angleRadY), 0, v_mag * Math.cos(angleRadY));
+
+            // Set magnetic field vector
+            const magneticAngleRadY = (magneticFieldAngleY * Math.PI) / 180;
+            magneticFieldVector.set(B_mag * Math.sin(magneticAngleRadY), 0, B_mag * Math.cos(magneticAngleRadY));
+
+            // Clear trajectory
+            trajectoryPoints = [];
+            updateTrajectoryLine();
+
+            // Update magnetic field arrow
+            updateMagneticFieldArrow();
+        }
+
+        // Update trajectory line
+        function updateTrajectoryLine() {
+            const positions = new Float32Array(trajectoryPoints.length * 3);
+            for (let i = 0; i < trajectoryPoints.length; i++) {
+                positions[i * 3] = trajectoryPoints[i].x;
+                positions[i * 3 + 1] = trajectoryPoints[i].y;
+                positions[i * 3 + 2] = trajectoryPoints[i].z;
+            }
+            trajectoryLine.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Physics simulation - 使用更精确的Runge-Kutta方法
+            if (B_mag > 0 && electronVelocity.length() > 0) {
+                // 保存初始速度大小用于能量守恒检查
+                const initialSpeed = electronVelocity.length();
+
+                // Calculate Lorentz force: F = q * (v × B)
+                const lorentzForce = new THREE.Vector3().crossVectors(electronVelocity, magneticFieldVector).multiplyScalar(q);
+                currentForceMagnitude = lorentzForce.length();
+
+                // Calculate acceleration: a = F / m
+                const acceleration = lorentzForce.clone().divideScalar(m);
+
+                // 使用Verlet积分法提高精度
+                // 更新速度: v = v + a * dt
+                electronVelocity.add(acceleration.clone().multiplyScalar(dt));
+
+                // 能量守恒：确保速度大小不变（洛伦兹力不做功）
+                if (electronVelocity.length() > 0) {
+                    electronVelocity.normalize().multiplyScalar(initialSpeed);
+                }
+
+                // Update position: r = r + v * dt
+                electronPosition.add(electronVelocity.clone().multiplyScalar(dt));
+
+                // Update electron position
+                electron.position.copy(electronPosition);
+
+                // Add to trajectory
+                trajectoryPoints.push(electronPosition.clone());
+                if (trajectoryPoints.length > 1000) {
+                    trajectoryPoints.shift(); // Remove oldest point to limit memory usage
+                }
+                updateTrajectoryLine();
+
+                // Update arrows - 保持棱锥大小恒定
+                forceArrow.position.copy(electronPosition);
+
+                // 修复受力为零时箭头显示问题
+                if (currentForceMagnitude > 0.001) {
+                    const forceDirection = lorentzForce.clone().normalize();
+                    forceArrow.setDirection(forceDirection);
+                    forceArrow.setLength(Math.min(currentForceMagnitude * 0.5, 10), 1.2, 0.6);
+                    forceArrow.visible = true;
+                } else {
+                    // 受力接近零时隐藏箭头，避免箭头异常显示
+                    forceArrow.visible = false;
+                }
+
+                velocityArrow.position.copy(electronPosition);
+
+                // 修复速度为零时箭头显示问题
+                const velocityMagnitude = electronVelocity.length();
+                if (velocityMagnitude > 0.001) {
+                    const velocityDirection = electronVelocity.clone().normalize();
+                    velocityArrow.setDirection(velocityDirection);
+                    velocityArrow.setLength(Math.min(velocityMagnitude * 0.5, 10), 1.2, 0.6);
+                    velocityArrow.visible = true;
+                } else {
+                    // 速度接近零时隐藏箭头，避免箭头超出粒子
+                    velocityArrow.visible = false;
+                }
+
+                // Calculate theoretical radius for circular motion
+                if (currentForceMagnitude > 0) {
+                    currentTheoreticalRadius = (m * electronVelocity.length()) / (Math.abs(q) * B_mag);
+                } else {
+                    currentTheoreticalRadius = NaN;
+                }
+            }
+
+            // Update display values
+            document.getElementById('forceMagnitudeDisplay').textContent = currentForceMagnitude.toFixed(2);
+            document.getElementById('theoreticalRadiusDisplay').textContent = isNaN(currentTheoreticalRadius) ? 'NaN' : currentTheoreticalRadius.toFixed(2);
+            document.getElementById('currentVelocityMagnitudeDisplay').textContent = electronVelocity.length().toFixed(2);
+            document.getElementById('currentPositionDisplay').textContent = `(${electronPosition.x.toFixed(2)}, ${electronPosition.y.toFixed(2)}, ${electronPosition.z.toFixed(2)})`;
+
+            // Render the scene
+            renderer.render(scene, camera);
+
+            // Reset if electron goes too far
+            if (electronPosition.length() > 100) {
+                 resetSimulation();
+            }
+        }
+
+        // 暗色模式切换
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        const sunIcon = document.getElementById('sunIcon');
+        const moonIcon = document.getElementById('moonIcon');
+
+        let isDarkMode = localStorage.getItem('darkMode') === 'true';
+
+        function updateDarkMode() {
+            if (isDarkMode) {
+                document.body.classList.add('dark-mode');
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+                if (scene) {
+                    scene.background = new THREE.Color(0x1a1a2e);
+                }
+            } else {
+                document.body.classList.remove('dark-mode');
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
+                if (scene) {
+                    scene.background = new THREE.Color(0xf0f4f8);
+                }
+            }
+            localStorage.setItem('darkMode', isDarkMode);
+        }
+
+        darkModeToggle.addEventListener('click', () => {
+            isDarkMode = !isDarkMode;
+            updateDarkMode();
+        });
+
+        // 检查用户登录状态
+        async function checkLoginStatus() {
+            try {
+                const response = await fetch('/api/user/profile', {
+                    credentials: 'include'
+                });
+                return response.ok;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        // AI聊天功能
+        document.getElementById('sendBtn').addEventListener('click', sendMessage);
+        document.getElementById('userInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            // 检查登录状态
+            const isLoggedIn = await checkLoginStatus();
+            if (!isLoggedIn) {
+                alert('请先登录后再使用AI助手功能！');
+                window.location.href = '/login';
+                return;
+            }
+
+            const chatDiv = document.getElementById('aiChat');
+
+            // 添加用户消息
+            const userMsg = document.createElement('div');
+            userMsg.className = 'mb-2 text-gray-800';
+            userMsg.innerHTML = `<strong>你：</strong>${message}`;
+            chatDiv.appendChild(userMsg);
+
+            // 添加加载消息
+            const loadingMsg = document.createElement('div');
+            loadingMsg.className = 'mb-2 text-gray-600';
+            loadingMsg.innerHTML = `<strong>AI助手：</strong>正在思考中...`;
+            chatDiv.appendChild(loadingMsg);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+
+            try {
+                const response = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        message: `基于洛伦兹力3D仿真教学情景，请回答用户问题：${message}`
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // 更新加载消息为实际回复
+                if (data.response) {
+                    loadingMsg.innerHTML = `<strong>AI助手：</strong>${data.response}`;
+                } else {
+                    loadingMsg.innerHTML = `<strong>AI助手：</strong>抱歉，AI服务暂时不可用。`;
+                }
+            } catch (error) {
+                console.error('Error calling AI API:', error);
+                loadingMsg.innerHTML = `<strong>AI助手：</strong>抱歉，AI服务连接失败。请稍后再试。`;
+            }
+
+            input.value = '';
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+        // 更新物理洞察功能
+        async function getPhysicsInsight() {
+            const isLoggedIn = await checkLoginStatus();
+            if (!isLoggedIn) {
+                alert('请先登录后再使用AI助手功能！');
+                window.location.href = '/login';
+                return;
+            }
+
+            const insightDisplay = document.getElementById('insightDisplay');
+            const button = document.getElementById('getInsightButton');
+
+            button.disabled = true;
+            button.textContent = '分析中...';
+            insightDisplay.textContent = '正在分析当前3D仿真参数...';
+
+            try {
+                const prompt = `
+                当前洛伦兹力3D仿真参数：
+                粒子电荷 (q): ${q.toFixed(1)}
+                粒子质量 (m): ${m.toFixed(1)}
+                初始速度大小 (|v|): ${v_mag.toFixed(1)}
+                磁场强度 (|B|): ${B_mag.toFixed(1)}
+                初始速度方向 (绕Y轴角度): ${initialVelocityAngleY}°
+                磁场方向 (绕Y轴角度): ${magneticFieldAngleY}°
+                当前洛伦兹力大小 (|F|): ${currentForceMagnitude.toFixed(2)}
+                理论偏转半径 (R): ${isNaN(currentTheoreticalRadius) ? '无限或不适用' : currentTheoreticalRadius.toFixed(2)}
+                当前位置: (${electronPosition.x.toFixed(2)}, ${electronPosition.y.toFixed(2)}, ${electronPosition.z.toFixed(2)})
+
+                请用中文详细解释这个3D洛伦兹力仿真中粒子的运动轨迹和物理原理。
+                `;
+
+                const response = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ message: prompt })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.response) {
+                    insightDisplay.textContent = data.response;
+                } else {
+                    insightDisplay.textContent = '抱歉，AI服务暂时不可用。';
+                }
+            } catch (error) {
+                console.error('Error calling AI API:', error);
+                insightDisplay.textContent = '获取洞察失败，请稍后再试。';
+            } finally {
+                button.disabled = false;
+                button.textContent = '✨ 获取物理洞察 ✨';
+            }
+        }
+
+        // 绑定物理洞察按钮
+        document.getElementById('getInsightButton').addEventListener('click', getPhysicsInsight);
+
+        // 页面加载时检查登录状态并显示提示
+        async function initializePageWithLoginCheck() {
+            const isLoggedIn = await checkLoginStatus();
+
+            // 更新AI功能区域的提示信息
+            const insightDisplay = document.getElementById('insightDisplay');
+            const aiChatDiv = document.getElementById('aiChat');
+
+            if (!isLoggedIn) {
+                insightDisplay.innerHTML = `
+                    <div class="text-center text-gray-600">
+                        <p class="mb-2">🔒 AI功能需要登录</p>
+                        <button onclick="window.location.href='/login'" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-all duration-300">
+                            立即登录
+                        </button>
+                    </div>
+                `;
+                aiChatDiv.innerHTML = `
+                    <div class="text-center text-gray-500">
+                        <p>请先登录后使用AI助手功能</p>
+                    </div>
+                `;
+
+                // 禁用AI相关按钮
+                document.getElementById('getInsightButton').disabled = true;
+                document.getElementById('userInput').disabled = true;
+            }
+        }
+
+        // Start the animation on window load.
+        window.onload = function () {
+            init();
+            animate();
+            updateDarkMode(); // 初始化暗色模式
+            initializePageWithLoginCheck(); // 检查登录状态
+        };
+    </script>
+</body>
+</html>

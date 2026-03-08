@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>自由落体运动：一个交互式探索</title>
+    <title>自由落体运动：互动式探索</title>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -140,8 +140,8 @@
         <nav class="container mx-auto px-6 py-3">
             <div class="flex justify-between items-center">
                 <div class="flex items-center">
-                    <a href="/" class="bg-blue-600 text-white px-3 py-1 rounded-md mr-4 hover:bg-blue-700 transition-colors">
-                        <i class="fas fa-arrow-left mr-1"></i>返回网站
+                    <a href="{{ url_for('education.resources') }}" class="bg-blue-600 text-white px-3 py-1 rounded-md mr-4 hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-arrow-left mr-1"></i>返回资源页
                     </a>
                     <h1 class="text-xl font-bold text-slate-800">自由落体运动探究</h1>
                 </div>
@@ -315,7 +315,7 @@
 
     <footer class="bg-slate-800 text-slate-300 py-6 mt-16">
         <div class="container mx-auto px-6 text-center">
-            <p>重庆师范大学智能社团+版权所有 &copy; 2025</p>
+            <p>重庆师范大学师能素质协会版权所有 &copy; 2025</p>
             <p class="text-sm text-slate-400 mt-1">基于"自由落体运动"教学设计创建，由Deepseek大模型提供问答支持</p>
         </div>
     </footer>
@@ -376,26 +376,29 @@
                     return "系统错误：无法获取安全令牌。请刷新页面后重试。";
                 }
                 
-                // 调用后端API，由后端处理火山API请求
-                const response = await fetch('/education/api/gemini', {
+                // 调用后端AI API
+                const response = await fetch('/api/ai/chat', {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'X-CSRFToken': csrfToken
                     },
-                    body: JSON.stringify({ prompt: prompt })
+                    body: JSON.stringify({
+                        message: prompt,
+                        context: 'free_fall_education'
+                    })
                 });
                 
                 const data = await response.json();
                 
                 hideModal();
                 
-                if (!data.success) {
-                    console.error('API错误:', data.error || data.content);
-                    return `AI助手暂时无法回答您的问题。${data.error || data.content || '请稍后再试。'}`;
+                if (data.error) {
+                    console.error('API错误:', data.error);
+                    return `AI助手暂时无法回答您的问题。${data.error || '请稍后再试。'}`;
                 }
-                
-                return data.content;
+
+                return data.response || '抱歉，AI助手没有返回有效回答。';
             } catch (error) {
                 console.error('API调用错误:', error);
                 hideModal();

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>抛体运动可视化</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs/%3E%3Crect width='64' height='64' rx='12' fill='%23121a2b'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%238ab4ff' opacity='0.15'/%3E%3Ctext x='32' y='38' font-size='22' text-anchor='middle' fill='%237af0b9' font-family='system-ui, -apple-system, Segoe UI, Roboto, Arial' font-weight='700'%3EAI%3C/text%3E%3C/svg%3E"/>
+  <link rel="stylesheet" href="assets/ui.css" />
+  <style>
+    canvas.display { height: 420px; }
+    .legend { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="{{ url_for('education.resources') }}" class="btn secondary" style="margin-right:8px;">← 返回资源页</a>
+      <div class="title">抛体运动可视化</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <section class="card">
+        <h2>参数设置</h2>
+        <p class="subtle">调整初速度、发射角与初始高度，实时绘制抛物线并计算飞行时间、最大高度与水平射程。</p>
+        <div class="panel-row">
+          <div>
+            <label>初速度 v₀ (m/s)</label>
+            <input id="v0" type="range" class="range" min="1" max="80" step="0.5" value="20" />
+            <input id="v0n" type="number" class="input" min="0.5" max="200" step="0.5" value="20" />
+          </div>
+          <div>
+            <label>发射角 θ (°)</label>
+            <input id="ang" type="range" class="range" min="0" max="89" step="0.5" value="35" />
+            <input id="angn" type="number" class="input" min="0" max="89" step="0.5" value="35" />
+          </div>
+        </div>
+        <div class="panel-row">
+          <div>
+            <label>初始高度 h₀ (m)</label>
+            <input id="h0" type="range" class="range" min="0" max="20" step="0.1" value="0" />
+            <input id="h0n" type="number" class="input" min="0" max="50" step="0.1" value="0" />
+          </div>
+          <div>
+            <label>重力加速度 g (m/s²)</label>
+            <input id="g" type="range" class="range" min="1" max="20" step="0.1" value="9.8" />
+            <input id="gn" type="number" class="input" min="1" max="30" step="0.1" value="9.8" />
+          </div>
+        </div>
+        <div class="panel-row">
+          <button id="start" class="btn">开始/重置</button>
+        </div>
+
+        <div class="kpi" style="margin-top:12px;">
+          <div class="item"><div class="val" id="k-t">-- s</div><div class="lab">飞行时间</div></div>
+          <div class="item"><div class="val" id="k-h">-- m</div><div class="lab">最大高度</div></div>
+          <div class="item"><div class="val" id="k-R">-- m</div><div class="lab">水平射程</div></div>
+        </div>
+
+        <div class="card" style="margin-top:12px;">
+          <h3>轨迹显示</h3>
+          <canvas id="view" class="display"></canvas>
+          <div class="legend">紫：轨迹；白：地面与刻度；绿：抛体当前点</div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3>实验原理</h3>
+        <p>忽略空气阻力时，x(t)=v₀cosθ·t，y(t)=h₀+v₀sinθ·t−½gt²。飞行时间来自 y(t)=0 的正根；最大高度在 vy=0 时取得；水平射程 R=x(T)。</p>
+        <h3 style="margin-top:10px;">实验步骤</h3>
+        <ol>
+          <li>设置初速度 v₀ 与发射角 θ，必要时设定初始高度 h₀。</li>
+          <li>点击“开始/重置”，观察实时轨迹与关键指标 T、Hmax、R。</li>
+          <li>尝试改变 θ 或 v₀，比较轨迹与射程变化；当 h₀=0 时，θ≈45° 常得到较大射程。</li>
+        </ol>
+        <h3 style="margin-top:10px;">AI 实验助手</h3>
+        <p class="subtle">点击右下“AI”可提问，支持语音。</p>
+      </aside>
+    </div>
+  </main>
+
+  <script src="assets/ai.js"></script>
+  <script src="assets/chat-widget.js"></script>
+  <script>
+    const el = id => document.getElementById(id);
+    const v0=el('v0'), v0n=el('v0n');
+    const ang=el('ang'), angn=el('angn');
+    const h0=el('h0'), h0n=el('h0n');
+    const gR=el('g'), gn=el('gn');
+    const kT=el('k-t'), kH=el('k-h'), kR=el('k-R');
+    const cv=el('view'), ctx=cv.getContext('2d');
+    const startBtn=el('start');
+
+    function sync(a,b){ a.addEventListener('input',()=>{b.value=a.value; drawAll();}); b.addEventListener('change',()=>{a.value=b.value; b.value=a.value; drawAll();});}
+    [ [v0,v0n],[ang,angn],[h0,h0n],[gR,gn] ].forEach(([a,b])=>sync(a,b));
+
+    let t=0, running=false, lastTs=0;
+
+    function params(){
+      return {
+        v0: +v0n.value, th: (+angn.value)*Math.PI/180,
+        h0: +h0n.value, g: +gn.value
+      };
+    }
+    function metrics(p){
+      const vy0 = p.v0*Math.sin(p.th);
+      const disc = vy0*vy0 + 2*p.g*p.h0;
+      const T = (vy0 + Math.sqrt(disc))/p.g;
+      const Hmax = p.h0 + vy0*vy0/(2*p.g);
+      const R = p.v0*Math.cos(p.th)*T;
+      return {T,Hmax,R};
+    }
+
+    function worldToCanvas(x,y, scale, origin){
+      return { X: origin.x + x*scale, Y: origin.y - y*scale };
+    }
+
+    function drawAll(){
+      const w=cv.clientWidth, h=cv.clientHeight; cv.width=w; cv.height=h; ctx.clearRect(0,0,w,h);
+      const p=params(); const m=metrics(p);
+      kT.textContent = m.T.toFixed(2)+' s';
+      kH.textContent = m.Hmax.toFixed(2)+' m';
+      kR.textContent = m.R.toFixed(2)+' m';
+
+      // 轻量建议：引导实验（右下角小气泡）
+      if (window.ChatWidget && typeof ChatWidget.suggest === 'function') {
+        clearTimeout(window.__pmSugT);
+        window.__pmSugT = setTimeout(() => {
+          let tip = '';
+          let payload = {};
+          const cur = params();
+          const deg = (cur.th * 180 / Math.PI);
+          if (Math.abs(cur.h0) < 1e-6) {
+            if (deg < 40 || deg > 50) {
+              tip = '试试把角度调到 45° 左右，观察水平射程是否增大。';
+              payload = { action:'set_params', angle_deg: 45 };
+            } else {
+              const nv0 = Math.min(cur.v0 + 10, 80);
+              tip = '现在角度接近 45°，尝试增大 v₀ 观察射程变化（示例：+10 m/s）。';
+              payload = { action:'set_params', v0: nv0 };
+            }
+          } else {
+            tip = '改变 h₀ 或 θ，比较最大高度与射程的差异（示例：将 h₀ 设为 0）。';
+            payload = { action:'set_params', h0: 0 };
+          }
+          ChatWidget.suggest(tip, payload);
+        }, 500);
+      }
+
+      // 自动缩放：让轨迹大致填满画布
+      const pad=40;
+      const xMax = Math.max(10, m.R*1.1);
+      const yMax = Math.max(1, m.Hmax, p.h0);
+      const scale = Math.min( (w-2*pad)/xMax, (h-2*pad)/yMax );
+      const origin = { x: pad, y: h - pad };
+
+      // 地面
+      ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(pad, origin.y); ctx.lineTo(w-pad, origin.y); ctx.stroke();
+
+      // 刻度（每 10m）
+      ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font='12px system-ui';
+      for(let x=0; x<=xMax; x+=10){ const P=worldToCanvas(x,0,scale,origin); ctx.fillText(x.toFixed(0), P.X, origin.y+14); }
+      for(let y=0; y<=yMax; y+=5){ const P=worldToCanvas(0,y,scale,origin); ctx.fillText(y.toFixed(0), pad-28, P.Y+4); }
+
+      // 轨迹
+      ctx.strokeStyle='#b099ff'; ctx.lineWidth=2; ctx.beginPath();
+      let first=true;
+      for(let tt=0; tt<=m.T; tt+=m.T/200){
+        const x = p.v0*Math.cos(p.th)*tt;
+        const y = p.h0 + p.v0*Math.sin(p.th)*tt - 0.5*p.g*tt*tt;
+        const P=worldToCanvas(x,y,scale,origin);
+        if(first){ ctx.moveTo(P.X,P.Y); first=false; } else ctx.lineTo(P.X,P.Y);
+      }
+      ctx.stroke();
+
+      // 动点
+      const tc = running ? Math.min(t, m.T) : 0;
+      const xc = p.v0*Math.cos(p.th)*tc;
+      const yc = p.h0 + p.v0*Math.sin(p.th)*tc - 0.5*p.g*tc*tc;
+      const Pc = worldToCanvas(xc,yc,scale,origin);
+      ctx.fillStyle='#7af0b9'; ctx.beginPath(); ctx.arc(Pc.X,Pc.Y,6,0,Math.PI*2); ctx.fill();
+    }
+
+    function loop(ts){
+      if(!running) return;
+      if(!lastTs) lastTs=ts;
+      const dt = Math.min(0.05, (ts-lastTs)/1000);
+      t += dt; lastTs=ts;
+      drawAll();
+      requestAnimationFrame(loop);
+    }
+
+    startBtn.addEventListener('click', ()=>{
+      running=false; t=0; lastTs=0; drawAll(); running=true; requestAnimationFrame(loop);
+    });
+    window.addEventListener('resize', drawAll);
+    drawAll();
+
+    // 供 ChatWidget.suggest 的“填入”直接改参数
+    window.onChatWidgetFill = function (payload = {}) {
+      try {
+        if (typeof payload.v0 === 'number') { v0.value = payload.v0; v0n.value = payload.v0; }
+        if (typeof payload.angle_deg === 'number') { ang.value = payload.angle_deg; angn.value = payload.angle_deg; }
+        if (typeof payload.h0 === 'number') { h0.value = payload.h0; h0n.value = payload.h0; }
+        if (typeof payload.g === 'number') { gR.value = payload.g; gn.value = payload.g; }
+        drawAll();
+      } catch (e) {}
+    };
+
+    ChatWidget.init({
+      title:'抛体运动 AI 助手',
+      tts:true, stt:true,
+      systemPrompt:'你是运动学实验助手，擅长抛体运动、参数估计与误差分析，回答简洁清晰。',
+      context: 'projectile_motion_education'
+    });
+
+    // 实验上下文：供聊天挂件读取
+    window.getExperimentContext = function () {
+      const p = params();
+      const m = metrics(p);
+      return {
+        experiment: 'projectile_motion',
+        v0_m_s: +p.v0.toFixed(3),
+        angle_deg: +(p.th*180/Math.PI).toFixed(2),
+        h0_m: +p.h0.toFixed(3),
+        g_m_s2: +p.g.toFixed(3),
+        T_s: +m.T.toFixed(3),
+        Hmax_m: +m.Hmax.toFixed(3),
+        R_m: +m.R.toFixed(3)
+      };
+    };
+  </script>
+</body>
+</html>

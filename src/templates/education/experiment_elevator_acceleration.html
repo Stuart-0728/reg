@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>电梯中的超重与失重实验</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs/%3E%3Crect width='64' height='64' rx='12' fill='%23121a2b'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%238ab4ff' opacity='0.15'/%3E%3Ctext x='32' y='38' font-size='22' text-anchor='middle' fill='%237af0b9' font-family='system-ui, -apple-system, Segoe UI, Roboto, Arial' font-weight='700'%3EAI%3C/text%3E%3C/svg%3E"/>
+  <link rel="stylesheet" href="assets/ui.css" />
+  <style>
+    .legend { font-size: 12px; color: var(--muted); }
+    canvas.display { height: 320px; }
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .status-normal { background-color: #7af0b9; }
+    .status-overweight { background-color: #ff7a7a; }
+    .status-weightless { background-color: #7a9fff; }
+    .status-label {
+      display: flex;
+      align-items: center;
+      margin-right: 12px;
+      font-size: 12px;
+    }
+    .status-container {
+      display: flex;
+      margin-top: 8px;
+    }
+
+    .status-stats {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="{{ url_for('education.resources') }}" class="btn secondary" style="margin-right:8px;">← 返回资源页</a>
+      <div class="title">电梯中的超重与失重实验</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <section class="card">
+        <h2>实验控制</h2>
+        <p class="subtle">在电梯运行过程中，手机竖直放置，点击"请求权限并开始"，测量电梯加速度变化，观察超重与失重现象。</p>
+
+        <div class="panel-row">
+          <div>
+            <label>平滑系数 α (0~1，越大越平滑)</label>
+            <input id="alpha" type="range" min="0" max="1" step="0.05" value="0.3" class="range" />
+          </div>
+          <div>
+            <label>绘图窗口时长 (秒)</label>
+            <input id="win" type="number" class="input" min="3" max="60" step="1" value="30" />
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <div>
+            <label>超重/失重阈值 (m/s²)</label>
+            <input id="threshold" type="number" class="input" min="0.1" max="2.0" step="0.05" value="0.2" />
+          </div>
+          <div>
+            <label>参考轴</label>
+            <select id="axis-select" class="input">
+              <option value="mag" selected>合加速度</option>
+              <option value="z">Z轴 (垂直)</option>
+              <option value="y">Y轴</option>
+              <option value="x">X轴</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <button id="start" class="btn">请求权限并开始</button>
+          <button id="stop" class="btn danger" disabled>停止</button>
+          <button id="mark" class="btn secondary" disabled>打标记</button>
+          <button id="export" class="btn secondary">导出数据</button>
+        </div>
+
+        <div class="kpi" style="margin-top: 12px;">
+          <div class="item">
+            <div class="val" id="k-a-now">-- m/s²</div>
+            <div class="lab">当前加速度</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-a-max">-- m/s²</div>
+            <div class="lab">最大加速度</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-a-min">-- m/s²</div>
+            <div class="lab">最小加速度</div>
+          </div>
+        </div>
+
+        <div class="status-container">
+          <div class="status-label"><span class="status-indicator status-normal"></span>正常</div>
+          <div class="status-label"><span class="status-indicator status-overweight"></span>超重</div>
+          <div class="status-label"><span class="status-indicator status-weightless"></span>失重</div>
+          <div id="current-status" style="margin-left: auto; font-weight: bold;">状态: 等待测量</div>
+        </div>
+        
+        <div class="status-stats">
+          <div>正常时长: <span id="normal-time">0.0</span>秒</div>
+          <div>超重时长: <span id="overweight-time">0.0</span>秒</div>
+          <div>失重时长: <span id="weightless-time">0.0</span>秒</div>
+        </div>
+
+        <div class="card" style="margin-top: 12px;">
+          <h3>实时曲线：电梯加速度</h3>
+          <canvas id="plot" class="display"></canvas>
+          <div class="legend">蓝线：加速度；红色区域：超重；蓝色区域：失重；白点：标记时刻；虚线：参考 0（以初始加速度为基准）m/s²</div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3>实验原理</h3>
+        <p>在电梯运动过程中，我们会感受到超重或失重现象。这是因为电梯的加速度与重力加速度叠加，改变了我们感受到的"有效重力"。</p>
+        <ul>
+          <li><strong>电梯向上加速</strong>：产生超重感，测得加速度大于重力加速度</li>
+          <li><strong>电梯向下加速</strong>：产生失重感，测得加速度小于重力加速度</li>
+          <li><strong>电梯匀速运动</strong>：正常重力感，测得加速度约等于重力加速度</li>
+        </ul>
+        
+        <h3>最佳实践步骤</h3>
+        <ol>
+          <li>将手机竖直放置（屏幕朝向自己，顶部向上），确保Z轴与电梯运动方向一致。</li>
+          <li>调整平滑系数α（推荐0.3-0.5）和绘图窗口时长（推荐30-60秒）。</li>
+          <li>在电梯启动前点击"请求权限并开始"，然后乘坐电梯上下楼层。</li>
+          <li>在电梯启动、停止或匀速运行时点击"打标记"记录关键时刻。</li>
+          <li>观察加速度曲线变化，分析超重与失重状态的出现时机和持续时间。</li>
+          <li>实验结束后点击"停止"，分析记录的数据。</li>
+        </ol>
+        
+        <h3>注意事项</h3>
+        <ul>
+          <li>保持手机稳定，避免手持晃动干扰测量。</li>
+          <li>不同电梯的加速度特性不同，高速电梯通常有更明显的超重/失重效果。</li>
+          <li>超重/失重阈值可根据实际情况调整，默认为±0.2 m/s²。</li>
+          <li>参考默认为合加速度（以初始表观重力为基准），可根据手机放置方式调整。</li>
+          <li>安全第一，实验过程中请注意安全，避免因关注手机而忽视周围环境。</li>
+        </ul>
+        
+        <div style="height:10px;"></div>
+        <h3>AI 实验助手</h3>
+        <p class="subtle">右下角"AI"按钮可打开问答面板。</p>
+      </aside>
+    </div>
+  </main>
+
+  <script src="assets/ai.js"></script>
+  <script src="assets/chat-widget.js"></script>
+  <script>
+    // DOM
+    const el = id => document.getElementById(id);
+    const startBtn = el('start'), stopBtn = el('stop'), markBtn = el('mark'), exportBtn = el('export');
+    const alphaR = el('alpha'), winInput = el('win'), thresholdInput = el('threshold');
+    const axisSelect = el('axis-select');
+    const kNow = el('k-a-now'), kMax = el('k-a-max'), kMin = el('k-a-min');
+    const currentStatus = el('current-status');
+    const plot = el('plot'); const pctx = plot.getContext('2d');
+
+    // 状态
+    let running = false;
+    let raf = null;
+    let alpha = parseFloat(alphaR.value);
+    let windowSec = parseFloat(winInput.value);
+    let threshold = parseFloat(thresholdInput.value);
+    let selectedAxis = axisSelect.value;
+    let series = []; // {t, a, ax, ay, az, mag, mark?}
+    let rawDataSeries = []; // 存储原始传感器数据
+    let aLP = null; // 低通后的加速度
+    let startT = 0;
+    let maxA = -Infinity;
+    let minA = Infinity;
+    const G0 = 9.81; // 标准重力加速度，用于合加速度法
+    
+    // 校准相关变量
+    let gRef = null; // 参考重力值
+    let gRefSum = 0; // 重力值累计
+    let gRefCount = 0; // 重力值计数
+    let calibrating = false; // 是否正在校准
+    let calibStartTime = 0; // 校准开始时间
+    let calibDuration = 1.0; // 校准持续时间（秒）
+    let lastMotionEventTime = 0; // 最后一次运动事件时间
+    let noSensorTimer = null; // 无传感器检测定时器
+
+    // 权限兼容
+    async function requestMotionPermission() {
+      const isiOS = typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function';
+
+      if (isiOS) {
+        // iOS 需 HTTPS 或 localhost，且需用户手势
+        const isLocalhost = /^(localhost|127\.0\.0\.1)$/i.test(location.hostname);
+        if (!window.isSecureContext && !isLocalhost) {
+          alert('iOS 需要在 HTTPS 或 localhost 下请求“运动与方向访问”权限。\n请改用 https 访问，或在本机通过 localhost 打开本页面。');
+          return false;
+        }
+        try {
+          let granted = false;
+          // 先尝试 Motion 权限
+          const r1 = await DeviceMotionEvent.requestPermission().catch(() => 'denied');
+          granted = (r1 === 'granted');
+          // 某些 iOS 版本需要再尝试 Orientation 权限
+          if (!granted && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            const r2 = await DeviceOrientationEvent.requestPermission().catch(() => 'denied');
+            granted = (r2 === 'granted');
+          }
+          if (!granted) {
+            alert('未授予“运动与方向访问”权限。\n请前往【设置 > Safari > 运动与方向访问】开启后返回刷新，再点击“请求权限并开始”。');
+          }
+          return granted;
+        } catch (e) {
+          console.error('[motion-permission] error:', e);
+          alert('请求运动传感器权限失败：' + (e && e.message ? e.message : e));
+          return false;
+        }
+      }
+
+      // 非 iOS：多数浏览器只要有用户手势即可，无独立弹窗
+      if (!('DeviceMotionEvent' in window)) {
+        alert('当前浏览器或设备不支持运动传感器 API。\n请在支持传感器的移动设备（如手机）上打开本实验。');
+        return false;
+      }
+      
+      // Android 和其他设备的权限检查
+      try {
+        // 检查是否需要权限请求（某些 Android 浏览器）
+        if (typeof navigator.permissions !== 'undefined') {
+          const result = await navigator.permissions.query({ name: 'accelerometer' }).catch(() => null);
+          if (result && result.state === 'denied') {
+            alert('加速度传感器权限被拒绝。请在浏览器设置中允许传感器访问。');
+            return false;
+          }
+        }
+      } catch (e) {
+        console.warn('权限检查失败，继续尝试访问传感器:', e);
+      }
+      
+      return true;
+    }
+
+    function onMotion(ev) {
+      if (!running) return;
+      lastMotionEventTime = performance.now();
+      
+      // 获取加速度数据（不含重力）
+      const a = ev.acceleration || {};
+      let ax = a.x || 0, ay = a.y || 0, az = a.z || 0;
+      
+      // 获取包含重力的加速度
+      const ag = ev.accelerationIncludingGravity || {};
+      let gx = ag.x || 0, gy = ag.y || 0, gz = ag.z || 0;
+      
+      // 如果acceleration为null，尝试从accelerationIncludingGravity估算
+      if (!ev.acceleration && ev.accelerationIncludingGravity) {
+        // 简单估算：假设重力主要在Z轴方向
+        const estimatedGravity = 9.81;
+        if (Math.abs(gz) > 5) { // Z轴有明显重力分量
+          az = gz - (gz > 0 ? estimatedGravity : -estimatedGravity);
+        } else {
+          // 重力可能在其他轴
+          ax = gx; ay = gy; az = gz;
+        }
+      }
+      
+      const mag = Math.hypot(ax, ay, az);
+      const gmag = Math.hypot(gx, gy, gz);
+
+      // 校准：收集约1秒的gmag作为参考
+      if (calibrating || gRef == null) {
+        if (gmag > 0) { // 仅在可用时积累
+          gRefSum += gmag; gRefCount++;
+        }
+        const elapsed = performance.now() / 1000 - calibStartTime;
+        if (elapsed >= calibDuration && gRefCount >= 10) {
+          gRef = gRefSum / gRefCount;
+          calibrating = false;
+          currentStatus.textContent = '状态: 测量中';
+          markBtn.disabled = false;
+        }
+        return; // 校准期间不处理数据
+      }
+
+      const deltaG = gRef != null ? (gmag - gRef) : 0; // >0 超重，<0 失重
+      
+      // 根据选择的轴确定要处理的加速度值
+      let currentA;
+      switch (selectedAxis) {
+        case 'x': currentA = ax; break;
+        case 'y': currentA = ay; break;
+        case 'z': currentA = az; break;
+        case 'mag': default: currentA = deltaG; // 默认采用相对初始表观重力的偏差
+      }
+      
+      // 低通滤波
+      aLP = aLP == null ? currentA : alpha * currentA + (1 - alpha) * aLP;
+      
+      // 更新最大/最小值
+      if (aLP > maxA) maxA = aLP;
+      if (aLP < minA) minA = aLP;
+      
+      const t = performance.now() / 1000 - startT;
+      const timestamp = new Date().toISOString();
+      
+      // 记录滤波后的数据
+      series.push({ t, a: aLP, ax, ay, az, mag, gmag, deltaG });
+      
+      // 记录原始传感器数据
+      rawDataSeries.push({ 
+        timestamp, 
+        t, 
+        ax_raw: ax, 
+        ay_raw: ay, 
+        az_raw: az, 
+        mag_raw: mag, // 线性加速度模长
+        g_mag_raw: gmag, // 含重力加速度模长（表观重力）
+        delta_g_raw: deltaG, // 相对初始参考的表观重力偏差
+        currentA_raw: currentA,
+        aLP_filtered: aLP,
+        selectedAxis,
+        alpha,
+        threshold
+      });
+      
+      // 保持窗口
+      const tmin = t - windowSec;
+      while (series.length && series[0].t < tmin) series.shift();
+      while (rawDataSeries.length && rawDataSeries[0].t < tmin) rawDataSeries.shift();
+      
+      // 更新状态显示
+      updateStatus(aLP);
+    }
+
+    // 状态时长统计
+    let normalTime = 0;
+    let overweightTime = 0;
+    let weightlessTime = 0;
+    let lastStatusUpdateTime = 0;
+    let lastStatus = "正常";
+    let statusChangeCount = 0;
+    
+    function updateStatus(a) {
+      let status = "正常";
+      let statusClass = "status-normal";
+      
+      if (a > threshold) {
+        status = "超重";
+        statusClass = "status-overweight";
+      } else if (a < -threshold) {
+        status = "失重";
+        statusClass = "status-weightless";
+      }
+      
+      // 更新状态显示
+      currentStatus.textContent = `状态: ${status}`;
+      currentStatus.className = "";
+      currentStatus.classList.add(statusClass);
+      
+      // 计算状态持续时间
+      const now = performance.now() / 1000;
+      if (lastStatusUpdateTime > 0) {
+        const elapsed = now - lastStatusUpdateTime;
+        if (lastStatus === "正常") normalTime += elapsed;
+        else if (lastStatus === "超重") overweightTime += elapsed;
+        else if (lastStatus === "失重") weightlessTime += elapsed;
+        
+        // 更新状态时长显示
+        document.getElementById("normal-time").textContent = normalTime.toFixed(1);
+        document.getElementById("overweight-time").textContent = overweightTime.toFixed(1);
+        document.getElementById("weightless-time").textContent = weightlessTime.toFixed(1);
+      }
+      
+      // 状态变化时记录
+      if (status !== lastStatus) {
+        statusChangeCount++;
+        lastStatus = status;
+      }
+      
+      lastStatusUpdateTime = now;
+    }
+    
+
+
+    function draw() {
+      raf = requestAnimationFrame(draw);
+      // 自适应像素
+      const w = plot.clientWidth, h = plot.clientHeight;
+      plot.width = w; plot.height = h;
+      pctx.clearRect(0, 0, w, h);
+
+      // 坐标范围
+      const ys = series.map(p => p.a);
+      if (!ys.length) return;
+      const ymin = Math.min(-threshold - 1, Math.min(...ys));
+      const ymax = Math.max(threshold + 1, Math.max(...ys));
+      const t0 = series[0].t, t1 = series[series.length - 1].t;
+
+      // 绘制超重/失重区域
+      const y0 = mapY(0, ymin, ymax, h);
+      const yOver = mapY(threshold, ymin, ymax, h);
+      const yUnder = mapY(-threshold, ymin, ymax, h);
+      
+      // 超重区域（红色）
+      pctx.fillStyle = 'rgba(255,122,122,0.2)';
+      pctx.fillRect(10, 10, w - 20, yOver - 10);
+      
+      // 失重区域（蓝色）
+      pctx.fillStyle = 'rgba(122,159,255,0.2)';
+      pctx.fillRect(10, yUnder, w - 20, h - 10 - yUnder);
+
+      // 参考线 0 m/s²
+      pctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      pctx.setLineDash([6,4]);
+      pctx.beginPath(); pctx.moveTo(10, y0); pctx.lineTo(w-10, y0); pctx.stroke();
+      pctx.setLineDash([]);
+
+      // 阈值线
+      pctx.strokeStyle = 'rgba(255,122,122,0.4)';
+      pctx.setLineDash([3,3]);
+      pctx.beginPath(); pctx.moveTo(10, yOver); pctx.lineTo(w-10, yOver); pctx.stroke();
+      
+      pctx.strokeStyle = 'rgba(122,159,255,0.4)';
+      pctx.beginPath(); pctx.moveTo(10, yUnder); pctx.lineTo(w-10, yUnder); pctx.stroke();
+      pctx.setLineDash([]);
+
+      // 加速度曲线
+      pctx.strokeStyle = '#8ab4ff';
+      pctx.lineWidth = 2;
+      pctx.beginPath();
+      series.forEach((p, i) => {
+        const x = mapX(p.t, t0, t1, w);
+        const y = mapY(p.a, ymin, ymax, h);
+        if (i === 0) pctx.moveTo(x, y); else pctx.lineTo(x, y);
+      });
+      pctx.stroke();
+
+      // KPI
+      kNow.textContent = aLP ? aLP.toFixed(3) + ' m/s²' : '--';
+      kMax.textContent = isFinite(maxA) ? maxA.toFixed(3) + ' m/s²' : '--';
+      kMin.textContent = isFinite(minA) ? minA.toFixed(3) + ' m/s²' : '--';
+
+      // 标记点
+      series.forEach(p => {
+        if (p.mark) {
+          const x = mapX(p.t, t0, t1, w);
+          const y = mapY(p.a, ymin, ymax, h);
+          pctx.fillStyle = '#ffffff';
+          pctx.beginPath(); pctx.arc(x, y, 3, 0, Math.PI*2); pctx.fill();
+        }
+      });
+    }
+
+    function mapX(t, t0, t1, w) {
+      if (t1 - t0 < 1e-6) return w - 10;
+      return 10 + (t - t0) / (t1 - t0) * (w - 20);
+    }
+    function mapY(v, vmin, vmax, h) {
+      if (vmax - vmin < 1e-6) return h / 2;
+      return h - 10 - (v - vmin) / (vmax - vmin) * (h - 20);
+    }
+
+    async function start() {
+      if (running) return;
+      startBtn.disabled = true;
+      const ok = await requestMotionPermission();
+      if (!ok) { alert('未授予运动传感器权限'); startBtn.disabled = false; return; }
+
+      window.addEventListener('devicemotion', onMotion, { passive: true });
+      running = true; stopBtn.disabled = false; markBtn.disabled = false;
+      startT = performance.now() / 1000;
+      aLP = null; series = []; rawDataSeries = [];
+      maxA = -Infinity;
+      minA = Infinity;
+      alpha = parseFloat(alphaR.value);
+      windowSec = parseFloat(winInput.value);
+      threshold = parseFloat(thresholdInput.value);
+      selectedAxis = axisSelect.value;
+
+      // 校准初始化（合加速度模式）
+      gRef = null; gRefSum = 0; gRefCount = 0; lastMotionEventTime = 0;
+      calibrating = (selectedAxis === 'mag');
+      calibStartTime = performance.now() / 1000;
+      if (calibrating) { currentStatus.textContent = '状态: 校准中（请保持手机静止约1秒）'; markBtn.disabled = true; }
+
+      // 重置状态时长统计
+      normalTime = 0; overweightTime = 0; weightlessTime = 0; 
+      lastStatusUpdateTime = 0; lastStatus = '正常'; statusChangeCount = 0;
+      document.getElementById('normal-time').textContent = normalTime.toFixed(1);
+      document.getElementById('overweight-time').textContent = overweightTime.toFixed(1);
+      document.getElementById('weightless-time').textContent = weightlessTime.toFixed(1);
+
+      if (!calibrating) {
+        currentStatus.textContent = '状态: 测量中';
+      }
+      currentStatus.className = '';
+
+      // 无传感器检测
+      if (noSensorTimer) clearTimeout(noSensorTimer);
+      noSensorTimer = setTimeout(() => {
+        if (!lastMotionEventTime || lastMotionEventTime === 0) {
+          currentStatus.textContent = '状态: 未检测到运动传感器';
+          alert('未检测到可用的运动传感器。请在支持传感器的移动设备上打开本实验，并允许"运动与方向访问"。\n\n可能的解决方案：\n1. 确保在移动设备上打开\n2. 允许浏览器访问传感器权限\n3. 尝试刷新页面重新授权');
+          stop();
+        }
+      }, 3000); // 增加检测时间到3秒
+
+      draw();
+    }
+
+    function stop() {
+      if (!running) return;
+      running = false;
+      window.removeEventListener('devicemotion', onMotion);
+      if (raf) cancelAnimationFrame(raf); raf = null;
+      stopBtn.disabled = true; markBtn.disabled = true; startBtn.disabled = false;
+      currentStatus.textContent = '状态: 已停止';
+      if (noSensorTimer) { clearTimeout(noSensorTimer); noSensorTimer = null; }
+    }
+
+    // 事件
+    startBtn.addEventListener('click', start);
+    stopBtn.addEventListener('click', stop);
+    markBtn.addEventListener('click', () => {
+      if (!series.length) return;
+      series[series.length - 1].mark = true;
+    });
+
+    exportBtn.addEventListener('click', () => {
+      if (!series.length) {
+        alert('没有数据可导出，请先进行测量');
+        return;
+      }
+      exportData();
+    });
+
+    function exportData() {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `elevator_acceleration_${timestamp}.csv`;
+      
+      // 准备完整CSV数据
+      let csvContent = 'Timestamp,Time(s),X_Raw(m/s²),Y_Raw(m/s²),Z_Raw(m/s²),LinMag_Raw(m/s²),GMag_Raw(m/s²),DeltaG_Raw(m/s²),Current_Raw(m/s²),Filtered(m/s²),Status,Marked,Selected_Axis,Alpha,Threshold\n';
+      
+      // 导出原始传感器数据
+      rawDataSeries.forEach((rawPoint, index) => {
+        const seriesPoint = series[index];
+        const status = rawPoint.aLP_filtered > rawPoint.threshold ? '超重' : (rawPoint.aLP_filtered < -rawPoint.threshold ? '失重' : '正常');
+        const marked = seriesPoint && seriesPoint.mark ? '是' : '否';
+        
+        csvContent += `${rawPoint.timestamp},${rawPoint.t.toFixed(3)},${rawPoint.ax_raw.toFixed(6)},${rawPoint.ay_raw.toFixed(6)},${rawPoint.az_raw.toFixed(6)},${rawPoint.mag_raw.toFixed(6)},${rawPoint.g_mag_raw.toFixed(6)},${rawPoint.delta_g_raw.toFixed(6)},${rawPoint.currentA_raw.toFixed(6)},${rawPoint.aLP_filtered.toFixed(6)},${status},${marked},${rawPoint.selectedAxis},${rawPoint.alpha},${rawPoint.threshold}\n`;
+      });
+      
+      // 添加统计信息
+      csvContent += '\n统计信息\n';
+      csvContent += `测量时长,${rawDataSeries.length > 0 ? (rawDataSeries[rawDataSeries.length-1].t - rawDataSeries[0].t).toFixed(1) : 0}秒\n`;
+      csvContent += `原始数据点数,${rawDataSeries.length}\n`;
+      csvContent += `滤波数据点数,${series.length}\n`;
+      csvContent += `最大加速度,${isFinite(maxA) ? maxA.toFixed(3) : 0} m/s²\n`;
+      csvContent += `最小加速度,${isFinite(minA) ? minA.toFixed(3) : 0} m/s²\n`;
+      csvContent += `平滑系数,${alpha}\n`;
+      csvContent += `阈值,${threshold} m/s²\n`;
+      csvContent += `参考轴,${selectedAxis}\n`;
+      
+      // 添加原始数据统计
+      if (rawDataSeries.length > 0) {
+        const xValues = rawDataSeries.map(p => p.ax_raw);
+        const yValues = rawDataSeries.map(p => p.ay_raw);
+        const zValues = rawDataSeries.map(p => p.az_raw);
+        const linMagValues = rawDataSeries.map(p => p.mag_raw);
+        const gMagValues = rawDataSeries.map(p => p.g_mag_raw);
+        const deltaGValues = rawDataSeries.map(p => p.delta_g_raw);
+        
+        csvContent += `X轴最大值,${Math.max(...xValues).toFixed(3)} m/s²\n`;
+        csvContent += `X轴最小值,${Math.min(...xValues).toFixed(3)} m/s²\n`;
+        csvContent += `Y轴最大值,${Math.max(...yValues).toFixed(3)} m/s²\n`;
+        csvContent += `Y轴最小值,${Math.min(...yValues).toFixed(3)} m/s²\n`;
+        csvContent += `Z轴最大值,${Math.max(...zValues).toFixed(3)} m/s²\n`;
+        csvContent += `Z轴最小值,${Math.min(...zValues).toFixed(3)} m/s²\n`;
+        csvContent += `线性加速度模长最大值,${Math.max(...linMagValues).toFixed(3)} m/s²\n`;
+        csvContent += `线性加速度模长最小值,${Math.min(...linMagValues).toFixed(3)} m/s²\n`;
+        csvContent += `表观重力模长最大值,${Math.max(...gMagValues).toFixed(3)} m/s²\n`;
+        csvContent += `表观重力偏差(Δg)最大值,${Math.max(...deltaGValues).toFixed(3)} m/s²\n`;
+        csvContent += `表观重力偏差(Δg)最小值,${Math.min(...deltaGValues).toFixed(3)} m/s²\n`;
+      }
+      
+      // 创建下载链接
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        alert(`完整传感器数据已导出为 ${filename}\n包含${rawDataSeries.length}个原始数据点`);
+      } else {
+        alert('您的浏览器不支持文件下载功能');
+      }
+    }
+    alphaR.addEventListener('input', () => alpha = parseFloat(alphaR.value));
+    winInput.addEventListener('change', () => windowSec = Math.max(3, Math.min(60, parseFloat(winInput.value)||30)));
+    thresholdInput.addEventListener('change', () => threshold = Math.max(0.1, Math.min(2.0, parseFloat(thresholdInput.value)||0.2)));
+    axisSelect.addEventListener('change', () => {
+      selectedAxis = axisSelect.value;
+      if (running) {
+        aLP = null; // 切换轴时重置滤波
+        maxA = -Infinity;
+        minA = Infinity;
+        if (selectedAxis === 'mag') {
+          // 切换到合加速度后自动重新校准
+          gRef = null; gRefSum = 0; gRefCount = 0;
+          calibrating = true; calibStartTime = performance.now() / 1000;
+          currentStatus.textContent = '状态: 校准中（切换轴后自动校准）';
+          markBtn.disabled = true;
+        } else {
+          calibrating = false;
+          currentStatus.textContent = '状态: 测量中';
+          markBtn.disabled = false;
+        }
+      }
+    });
+
+    window.addEventListener('beforeunload', () => stop());
+
+    // 初始化 Chat Widget
+    ChatWidget.init({
+      title: '电梯加速度 AI 助手',
+      tts: true,
+      stt: true,
+      systemPrompt: `你是物理实验助手，专长加速度与重力分析。解释电梯中的超重与失重现象、加速度测量原理、误差来源与分析方法。
+      
+实验原理：
+1. 在电梯中，我们感受到的"重力"实际上是真实重力与电梯加速度产生的惯性力的合力。
+2. 当电梯向上加速或向下减速时，我们会感到超重，即感受到的"重力"大于正常重力。
+3. 当电梯向下加速或向上减速时，我们会感到失重，即感受到的"重力"小于正常重力。
+4. 当电梯匀速运动或静止时，我们感受到的就是正常重力。
+
+实验数据解读：
+- 当前加速度：实时测量的电梯加速度，正值表示向上加速或向下减速，负值表示向下加速或向上减速
+- 最大/最小加速度：记录实验过程中的极值，可用于分析电梯运行特性
+- 状态时长：记录各状态持续的累计时间，可分析电梯运行模式
+
+常见问题解答：
+1. 为什么电梯启动时会感到超重？因为电梯向上加速，产生向下的惯性力，与重力叠加导致超重感。
+2. 为什么电梯突然下降时会有失重感？因为电梯向下加速，产生向上的惯性力，部分抵消重力导致失重感。
+3. 为什么自由落体状态完全失重？因为此时加速度等于重力加速度，惯性力完全抵消重力。`,
+      context: 'elevator_acceleration_education',
+      suggestedQuestions: [
+        "什么是超重和失重现象？",
+        "为什么电梯启动时会感到超重？",
+        "为什么电梯突然下降时会有失重感？",
+        "如何通过加速度计算判断超重和失重？",
+        "生活中还有哪些超重和失重的例子？"
+      ]
+    });
+
+
+
+    // 实验上下文：供聊天挂件读取
+    window.getExperimentContext = function () {
+      const samples = series.length;
+      const now = aLP;
+      const currentState = now > threshold ? "overweight" : (now < -threshold ? "weightless" : "normal");
+      
+
+      
+      return {
+        experiment: 'elevator_acceleration',
+        alpha: parseFloat(alphaR.value),
+        windowSec: parseFloat(winInput.value),
+        threshold: parseFloat(thresholdInput.value),
+        selectedAxis: selectedAxis,
+        running: !!running,
+        samples,
+        a_now: now != null && isFinite(now) ? +now.toFixed(3) : null,
+        a_max: isFinite(maxA) ? +maxA.toFixed(3) : null,
+        a_min: isFinite(minA) ? +minA.toFixed(3) : null,
+        status: now > threshold ? "超重" : (now < -threshold ? "失重" : "正常"),
+        stateStats: {
+          normal: Math.round(normalTime),
+          overweight: Math.round(overweightTime),
+          weightless: Math.round(weightlessTime)
+        }
+      };
+    };
+  </script>
+
+
+
+</body>
+</html>

@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>波的干涉现象 - 重庆市沙坪坝区人工智能科普基地</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .wave-container {
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+        }
+        .wave-animation {
+            animation: wave 2s ease-in-out infinite;
+        }
+        @keyframes wave {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .dark-mode {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e2e8f0;
+        }
+        .dark-mode .bg-white {
+            background-color: #2d3748 !important;
+            color: #e2e8f0 !important;
+        }
+        .dark-mode .text-gray-800 {
+            color: #e2e8f0 !important;
+        }
+        .dark-mode .text-gray-600 {
+            color: #a0aec0 !important;
+        }
+        .dark-mode .border-gray-200 {
+            border-color: #4a5568 !important;
+        }
+        .dark-mode input, .dark-mode select {
+            background-color: #4a5568 !important;
+            color: #e2e8f0 !important;
+            border-color: #718096 !important;
+        }
+        .dark-mode .shadow-lg {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2) !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen transition-all duration-300">
+    <!-- 暗色模式切换按钮 -->
+    <button id="darkModeToggle" class="fixed top-4 right-4 z-50 p-3 bg-gray-800 text-white rounded-full shadow-lg hover:bg-gray-700 transition-all duration-300">
+        <svg id="sunIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+        </svg>
+        <svg id="moonIcon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+        </svg>
+    </button>
+
+    <!-- 返回按钮 -->
+    <button onclick="window.location.href='{{ url_for('education.resources') }}'" class="fixed top-4 left-4 z-50 p-3 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+    </button>
+
+    <!-- 主容器 -->
+    <div class="wave-container min-h-screen">
+        <!-- 头部 -->
+        <div class="pt-20 pb-12 text-center text-white">
+            <div class="wave-animation inline-block mb-6">
+                <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+            </div>
+            <h1 class="text-4xl md:text-6xl font-bold mb-4">波的干涉现象</h1>
+            <p class="text-xl md:text-2xl opacity-90 max-w-3xl mx-auto">
+                探索波的叠加原理，理解干涉、衍射等波动现象的物理本质
+            </p>
+        </div>
+
+        <!-- 内容区域 -->
+        <div class="container mx-auto px-6 pb-12">
+            <!-- 控制面板 -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">波源控制</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">波源1频率 (Hz)</label>
+                        <input type="range" id="freq1" min="0.5" max="5" step="0.1" value="2" class="w-full">
+                        <span id="freq1Value" class="text-sm text-gray-600">2.0 Hz</span>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">波源2频率 (Hz)</label>
+                        <input type="range" id="freq2" min="0.5" max="5" step="0.1" value="2" class="w-full">
+                        <span id="freq2Value" class="text-sm text-gray-600">2.0 Hz</span>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">相位差 (°)</label>
+                        <input type="range" id="phase" min="0" max="360" step="10" value="0" class="w-full">
+                        <span id="phaseValue" class="text-sm text-gray-600">0°</span>
+                    </div>
+                </div>
+                <div class="mt-6 flex gap-4">
+                    <button id="startBtn" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        开始模拟
+                    </button>
+                    <button id="pauseBtn" class="px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors">
+                        暂停
+                    </button>
+                    <button id="resetBtn" class="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                        重置
+                    </button>
+                </div>
+            </div>
+
+            <!-- 可视化区域 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- 波形图 -->
+                <div class="bg-white rounded-2xl shadow-lg p-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">波形叠加</h3>
+                    <canvas id="waveChart" width="400" height="300"></canvas>
+                </div>
+
+                <!-- 干涉图样 -->
+                <div class="bg-white rounded-2xl shadow-lg p-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">干涉图样</h3>
+                    <canvas id="interferencePattern" width="400" height="300"></canvas>
+                </div>
+            </div>
+
+            <!-- 理论说明 -->
+            <div class="mt-8 bg-white rounded-2xl shadow-lg p-6">
+                <h3 class="text-2xl font-bold text-gray-800 mb-4">波的干涉原理</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-700 mb-2">叠加原理</h4>
+                        <p class="text-gray-600 leading-relaxed">
+                            当两个或多个波在同一介质中传播时，它们会相互叠加。在任何一点，合成波的振幅等于各个波在该点振幅的代数和。
+                        </p>
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-700 mb-2">相干条件</h4>
+                        <p class="text-gray-600 leading-relaxed">
+                            要产生稳定的干涉图样，两个波源必须是相干的，即它们的频率相同，相位差恒定。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI助手区域 -->
+            <div class="mt-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl shadow-lg p-6 text-white">
+                <h3 class="text-2xl font-bold mb-4">🤖 AI学习助手</h3>
+                <div id="aiChat" class="bg-white/10 rounded-lg p-4 mb-4 min-h-[200px] max-h-[400px] overflow-y-auto">
+                    <div class="text-white/90">
+                        <p><strong>AI助手：</strong>你好！我是你的波动学习助手。你可以问我关于波的干涉、叠加原理、相位差等任何问题。</p>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <input type="text" id="userInput" placeholder="请输入你的问题..."
+                           class="flex-1 px-4 py-2 rounded-lg bg-white/20 text-white placeholder-white/70 border border-white/30 focus:outline-none focus:border-white">
+                    <button id="sendBtn" class="px-6 py-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors">
+                        发送
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 检查用户登录状态
+        async function checkLoginStatus() {
+            try {
+                const response = await fetch('/api/user/profile', {
+                    credentials: 'include'
+                });
+                return response.ok;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        // 暗色模式切换
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        const sunIcon = document.getElementById('sunIcon');
+        const moonIcon = document.getElementById('moonIcon');
+
+        let isDarkMode = localStorage.getItem('darkMode') === 'true';
+
+        function updateDarkMode() {
+            if (isDarkMode) {
+                document.body.classList.add('dark-mode');
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
+            } else {
+                document.body.classList.remove('dark-mode');
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
+            }
+        }
+
+        darkModeToggle.addEventListener('click', () => {
+            isDarkMode = !isDarkMode;
+            localStorage.setItem('darkMode', isDarkMode);
+            updateDarkMode();
+        });
+
+        updateDarkMode();
+
+        // 波形模拟变量
+        let animationId;
+        let time = 0;
+        let isRunning = false;
+
+        // 获取控制元素
+        const freq1Slider = document.getElementById('freq1');
+        const freq2Slider = document.getElementById('freq2');
+        const phaseSlider = document.getElementById('phase');
+        const freq1Value = document.getElementById('freq1Value');
+        const freq2Value = document.getElementById('freq2Value');
+        const phaseValue = document.getElementById('phaseValue');
+
+        // 更新显示值
+        freq1Slider.addEventListener('input', () => {
+            freq1Value.textContent = parseFloat(freq1Slider.value).toFixed(1) + ' Hz';
+        });
+
+        freq2Slider.addEventListener('input', () => {
+            freq2Value.textContent = parseFloat(freq2Slider.value).toFixed(1) + ' Hz';
+        });
+
+        phaseSlider.addEventListener('input', () => {
+            phaseValue.textContent = phaseSlider.value + '°';
+        });
+
+        // 波形绘制
+        function drawWaves() {
+            const canvas = document.getElementById('waveChart');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const freq1 = parseFloat(freq1Slider.value);
+            const freq2 = parseFloat(freq2Slider.value);
+            const phase = parseFloat(phaseSlider.value) * Math.PI / 180;
+
+            // 绘制坐标轴
+            ctx.strokeStyle = isDarkMode ? '#a0aec0' : '#666';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, height/2);
+            ctx.lineTo(width, height/2);
+            ctx.stroke();
+
+            // 绘制波1
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < width; x++) {
+                const y1 = height/2 + 50 * Math.sin(2 * Math.PI * freq1 * (x/100 + time));
+                if (x === 0) ctx.moveTo(x, y1);
+                else ctx.lineTo(x, y1);
+            }
+            ctx.stroke();
+
+            // 绘制波2
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < width; x++) {
+                const y2 = height/2 + 50 * Math.sin(2 * Math.PI * freq2 * (x/100 + time) + phase);
+                if (x === 0) ctx.moveTo(x, y2);
+                else ctx.lineTo(x, y2);
+            }
+            ctx.stroke();
+
+            // 绘制合成波
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            for (let x = 0; x < width; x++) {
+                const y1 = 50 * Math.sin(2 * Math.PI * freq1 * (x/100 + time));
+                const y2 = 50 * Math.sin(2 * Math.PI * freq2 * (x/100 + time) + phase);
+                const y = height/2 + y1 + y2;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        // 干涉图样绘制
+        function drawInterferencePattern() {
+            const canvas = document.getElementById('interferencePattern');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const freq1 = parseFloat(freq1Slider.value);
+            const freq2 = parseFloat(freq2Slider.value);
+            const phase = parseFloat(phaseSlider.value) * Math.PI / 180;
+
+            // 创建图像数据
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const index = (y * width + x) * 4;
+
+                    // 计算两个波源到该点的距离
+                    const d1 = Math.sqrt((x - width/4)**2 + (y - height/2)**2);
+                    const d2 = Math.sqrt((x - 3*width/4)**2 + (y - height/2)**2);
+
+                    // 计算相位
+                    const phase1 = 2 * Math.PI * freq1 * (time - d1/100);
+                    const phase2 = 2 * Math.PI * freq2 * (time - d2/100) + phase;
+
+                    // 计算振幅
+                    const amplitude = Math.cos(phase1) + Math.cos(phase2);
+                    const intensity = (amplitude * amplitude) / 4;
+
+                    // 设置颜色
+                    const color = Math.floor(intensity * 255);
+                    data[index] = color;     // R
+                    data[index + 1] = color; // G
+                    data[index + 2] = 255;   // B
+                    data[index + 3] = 255;   // A
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // 动画循环
+        function animate() {
+            if (isRunning) {
+                time += 0.02;
+                drawWaves();
+                drawInterferencePattern();
+                animationId = requestAnimationFrame(animate);
+            }
+        }
+
+        // 控制按钮
+        document.getElementById('startBtn').addEventListener('click', () => {
+            isRunning = true;
+            animate();
+        });
+
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+            isRunning = false;
+            cancelAnimationFrame(animationId);
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            isRunning = false;
+            cancelAnimationFrame(animationId);
+            time = 0;
+            drawWaves();
+            drawInterferencePattern();
+        });
+
+        // AI聊天功能
+        document.getElementById('sendBtn').addEventListener('click', sendMessage);
+        document.getElementById('userInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            // 检查登录状态
+            const isLoggedIn = await checkLoginStatus();
+            if (!isLoggedIn) {
+                alert('请先登录后再使用AI助手功能！');
+                window.location.href = '/login';
+                return;
+            }
+
+            const chatDiv = document.getElementById('aiChat');
+
+            // 添加用户消息
+            const userMsg = document.createElement('div');
+            userMsg.className = 'mb-2 text-white';
+            userMsg.innerHTML = `<strong>你：</strong>${message}`;
+            chatDiv.appendChild(userMsg);
+
+            // 添加加载消息
+            const loadingMsg = document.createElement('div');
+            loadingMsg.className = 'mb-2 text-white/90';
+            loadingMsg.innerHTML = `<strong>AI助手：</strong>正在思考中...`;
+            chatDiv.appendChild(loadingMsg);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+
+            try {
+                const response = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        message: `基于波的干涉现象教学情景，请回答用户问题：${message}`
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // 更新加载消息为实际回复
+                if (data.response) {
+                    loadingMsg.innerHTML = `<strong>AI助手：</strong>${data.response}`;
+                } else {
+                    loadingMsg.innerHTML = `<strong>AI助手：</strong>抱歉，AI服务暂时不可用。`;
+                }
+            } catch (error) {
+                console.error('Error calling AI API:', error);
+                loadingMsg.innerHTML = `<strong>AI助手：</strong>抱歉，AI服务连接失败。请稍后再试。`;
+            }
+
+            input.value = '';
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+
+
+        // 初始化
+        drawWaves();
+        drawInterferencePattern();
+    </script>
+</body>
+</html>

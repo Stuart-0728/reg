@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>摄像头追踪单摆周期（混合追踪：CAMShift + NCC）</title>
+  <link rel="stylesheet" href="assets/ui.css" />
+  <style>
+    .legend { font-size: 12px; color: var(--muted); }
+    video { width: 100%; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.25); display:block; }
+    .video-wrap { position: relative; width: 100%; }
+    canvas.overlay-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 12px; pointer-events: auto; }
+    canvas.preview { width: 100%; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.25); }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="{{ url_for('education.resources') }}" class="btn secondary" style="margin-right:8px;">← 返回资源页</a>
+      <div class="title">摄像头追踪单摆周期</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <section class="card">
+        <h2>实验控制</h2>
+        <p class="subtle">将摄像头对准单摆，点击“框选目标”拖拽矩形圈住摆锤区域。算法：每帧 CAMShift（二维）快速跟踪，低相似或定期触发小模板 NCC 精修，并对直方图做缓慢自适应，精准且流畅。</p>
+
+        <div class="panel-row">
+          <div>
+            <label>摆长 L (m)</label>
+            <input id="len" type="number" class="input" min="0.05" max="5" step="0.01" value="0.50" />
+          </div>
+          <div>
+            <label>平滑系数 (0~1)</label>
+            <input id="smooth" type="range" class="range" min="0" max="1" step="0.05" value="0.50" />
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <button id="open" class="btn">打开摄像头</button>
+          <button id="pick" class="btn secondary" disabled>框选目标</button>
+          <button id="start" class="btn" disabled>开始追踪</button>
+          <button id="stop" class="btn danger" disabled>停止</button>
+        </div>
+
+        <div class="panel-row">
+          <div>
+            <label>摄像头选择</label>
+            <select id="camera" class="input" style="min-width:220px" title="选择摄像头">
+              <option value="">默认（系统决定）</option>
+            </select>
+          </div>
+        </div>
+        <div class="kpi" style="margin-top: 12px;">
+          <div class="item">
+            <div class="val" id="k-T">-- s</div>
+            <div class="lab">周期 T</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-f">-- Hz</div>
+            <div class="lab">频率 f</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-g">-- m/s²</div>
+            <div class="lab">估算重力加速度 g</div>
+          </div>
+        </div>
+
+        <div class="panel-row" style="margin-top: 12px;">
+          <div>
+            <label>摄像头（拖拽框选目标，或点击取色备用）</label>
+            <div class="video-wrap">
+              <video id="video" autoplay playsinline muted></video>
+              <canvas id="overlay" class="overlay-canvas"></canvas>
+            </div>
+          </div>
+          <div>
+            <label>追踪与波形</label>
+            <canvas id="wave" class="preview" height="300"></canvas>
+            <div class="legend">青框：追踪窗口；绿点：中心；蓝线：横向位移波形</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3>实验原理</h3>
+        <p>小角度近似下，单摆周期 T ≈ 2π√(L/g)。跟踪摆锤中心的时间序列，利用零交叉中位数估计 T，并据此反推 g。</p>
+        <h3 style="margin-top: 10px;">实验步骤</h3>
+        <ol>
+          <li>打开摄像头。</li>
+          <li>点击“框选目标”，圈住摆锤主体；若提示过大，请缩小（建议 ≤ 180×180 像素）。</li>
+          <li>点击“开始追踪”，轻幅摆动，等待数十秒得到稳定估计。</li>
+          <li>平滑系数建议 0.35~0.6，平衡响应与稳定。</li>
+        </ol>
+        <h3 style="margin-top: 10px;">AI 实验助手</h3>
+        <p class="subtle">右下角“AI”按钮可打开问答面板（支持语音）。仅在面板打开时播报回答。</p>
+      </aside>
+    </div>
+  </main>
+
+  <script src="assets/ai.js"></script>
+  <script src="assets/chat-widget.js"></script>
+  <script>
+    // DOM
+    const v = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const octx = overlay.getContext('2d');
+    const wave = document.getElementById('wave');
+    const wctx = wave.getContext('2d');
+
+    const kT = document.getElementById('k-T');
+    const kf = document.getElementById('k-f');
+    const kg = document.getElementById('k-g');
+    const openBtn = document.getElementById('open');
+    const pickBtn = document.getElementById('pick');
+    const startBtn = document.getElementById('start');
+    const stopBtn = document.getElementById('stop');
+    const lenInput = document.getElementById('len');
+    const smoothR = document.getElementById('smooth');
+    const camSel = document.getElementById('camera');
+
+    // 状态
+    let stream = null;
+    let picking = false, selecting = false;
+    let selectStart = null, selectRect = null;
+    let tracking = false;
+
+    let target = null; // 颜色回退 {r,g,b}
+    let lastTrackPosFrame = null; // {x,y} 原视频坐标
+    let lastTrackPos = null;      // {x,y} overlay
+    let smoothedX = null, smoothedY = null;
+    let xs = []; // {t, x}
+    let raf = null;
+
+    const MAX_WINDOW_S = 8;
+
+    // 下采样域
+    const DS = 0.5;
+    const dsCanvas = document.createElement('canvas');
+    const dsCtx = dsCanvas.getContext('2d');
+
+    // CAMShift 配置
+    const BINS_H = 32, BINS_S = 32;
+    const MIN_V = 0.2, MIN_S = 0.2;
+    const MS_ITERS = 4;
+    const WIN_GROW = 1.8;
+    const MAX_DXY_PER_FRAME = 22;   // 每帧最大位移（像素，原分辨率）
+    const M00_MIN = 60;             // 反投影质量阈值
+    const SIM_MIN = 0.72;           // 直方图相似度阈值（Bhattacharyya）
+    const SIM_ADAPT_MIN = 0.82;     // 高相似时才微量自适应
+    const HIST_LR = 0.02;           // 参考直方图学习率
+
+    // NCC 精修配置（小模板 + 小窗口 + 亚像素）
+    const NCC_TPL_MAX = 64;         // DS 尺度下模板最大边
+    const NCC_STEP = 2;             // 搜索步长
+    const NCC_INNER_STEP = 2;       // 模板内部采样步长
+    const NCC_R_MULT = 1.2;         // 搜索半径相对模板尺寸
+    const NCC_SCORE_MIN = 0.12;     // 最小可接受相关值
+    const NCC_PERIOD = 12;          // 每隔 N 帧触发 NCC
+    let nccFrames = 0;
+
+    // CAM/NCC 状态
+    let cam = { hist: null, dsW:0, dsH:0, win: null, refHist: null }; // win: {cx,cy,w,h} in DS
+    let nccTpl = null; // {w,h,data,mean,std}
+
+    // 工具：获取帧
+    function getFrameImageData() {
+      const w = v.videoWidth, h = v.videoHeight;
+      if (!w || !h) return null;
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const cx = c.getContext('2d');
+      cx.drawImage(v, 0, 0, w, h);
+      return cx.getImageData(0, 0, w, h);
+    }
+    function getDSImageData() {
+      const W = Math.round(v.videoWidth * DS);
+      const H = Math.round(v.videoHeight * DS);
+      if (!W || !H) return null;
+      dsCanvas.width = W; dsCanvas.height = H;
+      dsCtx.drawImage(v, 0, 0, W, H);
+      return dsCtx.getImageData(0, 0, W, H);
+    }
+
+    // RGB -> HSV
+    function toHSV(r,g,b) {
+      const rn=r/255, gn=g/255, bn=b/255;
+      const max=Math.max(rn,gn,bn), min=Math.min(rn,gn,bn);
+      const d=max-min; let h=0;
+      if(d!==0){ if(max===rn) h=((gn-bn)/d)%6; else if(max===gn) h=(bn-rn)/d+2; else h=(rn-gn)/d+4; h*=60; if(h<0) h+=360; }
+      const s=max===0?0:d/max; const v=max;
+      return {h,s,v};
+    }
+
+    // 构建/计算直方图与相似度
+    function buildHist(img, roi) {
+      const bins = new Float32Array(BINS_H * BINS_S);
+      let sum = 0;
+      for (let y = roi.y; y < roi.y + roi.h; y++) {
+        for (let x = roi.x; x < roi.x + roi.w; x++) {
+          if (x < 0 || y < 0 || x >= cam.dsW || y >= cam.dsH) continue;
+          const idx = (y * cam.dsW + x) * 4;
+          const {h,s,v} = toHSV(img.data[idx], img.data[idx+1], img.data[idx+2]);
+          if (s < MIN_S || v < MIN_V) continue;
+          const hb = Math.min(BINS_H-1, Math.floor(h/360 * BINS_H));
+          const sb = Math.min(BINS_S-1, Math.floor(s * BINS_S));
+          bins[hb * BINS_S + sb] += 1; sum += 1;
+        }
+      }
+      if (sum > 0) for (let i=0;i<bins.length;i++) bins[i]/=sum;
+      return bins;
+    }
+    function bhattacharyya(a, b) {
+      if (!a || !b) return 0;
+      let s = 0;
+      for (let i=0;i<a.length;i++) s += Math.sqrt((a[i]||0) * (b[i]||0));
+      return s; // [0,1]
+    }
+    function histInWin(img, cx, cy, w, h) {
+      const x0 = Math.max(0, Math.round(cx - w/2)), y0 = Math.max(0, Math.round(cy - h/2));
+      return buildHist(img, {x:x0, y:y0, w:Math.round(w), h:Math.round(h)});
+    }
+
+    // CAM：均值漂移（返回中心与质量）
+    function meanShift(img, win) {
+      let cx = win.cx, cy = win.cy, m00Last = 0;
+      for (let iter=0; iter<MS_ITERS; iter++) {
+        const w2 = Math.max(6, Math.round(win.w * WIN_GROW / 2));
+        const h2 = Math.max(6, Math.round(win.h * WIN_GROW / 2));
+        const x0 = Math.max(0, Math.round(cx - w2));
+        const y0 = Math.max(0, Math.round(cy - h2));
+        const x1 = Math.min(cam.dsW - 1, Math.round(cx + w2));
+        const y1 = Math.min(cam.dsH - 1, Math.round(cy + h2));
+        let m00=0, m10=0, m01=0;
+        for (let y=y0; y<=y1; y++) {
+          for (let x=x0; x<=x1; x++) {
+            const idx = (y * cam.dsW + x) * 4;
+            const {h,s,v} = toHSV(img.data[idx], img.data[idx+1], img.data[idx+2]);
+            if (s < MIN_S || v < MIN_V) continue;
+            const hb = Math.min(BINS_H-1, Math.floor(h/360 * BINS_H));
+            const sb = Math.min(BINS_S-1, Math.floor(s * BINS_S));
+            const wv = cam.refHist ? (cam.refHist[hb * BINS_S + sb] || 0) : 0; // 反投影值
+            m00 += wv; m10 += wv * x; m01 += wv * y;
+          }
+        }
+        if (m00 < 1e-6) { m00Last = m00; break; }
+        const nx = m10 / m00, ny = m01 / m00;
+        if (Math.hypot(nx - cx, ny - cy) < 0.4) { cx = nx; cy = ny; m00Last = m00; break; }
+        cx = nx; cy = ny; m00Last = m00;
+      }
+      return { cx, cy, m00: m00Last };
+    }
+
+    // NCC（DS 尺度）+ 亚像素一维抛物线细化
+    function nccRefine(dsImg, cx, cy) {
+      if (!nccTpl) return null;
+      const tpl = nccTpl;
+      const r = Math.round(Math.max(tpl.w, tpl.h) * NCC_R_MULT);
+      const x0 = Math.max(0, Math.round(cx - r));
+      const y0 = Math.max(0, Math.round(cy - r));
+      const x1 = Math.min(dsImg.width - tpl.w, Math.round(cx + r));
+      const y1 = Math.min(dsImg.height - tpl.h, Math.round(cy + r));
+      let best = null, bestScore = -1;
+
+      const n = Math.ceil(tpl.w/NCC_INNER_STEP) * Math.ceil(tpl.h/NCC_INNER_STEP);
+      function scoreAt(px, py) {
+        let s=0, s2=0;
+        for (let j=0;j<tpl.h;j+=NCC_INNER_STEP){
+          for (let i=0;i<tpl.w;i+=NCC_INNER_STEP){
+            const idx = ((py+j)*dsImg.width + (px+i)) * 4;
+            const R = dsImg.data[idx], G = dsImg.data[idx+1], B = dsImg.data[idx+2];
+            const gY = 0.299*R + 0.587*G + 0.114*B;
+            s += gY; s2 += gY*gY;
+          }
+        }
+        const m = s/n;
+        const sd = Math.max(1e-6, Math.sqrt(s2/n - m*m));
+        let num = 0;
+        for (let j=0;j<tpl.h;j+=NCC_INNER_STEP){
+          for (let i=0;i<tpl.w;i+=NCC_INNER_STEP){
+            const idx = ((py+j)*dsImg.width + (px+i)) * 4;
+            const R = dsImg.data[idx], G = dsImg.data[idx+1], B = dsImg.data[idx+2];
+            const gY = 0.299*R + 0.587*G + 0.114*B;
+            const t = tpl.data[j*tpl.w + i];
+            num += ((gY - m)/sd) * ((t - tpl.mean)/tpl.std);
+          }
+        }
+        return num / n;
+      }
+
+      // 粗搜索
+      for (let y=y0; y<=y1; y+=NCC_STEP) {
+        for (let x=x0; x<=x1; x+=NCC_STEP) {
+          const sc = scoreAt(x,y);
+          if (sc > bestScore) { bestScore = sc; best = { x: x + tpl.w/2, y: y + tpl.h/2, score: sc, px:x, py:y }; }
+        }
+      }
+      if (!best || bestScore < NCC_SCORE_MIN) return null;
+
+      // 精细 1 像素步长附近微调
+      const fx0 = Math.max(x0, best.px - 2), fy0 = Math.max(y0, best.py - 2);
+      const fx1 = Math.min(x1, best.px + 2), fy1 = Math.min(y1, best.py + 2);
+      let fbest = best, fscore = best.score, fpx = best.px, fpy = best.py;
+      for (let y=fy0; y<=fy1; y++) {
+        for (let x=fx0; x<=fx1; x++) {
+          const sc = scoreAt(x,y);
+          if (sc > fscore) { fscore = sc; fpx = x; fpy = y; }
+        }
+      }
+      // 亚像素抛物线细化（x 与 y 分别一维）
+      function subpixel1D(px, py, dir) {
+        const sc0 = scoreAt(px, py);
+        const scm = scoreAt(px - (dir==='x'?1:0), py - (dir==='y'?1:0));
+        const scp = scoreAt(px + (dir==='x'?1:0), py + (dir==='y'?1:0));
+        const denom = (scm - 2*sc0 + scp);
+        if (Math.abs(denom) < 1e-6) return 0;
+        let delta = 0.5 * (scm - scp) / denom; // [-0.5,0.5] 附近
+        if (!Number.isFinite(delta)) delta = 0;
+        return Math.max(-0.5, Math.min(0.5, delta));
+      }
+      const dx = subpixel1D(fpx, fpy, 'x');
+      const dy = subpixel1D(fpx, fpy, 'y');
+      return { x: fpx + dx + tpl.w/2, y: fpy + dy + tpl.h/2, score: fscore };
+    }
+
+    function colorDist(r,g,b, tr,tg,tb) { return Math.hypot(r - tr, g - tg, b - tb); }
+
+    // UI 尺寸
+    function fitOverlayAndWave() {
+      const r = v.getBoundingClientRect();
+      overlay.width = Math.max(1, Math.floor(r.width));
+      overlay.height = Math.max(1, Math.floor(r.height));
+      const rw = wave.getBoundingClientRect();
+      wave.width = Math.max(1, Math.floor(rw.width));
+      wave.height = Math.max(1, Math.floor(rw.height));
+    }
+
+    // 打开摄像头（可指定 deviceId）
+    async function openCam(deviceId = null) {
+      try {
+        // 关闭旧流
+        if (stream) {
+          try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+          v.srcObject = null; stream = null;
+        }
+        const constraints = deviceId
+          ? { video: { deviceId: { exact: deviceId } }, audio: false }
+          : { video: { facingMode: 'environment' }, audio: false };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        v.srcObject = stream;
+        await v.play();
+        setTimeout(() => fitOverlayAndWave(), 150);
+        pickBtn.disabled = false;
+      } catch (e) {
+        alert('无法打开摄像头：' + (e.message || e));
+      }
+    }
+
+    // 取色回退
+    function pickColorByClick(ev) {
+      if (!picking) return;
+      const rect = overlay.getBoundingClientRect();
+      const u = (ev.clientX - rect.left) / rect.width;
+      const vrel = (ev.clientY - rect.top) / rect.height;
+      const frame = getFrameImageData();
+      if (!frame) { alert('视频未就绪'); return; }
+      const px = Math.round(u * frame.width), py = Math.round(vrel * frame.height);
+      const idx = (py * frame.width + px) * 4;
+      target = { r: frame.data[idx], g: frame.data[idx+1], b: frame.data[idx+2] };
+      lastTrackPos = { x: u * overlay.width, y: vrel * overlay.height };
+      lastTrackPosFrame = { x: px, y: py };
+      startBtn.disabled = false; picking = false; overlay.style.cursor = 'default'; drawOverlay();
+    }
+
+    // 框选交互
+    function onSelectStart(e){
+      if (!picking) return;
+      const rect = overlay.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width * overlay.width;
+      const y = (e.clientY - rect.top) / rect.height * overlay.height;
+      selecting = true; selectStart = {x,y}; selectRect = {x, y, w:0, h:0};
+    }
+    function onSelectMove(e){
+      if (!selecting) return;
+      const rect = overlay.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width * overlay.width;
+      const y = (e.clientY - rect.top) / rect.height * overlay.height;
+      const x0 = Math.min(selectStart.x, x), y0 = Math.min(selectStart.y, y);
+      const x1 = Math.max(selectStart.x, x), y1 = Math.max(selectStart.y, y);
+      selectRect = { x: x0, y: y0, w: Math.max(8, x1 - x0), h: Math.max(8, y1 - y0) };
+      drawOverlay();
+    }
+    function onSelectEnd(){
+      if (!selecting) return;
+      selecting = false;
+
+      const frame = getFrameImageData();
+      if(!frame){ alert('视频未就绪'); selectRect=null; return; }
+
+      const fx = frame.width / overlay.width, fy = frame.height / overlay.height;
+      const x = Math.max(0, Math.round(selectRect.x * fx));
+      const y = Math.max(0, Math.round(selectRect.y * fy));
+      const w = Math.min(frame.width - x, Math.round(selectRect.w * fx));
+      const h = Math.min(frame.height - y, Math.round(selectRect.h * fy));
+      if (w < 6 || h < 6) { alert('选择区域太小，请重新框选'); selectRect=null; return; }
+      if (w > 220 || h > 220 || (w * h > 40000)) { alert('选择区域过大，会影响稳定性与性能，请缩小（建议 ≤ 180×180）。'); selectRect=null; return; }
+
+      // 初始化 CAM 参考
+      const dsImg = getDSImageData();
+      if (!dsImg) { alert('视频未就绪'); return; }
+      cam.dsW = dsImg.width; cam.dsH = dsImg.height;
+      const roi = {
+        x: Math.round(x * DS),
+        y: Math.round(y * DS),
+        w: Math.max(1, Math.round(w * DS)),
+        h: Math.max(1, Math.round(h * DS))
+      };
+      const h0 = buildHist(dsImg, roi);
+      cam.refHist = h0.slice();  // 参考直方图
+      cam.hist = h0;             // 当前窗口直方图（用于初始化）
+      cam.win = { cx: roi.x + roi.w/2, cy: roi.y + roi.h/2, w: Math.max(14, roi.w), h: Math.max(14, roi.h) };
+
+      // 构建 NCC 小模板（DS 尺度）
+      const tw = Math.min(NCC_TPL_MAX, roi.w);
+      const th = Math.min(NCC_TPL_MAX, roi.h);
+      const tmpC = document.createElement('canvas');
+      tmpC.width = cam.dsW; tmpC.height = cam.dsH; tmpC.getContext('2d').drawImage(v,0,0,cam.dsW,cam.dsH);
+      dsCanvas.width = tw; dsCanvas.height = th;
+      const sx = Math.max(0, Math.round(cam.win.cx - tw/2));
+      const sy = Math.max(0, Math.round(cam.win.cy - th/2));
+      dsCtx.drawImage(tmpC, sx, sy, tw, th, 0, 0, tw, th);
+      const timg = dsCtx.getImageData(0,0,tw,th).data;
+      const data = new Float32Array(tw*th);
+      let sum=0,sum2=0;
+      for(let i=0,j=0;i<timg.length;i+=4,j++){ const gY = 0.299*timg[i]+0.587*timg[i+1]+0.114*timg[i+2]; data[j]=gY; sum+=gY; sum2+=gY*gY; }
+      const mean = sum/(tw*th);
+      const std = Math.max(1e-6, Math.sqrt(sum2/(tw*th) - mean*mean));
+      nccTpl = { w:tw, h:th, data, mean, std };
+
+      lastTrackPosFrame = { x: x + w/2, y: y + h/2 };
+      lastTrackPos = { x: (lastTrackPosFrame.x / frame.width) * overlay.width, y: (lastTrackPosFrame.y / frame.height) * overlay.height };
+
+      startBtn.disabled = false;
+      picking = false; selectRect = null; overlay.style.cursor = 'default';
+      drawOverlay();
+    }
+
+    function startPick() {
+      if (!stream) { alert('请先打开摄像头'); return; }
+      picking = true; startBtn.disabled = !(cam.refHist || target); overlay.style.cursor = 'crosshair';
+    }
+    function startTrack() {
+      if (!cam.refHist && !target) { alert('请先框选目标区域或点击取色'); return; }
+      tracking = true; xs=[]; smoothedX=null; smoothedY=null; lastTrackPos=null; nccFrames = 0;
+      loop(); startBtn.disabled = true; stopBtn.disabled = false;
+    }
+    function stopTrack() {
+      tracking = false; if (raf) cancelAnimationFrame(raf); raf=null; startBtn.disabled = false; stopBtn.disabled = true; overlay.style.cursor = 'default';
+    }
+
+    // 绘制
+    function drawOverlay() {
+      octx.clearRect(0, 0, overlay.width, overlay.height);
+      if (selectRect) {
+        octx.setLineDash([6,4]); octx.strokeStyle = 'rgba(255,255,255,0.9)'; octx.lineWidth = 1.5;
+        octx.strokeRect(selectRect.x, selectRect.y, selectRect.w, selectRect.h); octx.setLineDash([]);
+      }
+      if (cam.win && lastTrackPos) {
+        const fx = v.videoWidth > 0 ? overlay.width / v.videoWidth : 1;
+        const fy = v.videoHeight > 0 ? overlay.height / v.videoHeight : 1;
+        const ww = (cam.win.w / DS) * fx, hh = (cam.win.h / DS) * fy;
+        octx.strokeStyle = '#58d3ff'; octx.lineWidth = 1.5;
+        octx.strokeRect(lastTrackPos.x - ww/2, lastTrackPos.y - hh/2, ww, hh);
+      }
+      if (lastTrackPos) {
+        octx.fillStyle = '#7af0b9'; octx.beginPath(); octx.arc(lastTrackPos.x, lastTrackPos.y, 6, 0, Math.PI * 2); octx.fill();
+      }
+    }
+    function drawWave() {
+      const w = wave.width, h = wave.height;
+      wctx.clearRect(0, 0, w, h);
+      wctx.strokeStyle = 'rgba(255,255,255,0.3)'; wctx.lineWidth = 1; wctx.beginPath(); wctx.moveTo(0, h/2); wctx.lineTo(w, h/2); wctx.stroke();
+      if (xs.length > 2) {
+        const minX = Math.min(...xs.map(p => p.x)), maxX = Math.max(...xs.map(p => p.x)); const midY = h * 0.75;
+        wctx.strokeStyle = '#8ab4ff'; wctx.lineWidth = 2; wctx.beginPath();
+        xs.forEach((p,i)=>{ const tNorm=(p.t - xs[0].t)/(xs[xs.length-1].t - xs[0].t + 1e-6); const xnorm=(p.x - minX)/Math.max(1,maxX-minX); const X=10 + tNorm*(w-20); const Y=midY - (xnorm-0.5)*(h*0.45); if(i===0) wctx.moveTo(X,Y); else wctx.lineTo(X,Y); }); wctx.stroke();
+      }
+    }
+
+    // 主循环
+    function loop() {
+      raf = requestAnimationFrame(loop);
+      drawOverlay(); drawWave();
+      if (!tracking) return;
+
+      const now = performance.now()/1000;
+      const frame = getFrameImageData(); if (!frame) return;
+      let tracked = false;
+
+      // 1) CAMShift（DS 尺度）+ 相似性门控 + 自适应
+      if (cam.refHist && cam.win) {
+        const dsImg = getDSImageData();
+        if (dsImg) {
+          cam.dsW = dsImg.width; cam.dsH = dsImg.height;
+
+          // 快速均值漂移
+          let { cx, cy, m00 } = meanShift(dsImg, cam.win);
+
+          // 在新中心计算窗口直方图并与参考比较
+          const curHist = histInWin(dsImg, cx, cy, cam.win.w, cam.win.h);
+          const sim = bhattacharyya(curHist, cam.refHist);
+
+          // 低相似/低质量或周期性触发 NCC 精修
+          const needRefine = (m00 < M00_MIN) || (sim < SIM_MIN) || (nccFrames++ % NCC_PERIOD === 0);
+          if (needRefine && nccTpl) {
+            const best = nccRefine(dsImg, cx, cy);
+            if (best) { cx = best.x; cy = best.y; }
+          }
+
+          // 映射回原分辨率 + 位移限幅 + 双轴平滑
+          let xFull = cx / DS, yFull = cy / DS;
+          if (lastTrackPosFrame) {
+            const dx = xFull - lastTrackPosFrame.x, dy = yFull - lastTrackPosFrame.y;
+            const mag = Math.hypot(dx, dy);
+            if (mag > MAX_DXY_PER_FRAME) {
+              const k = MAX_DXY_PER_FRAME / mag;
+              xFull = lastTrackPosFrame.x + dx * k;
+              yFull = lastTrackPosFrame.y + dy * k;
+            }
+          }
+          const alpha = parseFloat(smoothR.value);
+          smoothedX = smoothedX == null ? xFull : alpha * xFull + (1 - alpha) * smoothedX;
+          smoothedY = smoothedY == null ? yFull : alpha * yFull + (1 - alpha) * smoothedY;
+
+          lastTrackPosFrame = { x: smoothedX, y: smoothedY };
+          lastTrackPos = { x: (smoothedX / frame.width) * overlay.width, y: (smoothedY / frame.height) * overlay.height };
+
+          // 回写 CAM 窗口中心（保持尺寸）
+          cam.win.cx = smoothedX * DS; cam.win.cy = smoothedY * DS;
+
+          // 高相似时缓慢自适应参考直方图
+          if (sim >= SIM_ADAPT_MIN) {
+            for (let i=0;i<cam.refHist.length;i++) cam.refHist[i] = (1 - HIST_LR) * cam.refHist[i] + HIST_LR * curHist[i];
+          }
+
+          xs.push({ t: now, x: smoothedX });
+          const tmin = now - MAX_WINDOW_S; while (xs.length && xs[0].t < tmin) xs.shift();
+
+          const T = estimatePeriod(xs);
+          if (T) {
+            kT.textContent = T.toFixed(2) + ' s';
+            kf.textContent = (1 / T).toFixed(3) + ' Hz';
+            const L = parseFloat(lenInput.value);
+            const g = 4 * Math.PI * Math.PI * L / (T * T); kg.textContent = g.toFixed(3) + ' m/s²';
+          }
+          tracked = true;
+        }
+      }
+
+      // 2) 兜底：颜色阈值质心（原分辨率）
+      if (!tracked && target) {
+        const thr = 60; let sumX=0,sumY=0,count=0;
+        const { r:tr,g:tg,b:tb } = target; const step = 2;
+        for (let y=0; y<frame.height; y+=step) {
+          for (let x=0; x<frame.width; x+=step) {
+            const i=(y*frame.width + x)*4; const dist=colorDist(frame.data[i],frame.data[i+1],frame.data[i+2],tr,tg,tb);
+            if(dist<thr){ sumX+=x; sumY+=y; count++; }
+          }
+        }
+        if (count>20) {
+          let xFull=sumX/count, yFull=sumY/count;
+          if (lastTrackPosFrame) {
+            const dx=xFull - lastTrackPosFrame.x, dy=yFull - lastTrackPosFrame.y;
+            const mag = Math.hypot(dx,dy);
+            if (mag > MAX_DXY_PER_FRAME) { const k=MAX_DXY_PER_FRAME/mag; xFull=lastTrackPosFrame.x + dx*k; yFull=lastTrackPosFrame.y + dy*k; }
+          }
+          const alpha=parseFloat(smoothR.value);
+          smoothedX = smoothedX==null ? xFull : alpha*xFull + (1-alpha)*smoothedX;
+          smoothedY = smoothedY==null ? yFull : alpha*yFull + (1-alpha)*smoothedY;
+
+          lastTrackPos = { x: (smoothedX/frame.width)*overlay.width, y: (smoothedY/frame.height)*overlay.height };
+          lastTrackPosFrame = { x: smoothedX, y: smoothedY };
+
+          xs.push({ t: now, x: smoothedX });
+          const tmin = now - MAX_WINDOW_S; while (xs.length && xs[0].t < tmin) xs.shift();
+
+          const T = estimatePeriod(xs);
+          if (T) {
+            kT.textContent = T.toFixed(2) + ' s';
+            kf.textContent = (1 / T).toFixed(3) + ' Hz';
+            const L = parseFloat(lenInput.value);
+            const g = 4 * Math.PI * Math.PI * L / (T * T); kg.textContent = g.toFixed(3) + ' m/s²';
+          }
+        }
+      }
+    }
+
+    // 周期估计（零交叉中位数）
+    function estimatePeriod(seq) {
+      if (seq.length < 20) return null;
+      const ys = seq.map(p => p.x); const ts = seq.map(p => p.t);
+      const mean = ys.reduce((a,b)=>a+b,0)/ys.length;
+      const centered = ys.map(v => v - mean);
+      const crosses = [];
+      for (let i=1;i<centered.length;i++){
+        if (centered[i-1] < 0 && centered[i] >= 0) {
+          const t = ts[i-1] + (ts[i]-ts[i-1]) * (-centered[i-1]) / (centered[i]-centered[i-1] + 1e-6);
+          crosses.push(t);
+        }
+      }
+      if (crosses.length < 3) return null;
+      const intervals = []; for(let i=1;i<crosses.length;i++) intervals.push(crosses[i]-crosses[i-1]);
+      intervals.sort((a,b)=>a-b);
+      const mid = Math.floor(intervals.length/2);
+      const median = intervals.length%2 ? intervals[mid] : 0.5*(intervals[mid-1]+intervals[mid]);
+      const filtered = intervals.filter(x => x > 0.5*median && x < 1.5*median);
+      if (!filtered.length) return null;
+      return filtered.reduce((a,b)=>a+b,0)/filtered.length;
+    }
+
+    // 预取权限与设备枚举
+    async function enumerateAndPopulateCams({ preserve = true } = {}) {
+      try {
+        if (!navigator.mediaDevices?.enumerateDevices || !camSel) return;
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const vids = devices.filter(d => d.kind === 'videoinput');
+        const old = preserve ? (camSel.value || '') : '';
+        camSel.innerHTML = '';
+        const def = document.createElement('option');
+        def.value = '';
+        def.textContent = '默认（系统决定）';
+        camSel.appendChild(def);
+        let idx = 1;
+        for (const d of vids) {
+          const opt = document.createElement('option');
+          opt.value = d.deviceId;
+          opt.textContent = d.label || `摄像头 ${idx++}`;
+          camSel.appendChild(opt);
+        }
+        if (old && [...camSel.options].some(o => o.value === old)) {
+          camSel.value = old;
+        }
+      } catch (_) {}
+    }
+
+    async function ensurePermissionAndPopulate() {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) return;
+        const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        tmp.getTracks().forEach(t => t.stop());
+      } catch (_) { /* 用户可能拒绝，此时依然尝试刷新 */ }
+      await enumerateAndPopulateCams({ preserve: true });
+    }
+
+    // 事件
+    openBtn.addEventListener('click', () => openCam(camSel?.value || null));
+    pickBtn.addEventListener('click', startPick);
+    overlay.addEventListener('click', pickColorByClick);
+    overlay.addEventListener('mousedown', onSelectStart);
+    overlay.addEventListener('mousemove', onSelectMove);
+    overlay.addEventListener('mouseup', onSelectEnd);
+    startBtn.addEventListener('click', startTrack);
+    stopBtn.addEventListener('click', stopTrack);
+    window.addEventListener('resize', fitOverlayAndWave);
+
+    // 与下拉交互时预取权限并刷新设备名称
+    if (camSel) {
+      camSel.addEventListener('focus', ensurePermissionAndPopulate);
+      camSel.addEventListener('click', ensurePermissionAndPopulate);
+      camSel.addEventListener('touchstart', ensurePermissionAndPopulate, { passive: true });
+      camSel.addEventListener('change', async () => {
+        const id = camSel.value || null;
+        if (stream) {
+          try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+          v.srcObject = null; stream = null;
+        }
+        await openCam(id);
+      });
+    }
+
+    // 设备变更刷新
+    if (navigator.mediaDevices?.addEventListener) {
+      navigator.mediaDevices.addEventListener('devicechange', () => enumerateAndPopulateCams({ preserve: true }));
+    }
+
+    // 启动时尝试枚举一次（可能无标签，待获得权限后会刷新）
+    enumerateAndPopulateCams({ preserve: true });
+
+    window.addEventListener('beforeunload', () => {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (raf) cancelAnimationFrame(raf);
+    });
+
+    // 初始化 Chat Widget
+    ChatWidget.init({
+      title: '单摆 AI 助手',
+      tts: true,
+      stt: true,
+      greeting: '你好！先在视频上“框选目标”，我会用 CAMShift+NCC 稳定跟踪并估计周期。',
+      systemPrompt: '你是高中物理实验助手，专长单摆测量与误差分析。回答需简明，结合实验注意事项与改进建议。',
+      contextProvider: () => window.getExperimentContext?.()
+    });
+
+    // 实验上下文
+    window.getExperimentContext = function () {
+      const L = parseFloat(lenInput.value);
+      const T = estimatePeriod(xs);
+      const f = T ? (1 / T) : null;
+      const g = (T && isFinite(L)) ? (4 * Math.PI * Math.PI * L / (T * T)) : null;
+      return {
+        experiment: 'pendulum_camera',
+        method: cam?.refHist ? 'camshift+ncc' : (target ? 'color_only' : 'unset'),
+        L_m: isFinite(L) ? +L.toFixed(3) : null,
+        samples: xs.length,
+        T_s: T ? +T.toFixed(3) : null,
+        f_Hz: f ? +f.toFixed(3) : null,
+        g_m_s2: g ? +g.toFixed(3) : null,
+        smooth: parseFloat(smoothR.value)
+      };
+    };
+  </script>
+</body>
+</html>

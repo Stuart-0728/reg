@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>双缝干涉可视化</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs/%3E%3Crect width='64' height='64' rx='12' fill='%23121a2b'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%238ab4ff' opacity='0.15'/%3E%3Ctext x='32' y='38' font-size='22' text-anchor='middle' fill='%237af0b9' font-family='system-ui, -apple-system, Segoe UI, Roboto, Arial' font-weight='700'%3EAI%3C/text%3E%3C/svg%3E"/>
+  <link rel="stylesheet" href="assets/ui.css"/>
+  <style>
+    canvas.display { height: 320px; }
+    .legend { font-size: 12px; color: var(--muted); }
+    .intensity-plot { height: 150px; }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <a href="{{ url_for('education.resources') }}" class="btn secondary" style="margin-right:8px;">← 返回资源页</a>
+    <div class="title">双缝干涉可视化</div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="grid">
+    <section class="card">
+      <h2>参数与控制</h2>
+      <p class="subtle">调整光波波长、双缝间距和屏幕距离，观察干涉条纹的变化，理解波动光学的基本原理。</p>
+      <div class="panel-row">
+        <div>
+          <label>波长 λ (nm)</label>
+          <input id="wavelength" type="range" class="range" min="380" max="780" step="1" value="550"/>
+          <input id="wavelengthN" type="number" class="input" min="380" max="780" step="1" value="550"/>
+        </div>
+        <div>
+          <label>双缝间距 d (μm)</label>
+          <input id="slitDistance" type="range" class="range" min="1" max="100" step="0.1" value="10"/>
+          <input id="slitDistanceN" type="number" class="input" min="1" max="100" step="0.1" value="10"/>
+        </div>
+      </div>
+      <div class="panel-row">
+        <div>
+          <label>屏幕距离 L (cm)</label>
+          <input id="screenDistance" type="range" class="range" min="10" max="200" step="1" value="100"/>
+          <input id="screenDistanceN" type="number" class="input" min="10" max="200" step="1" value="100"/>
+        </div>
+        <div>
+          <label>缝宽 a (μm)</label>
+          <input id="slitWidth" type="range" class="range" min="0.1" max="20" step="0.1" value="2"/>
+          <input id="slitWidthN" type="number" class="input" min="0.1" max="20" step="0.1" value="2"/>
+        </div>
+      </div>
+      <div class="panel-row">
+        <button id="reset" class="btn danger">复位</button>
+        <div class="checkbox-wrap">
+          <input type="checkbox" id="showFormula" checked/>
+          <label for="showFormula">显示公式</label>
+        </div>
+        <div class="checkbox-wrap">
+          <input type="checkbox" id="showEnvelope" checked/>
+          <label for="showEnvelope">显示单缝衍射包络线</label>
+        </div>
+      </div>
+
+      <div class="kpi" style="margin-top:12px;">
+        <div class="item"><div class="val" id="k-fringe-width">-- mm</div><div class="lab">条纹间距 Δy</div></div>
+        <div class="item"><div class="val" id="k-central-order">0</div><div class="lab">中央条纹级次</div></div>
+        <div class="item"><div class="val" id="k-max-order">-- 级</div><div class="lab">物理可见最大级次（屏幕显示）</div></div>
+      </div>
+      <div id="k-view-note" class="legend" style="margin-top:4px;">格式：衍射极限级次 (视窗内级次)。衍射极限 = 单缝包络缺级决定的理论上限（d/a−1）；视窗内 = 当前显示范围（±10 mm）内可见的最大级次。</div>
+
+      <div class="card" style="margin-top:12px;">
+        <h3>干涉图样</h3>
+        <canvas id="pattern" class="display"></canvas>
+        <div class="legend">上方为干涉条纹模拟，下方为光强分布曲线。</div>
+      </div>
+      
+      <div class="card" style="margin-top:12px;">
+        <h3>光强分布</h3>
+        <canvas id="intensity" class="intensity-plot"></canvas>
+        <div class="legend">横轴：屏幕位置 (mm)，纵轴：相对光强。</div>
+      </div>
+    </section>
+
+    <aside class="card">
+      <h3>实验原理</h3>
+      <p>双缝干涉是波动光学的经典实验，由托马斯·杨于1801年首次进行。当相干光通过两个狭缝时，会在屏幕上形成明暗相间的干涉条纹。</p>
+      
+      <div id="formula-section" style="margin-top:10px;">
+        <h3>干涉条纹公式</h3>
+        <p>条纹间距：Δy = λL/d</p>
+        <p>明条纹位置：y = mλL/d (m = 0, ±1, ±2, ...)</p>
+        <p>暗条纹位置：y = (m+1/2)λL/d (m = 0, ±1, ±2, ...)</p>
+        <p>光强分布：I = I₀cos²(πdy/λL) · sinc²(πay/λL)</p>
+        <p>其中，λ为波长，L为屏距，d为双缝间距，a为缝宽</p>
+      </div>
+      
+      <h3 style="margin-top:10px;">实验步骤</h3>
+      <ol>
+        <li>调整波长λ，观察不同颜色光的干涉条纹变化。</li>
+        <li>调整双缝间距d，观察条纹间距的变化。</li>
+        <li>调整屏幕距离L，观察条纹宽度的变化。</li>
+        <li>调整缝宽a，观察单缝衍射对双缝干涉的调制作用。</li>
+      </ol>
+      
+      <h3 style="margin-top:10px;">物理意义</h3>
+      <p>双缝干涉实验证明了光的波动性，是量子力学中波粒二象性的重要基础。条纹间距与波长成正比，与缝间距成反比，这反映了波的干涉规律。</p>
+      
+      <h3 style="margin-top:10px;">AI 实验助手</h3>
+      <p class="subtle">右下角"AI"按钮可提问；点击建议气泡的"填入"将直接修改参数。</p>
+    </aside>
+  </div>
+</main>
+
+<script src="assets/ai.js"></script>
+<script src="assets/chat-widget.js"></script>
+<script>
+  const el = id => document.getElementById(id);
+  const wavelength = el('wavelength'), wavelengthN = el('wavelengthN');
+  const slitDistance = el('slitDistance'), slitDistanceN = el('slitDistanceN');
+  const screenDistance = el('screenDistance'), screenDistanceN = el('screenDistanceN');
+  const slitWidth = el('slitWidth'), slitWidthN = el('slitWidthN');
+  const showFormula = el('showFormula');
+  const showEnvelope = el('showEnvelope');
+  const kFringeWidth = el('k-fringe-width');
+  const kCentralOrder = el('k-central-order');
+  const kMaxOrder = el('k-max-order');
+  const pattern = el('pattern'), patternCtx = pattern.getContext('2d');
+  const intensity = el('intensity'), intensityCtx = intensity.getContext('2d');
+  const resetBtn = el('reset');
+  const formulaSection = el('formula-section');
+
+  // 同步滑块和数字输入框
+  function sync(a, b) {
+    a.addEventListener('input', () => { b.value = a.value; redraw(); });
+    b.addEventListener('change', () => { a.value = b.value; b.value = a.value; redraw(); });
+  }
+  sync(wavelength, wavelengthN);
+  sync(slitDistance, slitDistanceN);
+  sync(screenDistance, screenDistanceN);
+  sync(slitWidth, slitWidthN);
+
+  // 获取参数
+  function params() {
+    const lambda = +wavelengthN.value; // nm
+    const d = +slitDistanceN.value; // μm
+    const L = +screenDistanceN.value; // cm
+    const a = +slitWidthN.value; // μm
+    return { lambda, d, L, a };
+  }
+
+  // 波长到RGB颜色的转换
+  function wavelengthToColor(wavelength) {
+    let r, g, b;
+    if (wavelength >= 380 && wavelength < 440) {
+      r = -1 * (wavelength - 440) / (440 - 380);
+      g = 0;
+      b = 1;
+    } else if (wavelength >= 440 && wavelength < 490) {
+      r = 0;
+      g = (wavelength - 440) / (490 - 440);
+      b = 1;
+    } else if (wavelength >= 490 && wavelength < 510) {
+      r = 0;
+      g = 1;
+      b = -1 * (wavelength - 510) / (510 - 490);
+    } else if (wavelength >= 510 && wavelength < 580) {
+      r = (wavelength - 510) / (580 - 510);
+      g = 1;
+      b = 0;
+    } else if (wavelength >= 580 && wavelength < 645) {
+      r = 1;
+      g = -1 * (wavelength - 645) / (645 - 580);
+      b = 0;
+    } else if (wavelength >= 645 && wavelength <= 780) {
+      r = 1;
+      g = 0;
+      b = 0;
+    } else {
+      r = 0.5;
+      g = 0.5;
+      b = 0.5;
+    }
+    
+    // 亮度因子
+    let factor = 0.1;
+    if (wavelength >= 380 && wavelength < 420) {
+      factor = 0.3 + 0.7 * (wavelength - 380) / (420 - 380);
+    } else if (wavelength >= 420 && wavelength <= 700) {
+      factor = 1.0;
+    } else if (wavelength > 700 && wavelength <= 780) {
+      factor = 0.3 + 0.7 * (780 - wavelength) / (780 - 700);
+    }
+    
+    r = Math.round(255 * Math.pow(r * factor, 0.8));
+    g = Math.round(255 * Math.pow(g * factor, 0.8));
+    b = Math.round(255 * Math.pow(b * factor, 0.8));
+    
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  // 双缝干涉强度计算
+  function calculateIntensity(x, lambda, d, L, a) {
+    // 转换单位：nm -> m, μm -> m, cm -> m
+    const lambda_m = lambda * 1e-9;
+    const d_m = d * 1e-6;
+    const L_m = L * 1e-2;
+    const a_m = a * 1e-6;
+    const x_m = x * 1e-3; // mm -> m
+    
+    // 计算衍射角
+    const theta = Math.atan(x_m / L_m);
+    const sin_theta = Math.sin(theta);
+    
+    // 双缝干涉因子 - 使用正确的公式 cos²(φ/2)
+    const phi = (2 * Math.PI * d_m * sin_theta) / lambda_m;
+    const interference = Math.pow(Math.cos(phi / 2), 2);
+    
+    // 单缝衍射因子 - 使用sinc²函数
+    const beta = (Math.PI * a_m * sin_theta) / lambda_m;
+    let diffraction = 1;
+    if (Math.abs(beta) > 1e-10) {
+      diffraction = Math.pow(Math.sin(beta) / beta, 2);
+    }
+    
+    // 总强度 = 干涉因子 × 衍射因子
+    return interference * diffraction;
+  }
+
+  // 视窗常量和坐标转换函数
+  const VIEW_HALF_MM = 10; // 视窗半宽(mm)
+  const mmRange = VIEW_HALF_MM * 2; // 视窗宽度(mm)
+  const getPxPerMm = (canvas) => canvas.width / mmRange;
+  const mmToPx = (mm, canvas) => (mm + VIEW_HALF_MM) * getPxPerMm(canvas);
+  const pxToMm = (px, canvas) => px / getPxPerMm(canvas) - VIEW_HALF_MM;
+
+  // 重绘图像
+  function redraw() {
+    const { lambda, d, L, a } = params();
+    const color = wavelengthToColor(lambda);
+    
+    // 计算条纹间距（mm）
+    // λ(nm) × L(cm) / d(μm) = nm·cm/μm = 10⁻⁹m × 10⁻²m / 10⁻⁶m = 10⁻³m = mm
+    const fringeWidth = (lambda * L) / (d * 100); // λL/d (nm·cm/μm -> mm)
+    kFringeWidth.textContent = fringeWidth.toFixed(2) + ' mm';
+    
+    // 计算可见最大级次
+    // 使用公式 m = d*sin(θ)/λ，其中θ是可见角度
+    // 对于小角度，sin(θ) ≈ x/L，所以 m ≈ d*x/(λ*L)
+    
+    // 单缝衍射限制了可见级次，使用公式 m_max ≈ d/a（当a<d时）
+    // 考虑单缝衍射和双缝干涉的综合效应
+    
+    // 计算基于屏幕宽度的理论最大级次（视窗内）
+    const maxX = VIEW_HALF_MM; // 视窗半宽(mm)
+    const theoreticalMaxOrder = Math.floor((d * maxX) / (lambda * L / 100));
+    
+    // 计算基于单缝衍射的限制级次（第一暗纹对应于 sin(θ) = λ/a）
+    const diffractionLimit = Math.floor(d / a);
+    
+    // 衍射限制的最大可见级次（理论上限）
+    const maxByDiff = Math.max(diffractionLimit - 1, 0);
+    
+    // 视窗内级次不应超过衍射极限级次
+    const viewMaxOrder = Math.min(theoreticalMaxOrder, maxByDiff);
+    
+    // 显示"衍射极限级次 (视窗内级次)"，格式为"49 (1)"
+    kMaxOrder.textContent = `${maxByDiff} (${viewMaxOrder})`;
+    
+    // 更新中央条纹级次（始终为0）
+    kCentralOrder.textContent = '0';
+    
+    // 绘制干涉图样
+    const w = pattern.clientWidth;
+    const h = pattern.clientHeight;
+    pattern.width = w;
+    pattern.height = h;
+    patternCtx.clearRect(0, 0, w, h);
+    
+    // 绘制背景
+    patternCtx.fillStyle = '#000';
+    patternCtx.fillRect(0, 0, w, h);
+    
+    // 绘制干涉条纹
+    const patternHeight = h * 0.7; // 上部分用于条纹图样
+    const intensityHeight = h - patternHeight; // 下部分用于光强曲线
+    
+    // 计算显示范围（屏幕宽度，单位mm）
+    const pixelsPerMm = getPxPerMm(pattern);
+    
+    // 绘制干涉条纹图样
+    const imageData = patternCtx.createImageData(w, patternHeight);
+    const data = imageData.data;
+    
+    for (let x = 0; x < w; x++) {
+      // 将像素位置转换为屏幕上的实际位置（mm）
+      const screenX = pxToMm(x, pattern);
+      
+      // 计算该位置的光强
+      const intensity = calculateIntensity(screenX, lambda, d, L, a);
+      
+      // 将光强转换为颜色
+      const rgb = color.match(/\d+/g).map(Number);
+      
+      // 填充整列像素
+      for (let y = 0; y < patternHeight; y++) {
+        const i = (y * w + x) * 4;
+        data[i] = rgb[0] * intensity;     // R
+        data[i + 1] = rgb[1] * intensity; // G
+        data[i + 2] = rgb[2] * intensity; // B
+        data[i + 3] = 255;                // A
+      }
+    }
+    
+    patternCtx.putImageData(imageData, 0, 0);
+    
+    // 绘制分隔线
+    patternCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+    patternCtx.beginPath();
+    patternCtx.moveTo(0, patternHeight);
+    patternCtx.lineTo(w, patternHeight);
+    patternCtx.stroke();
+    
+    // 绘制光强分布曲线
+    patternCtx.strokeStyle = 'rgba(255,255,255,0.8)';
+    patternCtx.beginPath();
+    
+    for (let x = 0; x < w; x++) {
+      const screenX = pxToMm(x, pattern);
+      const intensity = calculateIntensity(screenX, lambda, d, L, a);
+      const y = patternHeight + intensityHeight - (intensity * intensityHeight * 0.9);
+      
+      if (x === 0) {
+        patternCtx.moveTo(x, y);
+      } else {
+        patternCtx.lineTo(x, y);
+      }
+    }
+    
+    patternCtx.stroke();
+    
+    // 绘制单独的光强分布图
+    const iw = intensity.clientWidth;
+    const ih = intensity.clientHeight;
+    intensity.width = iw;
+    intensity.height = ih;
+    intensityCtx.clearRect(0, 0, iw, ih);
+    
+    // 设置背景色
+    intensityCtx.fillStyle = '#2a2a42';
+    intensityCtx.fillRect(0, 0, iw, ih);
+    
+    // 绘制坐标轴
+    intensityCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+    intensityCtx.beginPath();
+    intensityCtx.moveTo(0, ih - 30);
+    intensityCtx.lineTo(iw, ih - 30);
+    intensityCtx.stroke();
+    
+    intensityCtx.beginPath();
+    intensityCtx.moveTo(iw / 2, 10);
+    intensityCtx.lineTo(iw / 2, ih - 20);
+    intensityCtx.stroke();
+    
+    // 标记中心
+    intensityCtx.fillStyle = 'rgba(255,255,255,0.7)';
+    intensityCtx.font = '10px Arial';
+    intensityCtx.textAlign = 'center';
+    intensityCtx.fillText('0', iw / 2, ih - 15);
+    
+    // 绘制刻度
+    const mmPerTick = 2; // 每2mm一个刻度
+    const maxMm = VIEW_HALF_MM;
+    for (let mm = -maxMm; mm <= maxMm; mm += mmPerTick) {
+      if (mm === 0) continue; // 跳过中心点，已经标记
+      
+      const x = mmToPx(mm, intensity);
+      intensityCtx.beginPath();
+      intensityCtx.moveTo(x, ih - 35);
+      intensityCtx.lineTo(x, ih - 25);
+      intensityCtx.stroke();
+      
+      intensityCtx.fillText(mm, x, ih - 15);
+    }
+    
+    // 绘制光强曲线
+    intensityCtx.strokeStyle = color;
+    intensityCtx.lineWidth = 2;
+    intensityCtx.beginPath();
+    
+    // 单缝衍射包络线
+    let envelopePath = new Path2D();
+    let firstPoint = true;
+    
+    // 使用统一的像素到毫米的转换比例
+    const intensityPixelsPerMm = getPxPerMm(intensity);
+    
+    for (let x = 0; x < iw; x++) {
+      const screenX = pxToMm(x, intensity);
+      
+      // 计算双缝干涉强度
+      const totalIntensity = calculateIntensity(screenX, lambda, d, L, a);
+      const y = ih - 30 - (totalIntensity * (ih - 40));
+      
+      if (x === 0) {
+        intensityCtx.moveTo(x, y);
+      } else {
+        intensityCtx.lineTo(x, y);
+      }
+      
+      // 计算单缝衍射包络线
+      if (showEnvelope.checked) {
+        // 转换单位
+        const lambda_m = lambda * 1e-9;
+        const a_m = a * 1e-6;
+        const L_m = L * 1e-2;
+        const x_m = screenX * 1e-3;
+        
+        // 计算衍射角
+        const theta = Math.atan(x_m / L_m);
+        const sin_theta = Math.sin(theta);
+        
+        // 单缝衍射因子
+        const beta = (Math.PI * a_m * sin_theta) / lambda_m;
+        let diffraction = 1;
+        if (Math.abs(beta) > 1e-10) {
+          diffraction = Math.pow(Math.sin(beta) / beta, 2);
+        }
+        
+        // 包络线应该是单缝衍射图样的最大值
+        const envelopeY = ih - 30 - (diffraction * (ih - 40));
+        
+        if (firstPoint) {
+          envelopePath.moveTo(x, envelopeY);
+          firstPoint = false;
+        } else {
+          envelopePath.lineTo(x, envelopeY);
+        }
+      }
+    }
+    
+    intensityCtx.stroke();
+    
+    // 绘制单缝衍射包络线
+    if (showEnvelope.checked) {
+      intensityCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+      intensityCtx.lineWidth = 1.5;
+      intensityCtx.setLineDash([5, 3]);
+      intensityCtx.stroke(envelopePath);
+      intensityCtx.setLineDash([]);
+    }
+    
+    // 显示/隐藏公式部分
+    formulaSection.style.display = showFormula.checked ? 'block' : 'none';
+    
+    // AI 指引建议
+    try {
+      if (window.ChatWidget && typeof ChatWidget.suggest === 'function') {
+        clearTimeout(window.__dsSugT);
+        window.__dsSugT = setTimeout(() => {
+          const p = params();
+          let tip = '';
+          let payload = null;
+          
+          if (p.d > 50) {
+            tip = '双缝间距较大，条纹较密。尝试减小间距以观察更清晰的条纹。';
+            payload = { slitDistanceN: { value: 10 } };
+          } else if (p.lambda < 450) {
+            tip = '当前为蓝紫光波长，尝试增加波长至绿光(550nm)观察条纹变化。';
+            payload = { wavelengthN: { value: 550 } };
+          } else if (p.lambda > 650) {
+            tip = '当前为红光波长，尝试减小波长至绿光(550nm)观察条纹变化。';
+            payload = { wavelengthN: { value: 550 } };
+          } else if (p.a > 10) {
+            tip = '缝宽较大，单缝衍射效应明显。尝试减小缝宽以减弱衍射效应。';
+            payload = { slitWidthN: { value: 2 } };
+          } else if (p.L < 50) {
+            tip = '屏幕距离较近，条纹较密。尝试增加屏距以观察更清晰的条纹。';
+            payload = { screenDistanceN: { value: 100 } };
+          }
+          
+          if (tip) {
+            ChatWidget.suggest(tip, payload);
+          }
+        }, 600);
+      }
+    } catch (_) {}
+  }
+
+  // 复位按钮
+  resetBtn.addEventListener('click', () => {
+    wavelength.value = wavelengthN.value = 550;
+    slitDistance.value = slitDistanceN.value = 10;
+    screenDistance.value = screenDistanceN.value = 100;
+    slitWidth.value = slitWidthN.value = 2;
+    showFormula.checked = true;
+    showEnvelope.checked = true;
+    redraw();
+  });
+
+  // 显示/隐藏公式和包络线
+  showFormula.addEventListener('change', redraw);
+  showEnvelope.addEventListener('change', redraw);
+
+  // 窗口大小变化时重绘
+  window.addEventListener('resize', redraw);
+
+  // 初始绘制
+  redraw();
+
+  // 实验上下文：供聊天挂件读取
+  window.getExperimentContext = function () {
+    const p = params();
+    // 计算可见最大级次（与redraw函数中保持一致）
+    const maxX = VIEW_HALF_MM; // mm
+    const theoreticalMaxOrder = Math.floor((p.d * maxX) / (p.lambda * p.L / 100));
+    const diffractionLimit = Math.floor(p.d / p.a);
+    const maxByDiff = Math.max(diffractionLimit - 1, 0);
+    const viewMaxOrder = Math.min(theoreticalMaxOrder, maxByDiff);
+    
+    return {
+      experiment: 'double_slit',
+      wavelength_nm: +p.lambda.toFixed(1),
+      slit_distance_um: +p.d.toFixed(2),
+      screen_distance_cm: +p.L.toFixed(1),
+      slit_width_um: +p.a.toFixed(2),
+      fringe_width_mm: +((p.lambda * p.L) / (p.d * 100)).toFixed(3),
+      max_visible_order: maxByDiff,
+      max_visible_order_in_view: viewMaxOrder
+    };
+  };
+
+  // 初始化AI助手
+  ChatWidget.init({
+    title: '双缝干涉 AI 助手',
+    tts: true,
+    stt: true,
+    systemPrompt: '你是波动光学实验助手，擅长双缝干涉、单缝衍射、波长与条纹关系等知识。',
+    context: 'double_slit_education'
+  });
+</script>
+</body>
+</html>

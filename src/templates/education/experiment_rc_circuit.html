@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>RC 充放电曲线</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs/%3E%3Crect width='64' height='64' rx='12' fill='%23121a2b'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%238ab4ff' opacity='0.15'/%3E%3Ctext x='32' y='38' font-size='22' text-anchor='middle' fill='%237af0b9' font-family='system-ui, -apple-system, Segoe UI, Roboto, Arial' font-weight='700'%3EAI%3C/text%3E%3C/svg%3E"/>
+  <link rel="stylesheet" href="assets/ui.css"/>
+  <style>
+    canvas.display { height: 320px; }
+    .legend { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <a href="{{ url_for('education.resources') }}" class="btn secondary" style="margin-right:8px;">← 返回资源页</a>
+    <div class="title">RC 充放电曲线</div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="grid">
+    <section class="card">
+      <h2>参数与控制</h2>
+      <p class="subtle">选择 R、C、V，观察充放电曲线 vC(t)=V(1−e^{-t/RC}) / vC(t)=V e^{-t/RC}，并标注时间常数 τ=RC。</p>
+      <div class="panel-row">
+        <div>
+          <label>电阻 R (kΩ)</label>
+          <input id="R" type="range" class="range" min="0.1" max="100" step="0.1" value="10"/>
+          <input id="Rn" type="number" class="input" min="0.01" max="1000" step="0.01" value="10"/>
+        </div>
+        <div>
+          <label>电容 C (µF)</label>
+          <input id="C" type="range" class="range" min="0.1" max="1000" step="0.1" value="100"/>
+          <input id="Cn" type="number" class="input" min="0.01" max="10000" step="0.01" value="100"/>
+        </div>
+      </div>
+      <div class="panel-row">
+        <div>
+          <label>电源 V (V)</label>
+          <input id="V" type="range" class="range" min="0" max="24" step="0.1" value="5"/>
+          <input id="Vn" type="number" class="input" min="0" max="50" step="0.1" value="5"/>
+        </div>
+        <div>
+          <label>时间轴 (秒)</label>
+          <input id="T" type="number" class="input" min="1" max="120" step="1" value="20"/>
+        </div>
+      </div>
+      <div class="panel-row">
+        <button id="charge" class="btn">充电</button>
+        <button id="discharge" class="btn secondary">放电</button>
+        <button id="reset" class="btn danger">复位</button>
+        <button id="compare" class="btn secondary">对比充放电</button>
+      </div>
+
+      <div class="kpi" style="margin-top:12px;">
+        <div class="item"><div class="val" id="k-tau">-- s</div><div class="lab">时间常数 τ=RC</div></div>
+        <div class="item"><div class="val" id="k-vc">-- V</div><div class="lab">当前电容电压</div></div>
+        <div class="item"><div class="val" id="k-63">-- s</div><div class="lab">到 0.632V 时刻</div></div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <h3>电容电压 vC(t)</h3>
+        <canvas id="plot" class="display"></canvas>
+        <div class="legend">蓝：vC(t)；虚线：V 与 0.632V（充电）/ 0.368V（放电）。</div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <h3>电路电流 i(t)</h3>
+        <canvas id="plotI" class="display"></canvas>
+        <div class="legend">红：i(t)；虚线：0 A（充电为正、放电为负）。</div>
+      </div>
+    </section>
+
+    <aside class="card">
+      <h3>实验原理</h3>
+      <p>充电：vC(t)=V(1−e^{-t/τ})；放电：vC(t)=V e^{-t/τ}，τ=RC。t=τ 时充电到 63.2%，放电剩余 36.8%。</p>
+      <h3 style="margin-top:10px;">实验步骤</h3>
+      <ol>
+        <li>设置电阻 R、电容 C、电源 V 与时间轴范围 T，观察时间常数 τ=RC。</li>
+        <li>点击“充电”或“放电”，观察 vC(t) 曲线与 0.632V/0.368V 参考线。</li>
+        <li>根据右下建议气泡尝试“填入”参数，比较不同 τ 与 V 对曲线的影响。</li>
+      </ol>
+      <h3 style="margin-top:10px;">AI 实验助手</h3>
+      <p class="subtle">右下角“AI”按钮可提问；点击建议气泡的“填入”将直接修改参数。</p>
+    </aside>
+  </div>
+</main>
+
+<script src="assets/ai.js"></script>
+<script src="assets/chat-widget.js"></script>
+<script>
+  const el=id=>document.getElementById(id);
+  const RR=el('R'), Rn=el('Rn'); const CC=el('C'), Cn=el('Cn'); const VV=el('V'), Vn=el('Vn'); const TT=el('T');
+  const kTau=el('k-tau'), kVc=el('k-vc'), k63=el('k-63');
+  const plot=el('plot'), ctx=plot.getContext('2d');
+  const plotI=el('plotI'), ctxI=plotI.getContext('2d');
+  const btnCharge=el('charge'), btnDis=el('discharge'), btnReset=el('reset');
+  const btnCompare=el('compare');
+
+  function sync(a,b){ a.addEventListener('input',()=>{b.value=a.value; redraw();}); b.addEventListener('change',()=>{a.value=b.value; b.value=a.value; redraw();});}
+  sync(RR,Rn); sync(CC,Cn); sync(VV,Vn);
+
+  let mode='idle', t0=0, vC=0, elapsed=0;
+  let compareMode=false; // 对比充放电曲线（单图叠加）
+
+  function params(){
+    const Rk = Math.max(0.0001, +Rn.value); // kΩ
+    const Cµ = Math.max(0.0001, +Cn.value); // µF
+    const R = Rk * 1000;
+    const C = Cµ * 1e-6;
+    const V = +Vn.value;
+    const T = Math.max(1, +TT.value||20);
+    return {R,C,V,T, tau: R*C};
+  }
+
+  function redraw(){
+    const {R,C,V,T,tau} = params();
+    kTau.textContent = tau.toFixed(3)+' s';
+    // 63% 时刻
+    k63.textContent = tau.toFixed(3)+' s';
+
+    // ===== 电压图 =====
+    const w=plot.clientWidth, h=plot.clientHeight; plot.width=w; plot.height=h; ctx.clearRect(0,0,w,h);
+
+    // 轴框
+    ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1.5; ctx.strokeRect(50,20,w-70,h-60);
+    ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='12px system-ui'; ctx.fillText('t (s)', w-50, h-30); ctx.fillText('V (V)', 10, 28);
+
+    // 参考线 V, 0.632V, 0.368V
+    function yOf(val){ const ymin=0, ymax=Math.max(1,V*1.2); return  h-40 - (val-ymin)/(ymax-ymin)*(h-60);}    
+    ctx.setLineDash([6,4]); ctx.strokeStyle='rgba(255,255,255,0.4)';
+    // V
+    ctx.beginPath(); ctx.moveTo(50, yOf(V)); ctx.lineTo(w-20, yOf(V)); ctx.stroke();
+    // 0.632V & 0.368V
+    ctx.strokeStyle='rgba(138,180,255,0.5)'; ctx.beginPath(); ctx.moveTo(50, yOf(0.632*V)); ctx.lineTo(w-20, yOf(0.632*V)); ctx.stroke();
+    ctx.strokeStyle='rgba(122,240,185,0.5)'; ctx.beginPath(); ctx.moveTo(50, yOf(0.368*V)); ctx.lineTo(w-20, yOf(0.368*V)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 曲线
+    const totalT = (+TT.value||20);
+    const N=300;
+    if (compareMode) {
+      // 叠加显示充/放电理论曲线
+      // 充电（蓝）
+      ctx.strokeStyle='#8ab4ff'; ctx.lineWidth=2; ctx.beginPath();
+      for (let i=0;i<=N;i++) {
+        const t=(i/N)*totalT;
+        const val= V*(1-Math.exp(-t/tau));
+        const x=50+((t/totalT))*(w-70);
+        const y=yOf(val);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      // 放电（绿）
+      ctx.strokeStyle='#7af0b9'; ctx.lineWidth=2; ctx.beginPath();
+      for (let i=0;i<=N;i++) {
+        const t=(i/N)*totalT;
+        const val= V*Math.exp(-t/tau);
+        const x=50+((t/totalT))*(w-70);
+        const y=yOf(val);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    } else {
+      const tVis = (mode==='idle') ? 0 : Math.min(elapsed, totalT);
+      ctx.strokeStyle='#8ab4ff'; ctx.lineWidth=2; ctx.beginPath();
+      for(let i=0;i<=N;i++){
+        const t = (i/N) * tVis;
+        let val=0;
+        if(mode==='charge') val = V*(1-Math.exp(-t/tau));
+        else if(mode==='discharge') val = V*Math.exp(-t/tau);
+        else val = vC;
+        const x = 50 + ((t/totalT))*(w-70);
+        const y = yOf(val);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+
+    // 当前状态下电容电压显示
+    kVc.textContent = (vC).toFixed(3)+' V';
+
+    // ===== 电流图 =====
+    const wi=plotI.clientWidth, hi=plotI.clientHeight; plotI.width=wi; plotI.height=hi; ctxI.clearRect(0,0,wi,hi);
+    // 轴框
+    ctxI.strokeStyle='rgba(255,255,255,0.5)'; ctxI.lineWidth=1.5; ctxI.strokeRect(50,20,wi-70,hi-60);
+    ctxI.fillStyle='rgba(255,255,255,0.8)'; ctxI.font='12px system-ui'; ctxI.fillText('t (s)', wi-50, hi-30); ctxI.fillText('I (A)', 10, 28);
+
+    const I0 = V/Math.max(1e-9, params().R); // 初始电流幅值
+    const Imax = Math.max(1e-6, I0);
+    function yOfI(val){ const ymin=-1.2*Imax, ymax=1.2*Imax; return  hi-40 - (val-ymin)/(ymax-ymin)*(hi-60);}
+    // 0 A 参考线
+    ctxI.setLineDash([6,4]); ctxI.strokeStyle='rgba(255,255,255,0.4)';
+    ctxI.beginPath(); ctxI.moveTo(50, yOfI(0)); ctxI.lineTo(wi-20, yOfI(0)); ctxI.stroke();
+    ctxI.setLineDash([]);
+
+    if (compareMode) {
+      // 充电电流（正，红）
+      ctxI.strokeStyle='#ff7a7a'; ctxI.lineWidth=2; ctxI.beginPath();
+      for (let i=0;i<=N;i++) {
+        const t=(i/N)*totalT;
+        const val = (V/params().R) * Math.exp(-t/tau);
+        const x=50+((t/totalT))*(wi-70); const y=yOfI(val);
+        if(i===0) ctxI.moveTo(x,y); else ctxI.lineTo(x,y);
+      }
+      ctxI.stroke();
+      // 放电电流（负，青绿）
+      ctxI.strokeStyle='#7af0b9'; ctxI.lineWidth=2; ctxI.beginPath();
+      for (let i=0;i<=N;i++) {
+        const t=(i/N)*totalT;
+        const val = -(V/params().R) * Math.exp(-t/tau);
+        const x=50+((t/totalT))*(wi-70); const y=yOfI(val);
+        if(i===0) ctxI.moveTo(x,y); else ctxI.lineTo(x,y);
+      }
+      ctxI.stroke();
+    } else {
+      const tVis = (mode==='idle') ? 0 : Math.min(elapsed, totalT);
+      ctxI.strokeStyle='#ff7a7a'; ctxI.lineWidth=2; ctxI.beginPath();
+      for (let i=0;i<=N;i++) {
+        const t=(i/N)*tVis;
+        let val=0;
+        if (mode==='charge') val = (V/params().R) * Math.exp(-t/tau);
+        else if (mode==='discharge') val = -(V/params().R) * Math.exp(-t/tau);
+        else val = 0;
+        const x=50+((t/totalT))*(wi-70); const y=yOfI(val);
+        if(i===0) ctxI.moveTo(x,y); else ctxI.lineTo(x,y);
+      }
+      ctxI.stroke();
+    }
+
+    // AI 指引建议（去抖 + payload）
+    try {
+      if (window.ChatWidget && typeof ChatWidget.suggest === 'function') {
+        clearTimeout(window.__rcSugT);
+        window.__rcSugT = setTimeout(() => {
+          const p = params();
+          const tau = p.tau;
+          const curT = Math.max(1, +TT.value || 20);
+          let tip = '';
+          let payload = null;
+          if (curT < 4 * tau) {
+            const newT = Math.min(120, Math.max(1, Math.round(5 * tau)));
+            tip = '时间窗较短，可能看不清完整充放电过程。试试将时间轴设为约 5τ。';
+            payload = { T: newT };
+          } else if (tau < 0.5) {
+            tip = '时间常数 τ 偏小，曲线变化很快。试试增大电容 C（示例：+50 µF）。';
+            payload = { Cn: { delta: 50 } };
+          } else if (tau > 5) {
+            tip = '时间常数 τ 偏大，曲线变化较慢。试试减小电容 C（示例：−50 µF）。';
+            payload = { Cn: { delta: -50 } };
+          } else {
+            tip = '可适当增大电源电压 V，以提升曲线对比度（示例：+1 V）。';
+            payload = { Vn: { delta: 1 } };
+          }
+          ChatWidget.suggest(tip, payload);
+        }, 600);
+      }
+    } catch (_) {}
+  }
+
+  function start(modeNew){
+    const p=params();
+    mode=modeNew; t0=performance.now()/1000; elapsed=0;
+    if(mode==='charge') vC=0;
+    if(mode==='discharge') vC=p.V;
+    loop();
+  }
+
+  function loop(){
+    if(mode==='idle') return;
+    const p=params();
+    const t = performance.now()/1000 - t0;
+    elapsed = t;
+    if(mode==='charge') vC = p.V*(1 - Math.exp(-t/p.tau));
+    else if(mode==='discharge') vC = p.V*Math.exp(-t/p.tau);
+    redraw();
+    if (elapsed >= (+TT.value || 20)) { mode='idle'; return; }
+    requestAnimationFrame(loop);
+  }
+
+  btnCharge.addEventListener('click', ()=>start('charge'));
+  btnDis.addEventListener('click', ()=>start('discharge'));
+  btnReset.addEventListener('click', ()=>{ mode='idle'; vC=0; elapsed=0; redraw(); });
+  btnCompare.addEventListener('click', ()=>{
+    compareMode = !compareMode;
+    btnCompare.textContent = compareMode ? '退出对比' : '对比充放电';
+    // 对比模式下不使用动画时长限制，直接全时窗绘制
+    redraw();
+  });
+
+  [RR, Rn, CC, Cn, VV, Vn, TT].forEach(x=>x.addEventListener('input', redraw));
+  window.addEventListener('resize', redraw);
+  redraw();
+
+  // 实验上下文：供聊天挂件读取
+  window.getExperimentContext = function () {
+    const p = params();
+    return {
+      experiment: 'rc_circuit',
+      R_ohm: +p.R.toFixed(3),
+      C_F: +p.C.toFixed(9),
+      V_V: +p.V.toFixed(3),
+      tau_s: +p.tau.toFixed(6),
+      mode: mode,
+      vC_V: +vC.toFixed(4),
+      time_window_s: +(TT.value || 20)
+    };
+  };
+
+  ChatWidget.init({
+    title:'RC 电路 AI 助手',
+    tts:true, stt:true,
+    systemPrompt:'你是电学实验助手，擅长 RC 充放电、时间常数与测量方法。',
+    context: 'rc_circuit_education'
+  });
+</script>
+</body>
+</html>

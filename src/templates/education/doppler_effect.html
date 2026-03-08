@@ -1,15 +1,15 @@
-{% extends "base.html" %}
-
-{% block title %}多普勒效应演示 - 重庆师范大学智能社团+{% endblock %}
-
-{% block styles %}
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
-<meta name="csrf-token" content="{{ csrf_token() }}">
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多普勒效应演示 - 重庆市沙坪坝区人工智能科普基地</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
     body { font-family: 'Inter', 'Noto Sans SC', sans-serif; background-color: #f0f2f5; color: #334155; }
     .main-container-gradient { background: linear-gradient(145deg, #eef2f7, #ffffff); }
@@ -22,7 +22,7 @@
     .btn-stop { background-color: #dc2626; color: white; }
     .btn-stop:hover { background-color: #b91c1c; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.25); }
     .btn:disabled { background-color: #9ca3af; color: #e5e7eb; cursor: not-allowed; box-shadow: none; transform: none; }
-    .status-overlay { position: absolute; inset: 0; background-color: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; transition: opacity 0.3s ease-in-out; border-radius: 0.5rem; }
+    .status-overlay { position: absolute; inset: 0; background-color: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 12003; transition: opacity 0.3s ease-in-out; border-radius: 0.5rem; }
     .status-overlay.hidden { opacity: 0; pointer-events: none; }
     .spinner { width: 48px; height: 48px; border: 5px solid #e5e7eb; border-top: 5px solid #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem; }
     .ai-spinner { width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; }
@@ -40,11 +40,11 @@
     @keyframes approach { 0% { transform: translateX(-2px); } 100% { transform: translateX(2px); } }
     @keyframes retreat { 0% { transform: translateX(2px); } 100% { transform: translateX(-2px); } }
 </style>
-{% endblock %}
-
-{% block content %}
-<header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-    <nav class="container mx-auto px-6 py-3">
+</style>
+</head>
+<body class="antialiased">
+<header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm w-full">
+    <nav class="w-full px-6 py-3">
         <div class="flex justify-between items-center">
             <div class="flex items-center">
                 <a href="{{ url_for('education.resources') }}" class="bg-blue-600 text-white px-3 py-1 rounded-md mr-4 hover:bg-blue-700 transition-colors">
@@ -123,10 +123,21 @@
 
         <div class="main-container-gradient shadow-xl rounded-2xl p-6 md:p-8">
             <h2 class="text-2xl font-bold text-gray-800 mb-4">AI 物理问答</h2>
-            <div class="space-y-4">
-                <textarea id="aiQuestionInput" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition" rows="3" placeholder="输入你关于多普勒效应或其他物理知识的问题..."></textarea>
-                <button id="askAIButton" class="btn bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-6 rounded-lg shadow-md">提问</button>
-                <div id="aiAnswer" class="text-gray-700 bg-purple-50 p-4 rounded-md min-h-[60px] border border-purple-100">AI 的回答将显示在这里。</div>
+            <div class="flex flex-col h-96">
+                <!-- 对话历史区域 -->
+                <div id="chatHistory" class="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 overflow-y-auto space-y-3">
+                    <div class="text-center text-gray-500 text-sm" id="chatWelcome">
+                        <p>👋 你好！我是AI助手，可以回答关于多普勒效应和其他物理知识的问题。</p>
+                        <p>你可以问我任何相关问题，我会基于之前的对话内容为你提供连贯的回答。</p>
+                    </div>
+                </div>
+                
+                <!-- 输入区域 -->
+                <div class="flex gap-2">
+                    <input type="text" id="aiQuestionInput" class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition" placeholder="输入你的问题..." />
+                    <button id="askAIButton" class="btn bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-md whitespace-nowrap">发送</button>
+                    <button id="clearChatButton" class="btn bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg shadow-md" title="清空对话">🗑️</button>
+                </div>
             </div>
         </div>
     </div>
@@ -213,7 +224,9 @@
             aiResult: document.getElementById('aiResult'),
             aiQuestionInput: document.getElementById('aiQuestionInput'),
             askAIButton: document.getElementById('askAIButton'),
-            aiAnswer: document.getElementById('aiAnswer'),
+            chatHistory: document.getElementById('chatHistory'),
+            chatWelcome: document.getElementById('chatWelcome'),
+            clearChatButton: document.getElementById('clearChatButton'),
             threeCanvas: document.getElementById('doppler3DScene'),
         };
 
@@ -225,7 +238,8 @@
             microphoneStream: null, oscillator: null, animationFrameId: null,
             dataHistory: [], lastSmoothedFreq: null, startTime: 0,
             finalFilteredData: [], lastUiUpdateTime: 0, noSignalCounter: 0,
-            isStabilizing: false, previousFreq: null
+            isStabilizing: false, previousFreq: null,
+            chatHistory: [], isAiResponding: false
         };
         let charts = { realtimeChart: null, finalFreqChart: null, finalSpeedChart: null };
         let threeState = { scene: null, camera: null, renderer: null, waves: [], clock: new THREE.Clock(), lastWaveTime: 0, wavelengthFactor: 1.0, source: null, sourceSpeed: 0, sourceInitialPosition: new THREE.Vector3(-6, 1, 0) };
@@ -612,7 +626,7 @@
             }
             const prompt = `根据以下运动摘要，直接用通俗、连贯的语言总结运动过程，不要添加任何多余的前言。摘要：${segmentedSummary}`;
             try {
-                const text = await callGeminiAPI(prompt);
+                const text = await calldeepseekAPI(prompt);
                 dom.aiResult.textContent = text;
             } catch (error) {
                 dom.aiResult.textContent = `分析失败: ${error.message}`;
@@ -621,43 +635,139 @@
             }
         }
 
-        // 作用: 请求AI回答用户提出的问题。
+        // 作用: 请求AI回答用户提出的问题，支持对话历史和上下文。
         async function askAiQuestion() {
             const question = dom.aiQuestionInput.value.trim();
             if (!question) { alert("请输入您的问题。"); return; }
+            if (state.isAiResponding) return;
+            
+            // 添加用户消息到对话历史
+            addMessageToChat('user', question);
+            dom.aiQuestionInput.value = '';
+            
+            // 设置AI响应状态
+            state.isAiResponding = true;
             const originalText = dom.askAIButton.innerHTML;
             await setButtonLoading(dom.askAIButton, '思考中...');
+            
+            // 添加AI思考中的占位消息
+            const thinkingMessageId = addMessageToChat('ai', '正在思考中...', true);
+            
             try {
-                const prompt = `请直接、简洁地回答以下中文物理问题：${question}`;
-                const text = await callGeminiAPI(prompt);
-                dom.aiAnswer.textContent = text;
+                // 构建包含上下文的提示
+                let contextPrompt = '';
+                if (state.chatHistory.length > 1) {
+                    const recentHistory = state.chatHistory.slice(-6); // 最近3轮对话
+                    contextPrompt = '\n\n对话历史：\n' + recentHistory.map(msg => 
+                        `${msg.role === 'user' ? '用户' : 'AI'}：${msg.content}`
+                    ).join('\n') + '\n\n';
+                }
+                
+                const prompt = `你是一个专业的物理教学助手，特别擅长解释多普勒效应等物理现象。请基于对话历史，用通俗易懂的语言回答用户的问题。${contextPrompt}当前问题：${question}`;
+                
+                const response = await calldeepseekAPI(prompt, state.chatHistory);
+                
+                // 更新AI消息
+                updateChatMessage(thinkingMessageId, response);
+                
+                // 添加到对话历史
+                state.chatHistory.push({ role: 'user', content: question });
+                state.chatHistory.push({ role: 'ai', content: response });
+                
             } catch (error) {
-                dom.aiAnswer.textContent = `回答失败: ${error.message}`;
+                updateChatMessage(thinkingMessageId, `回答失败: ${error.message}`);
             } finally {
+                state.isAiResponding = false;
                 resetButton(dom.askAIButton, originalText);
             }
         }
 
-        // 作用: 调用后端API与Gemini模型交互。
-        async function callGeminiAPI(prompt) {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-            const apiUrl = "{{ url_for('education.gemini_api') }}";
-            const response = await fetch(apiUrl, { 
-                method: 'POST', 
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                }, 
-                body: JSON.stringify({ prompt: prompt }) 
-            });
+        // 作用: 添加消息到对话框
+        function addMessageToChat(role, content, isTemporary = false) {
+            // 隐藏欢迎消息
+            if (dom.chatWelcome) {
+                dom.chatWelcome.style.display = 'none';
+            }
             
+            const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            const messageDiv = document.createElement('div');
+            messageDiv.id = messageId;
+            messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = `max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                role === 'user' 
+                    ? 'bg-purple-600 text-white' 
+                    : 'bg-white border border-gray-200 text-gray-800'
+            }`;
+            
+            if (isTemporary) {
+                bubbleDiv.innerHTML = `<div class="flex items-center gap-2"><div class="ai-spinner"></div><span>${content}</span></div>`;
+            } else {
+                bubbleDiv.textContent = content;
+            }
+            
+            messageDiv.appendChild(bubbleDiv);
+            dom.chatHistory.appendChild(messageDiv);
+            
+            // 滚动到底部
+            dom.chatHistory.scrollTop = dom.chatHistory.scrollHeight;
+            
+            return messageId;
+        }
+        
+        // 作用: 更新对话框中的消息内容
+        function updateChatMessage(messageId, newContent) {
+            const messageElement = document.getElementById(messageId);
+            if (messageElement) {
+                const bubbleDiv = messageElement.querySelector('div');
+                if (bubbleDiv) {
+                    bubbleDiv.textContent = newContent;
+                    // 滚动到底部
+                    dom.chatHistory.scrollTop = dom.chatHistory.scrollHeight;
+                }
+            }
+        }
+        
+        // 作用: 清空对话历史
+        function clearChatHistory() {
+            state.chatHistory = [];
+            dom.chatHistory.innerHTML = '';
+            
+            // 重新显示欢迎消息
+            const welcomeDiv = document.createElement('div');
+            welcomeDiv.id = 'chatWelcome';
+            welcomeDiv.className = 'text-center text-gray-500 text-sm';
+            welcomeDiv.innerHTML = `
+                <p>👋 你好！我是AI助手，可以回答关于多普勒效应和其他物理知识的问题。</p>
+                <p>你可以问我任何相关问题，我会基于之前的对话内容为你提供连贯的回答。</p>
+            `;
+            dom.chatHistory.appendChild(welcomeDiv);
+            dom.chatWelcome = welcomeDiv;
+        }
+
+        // 作用: 调用后端AI API进行分析。
+        async function calldeepseekAPI(prompt, chatHistory = []) {
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({ 
+                    message: prompt,
+                    context: chatHistory.length > 0 ? 'education_chat' : undefined,
+                    history: chatHistory
+                })
+            });
+
             if (!response.ok) throw new Error(`API请求失败，状态码: ${response.status}`);
             const result = await response.json();
-            
-            if (result.success && result.content) {
-                return result.content;
+
+            if (result.response) {
+                return result.response;
             } else {
-                throw new Error(result.content || "AI未能生成有效的回复。");
+                throw new Error("AI未能生成有效的回复。");
             }
         }
 
@@ -820,6 +930,16 @@
             dom.exportCsvBtn.addEventListener('click', exportToCsv);
             dom.aiAnalyzeBtn.addEventListener('click', generateAiAnalysis);
             dom.askAIButton.addEventListener('click', askAiQuestion);
+            dom.clearChatButton.addEventListener('click', clearChatHistory);
+            
+            // 支持回车键发送消息
+            dom.aiQuestionInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    askAiQuestion();
+                }
+            });
+            
             window.addEventListener('beforeunload', cleanupAudioResources);
             updateUiState('IDLE');
             initRealtimeChart();
@@ -830,4 +950,5 @@
     });
     </script>
 </div>
-{% endblock %}
+</body>
+</html>

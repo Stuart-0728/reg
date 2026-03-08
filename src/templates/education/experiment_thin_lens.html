@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>薄透镜成像与光路示意</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs/%3E%3Crect width='64' height='64' rx='12' fill='%23121a2b'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%238ab4ff' opacity='0.15'/%3E%3Ctext x='32' y='38' font-size='22' text-anchor='middle' fill='%237af0b9' font-family='system-ui, -apple-system, Segoe UI, Roboto, Arial' font-weight='700'%3EAI%3C/text%3E%3C/svg%3E"/>
+  <link rel="stylesheet" href="assets/ui.css" />
+  <style>
+    .legend { font-size: 12px; color: var(--muted); }
+    canvas.display { height: 420px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="{{ url_for('education.resources') }}" class="btn secondary" style="margin-right:8px;">← 返回资源页</a>
+      <div class="title">薄透镜成像与光路示意</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <section class="card">
+        <h2>参数设置</h2>
+        <p class="subtle">使用薄透镜公式 1/f = 1/u + 1/v，调节焦距与物距，观察像距、放大率与像的性质（实/虚、正/倒）。</p>
+
+        <div class="panel-row">
+          <div>
+            <label>镜片类型</label>
+            <select id="lensType" class="input">
+              <option value="convex" selected>凸透镜（f>0）</option>
+              <option value="concave">凹透镜（f<0）</option>
+            </select>
+          </div>
+          <div>
+            <label>焦距 f（cm）</label>
+            <input id="f" type="range" min="3" max="50" step="0.5" value="10" class="range" />
+            <input id="fNum" type="number" class="input" min="3" max="50" step="0.5" value="10" />
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <div>
+            <label>物距 u（cm，物在左侧取正）</label>
+            <input id="u" type="range" min="5" max="120" step="1" value="30" class="range" />
+            <input id="uNum" type="number" class="input" min="5" max="120" step="1" value="30" />
+          </div>
+          <div>
+            <label>物高 H（cm）</label>
+            <input id="H" type="range" min="1" max="20" step="0.5" value="5" class="range" />
+            <input id="HNum" type="number" class="input" min="1" max="20" step="0.5" value="5" />
+          </div>
+        </div>
+
+
+        <div class="kpi" style="margin-top: 12px;">
+          <div class="item">
+            <div class="val" id="k-v">-- cm</div>
+            <div class="lab">像距 v（右侧为正）</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-m">--</div>
+            <div class="lab">放大率 m = -v/u</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-nature">--</div>
+            <div class="lab">像的性质</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 12px;">
+          <h3>光路示意</h3>
+          <canvas id="view" class="display"></canvas>
+          <div class="legend">蓝：主光轴；白：透镜；紫：入射主光线（平行主轴/过光心/过焦点）；绿：折射光线；红：虚线表示延长线。</div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3>实验说明</h3>
+        <ol>
+          <li>采用笛卡尔符号约定：物在左侧 u>0；凸透镜 f>0，凹透镜 f<0；像距 v>0 表示像在右侧，为实像，v<0 在左侧为虚像。</li>
+          <li>放大率 m = -v/u，m>0 为正立，m<0 为倒立；像高 H' = m·H。</li>
+          <li>可通过调节 u,f 观察"倒立的实像""正立的虚像"等典型情况。</li>
+        </ol>
+        <h3 style="margin-top: 10px;">实验步骤</h3>
+        <ol>
+          <li>选择镜片类型（凸/凹），设置焦距 f。</li>
+          <li>设置物距 u 与物高 H，观察像距 v 与放大率 m 的变化。</li>
+          <li>观察三条主光线的折射或延长，并判断像的性质（实/虚、正/倒）。</li>
+        </ol>
+        <h3 style="margin-top: 10px;">AI 实验助手</h3>
+        <p class="subtle">右下角"AI"按钮可打开问答面板，支持语音。</p>
+      </aside>
+    </div>
+  </main>
+
+  <script src="assets/ai.js"></script>
+  <script src="assets/chat-widget.js"></script>
+  <script>
+    const el = id => document.getElementById(id);
+    const lensType = el('lensType');
+    const fR = el('f'), fNum = el('fNum');
+    const uR = el('u'), uNum = el('uNum');
+    const HR = el('H'), HNum = el('HNum');
+    const kV = el('k-v'), kM = el('k-m'), kNature = el('k-nature');
+    const view = el('view'), ctx = view.getContext('2d');
+
+    function sync(a,b) {
+      a.addEventListener('input', () => { b.value = a.value; redraw(); });
+      b.addEventListener('change', () => { a.value = b.value; b.value = a.value; redraw(); });
+    }
+    sync(fR, fNum);
+    sync(uR, uNum);
+    sync(HR, HNum);
+
+    function params() {
+      const isConvex = lensType.value === 'convex';
+      const fAbs = clamp(parseFloat(fNum.value)||10, 3, 50);
+      const f = isConvex ? fAbs : -fAbs;
+      const u = clamp(parseFloat(uNum.value)||30, 5, 120); // 物在左侧取正
+      const H = clamp(parseFloat(HNum.value)||5, 1, 20);
+      return { f, u, H, isConvex };
+    }
+
+    function compute() {
+      const { f, u, H } = params();
+      // 1/f = 1/u + 1/v => v = 1/(1/f - 1/u)
+      const denom = (1/f - 1/u);
+      let v = Infinity;
+      if (Math.abs(denom) > 1e-6) v = 1/denom; // cm
+      // 放大率
+      const m = -v / u;
+      const Himg = m * H;
+
+      const isReal = v > 0;
+      const upright = m > 0;
+      let nature = (isReal ? '实像' : '虚像') + '，' + (upright ? '正立' : '倒立');
+      if (!isFinite(v)) nature = '共轭位置（近似无像）';
+
+      return { v, m, Himg, nature };
+    }
+
+    function redraw() {
+      const { f, u, H } = params();
+      const { v, m, Himg, nature } = compute();
+
+      // KPI
+      kV.textContent = isFinite(v) ? v.toFixed(2)+' cm' : '—';
+      kM.textContent = isFinite(m) ? m.toFixed(3) : '—';
+      kNature.textContent = nature;
+
+      // 实验建议（轻量提示，满足"AI 指导实验"需求；仅弹短句，避免干扰）
+      if (window.ChatWidget && typeof ChatWidget.suggest === 'function') {
+        clearTimeout(window.__lensSugT);
+        window.__lensSugT = setTimeout(() => {
+          let tip = '';
+          let payload = null;
+          const uVal = parseFloat(uNum.value) || 30;
+          const fAbs = Math.abs(parseFloat(fNum.value) || 10);
+          if (!isFinite(v)) {
+            tip = '当前接近共轭位置（1/f ≈ 1/u）。轻调 u 或 f，尝试使像距 v 有限以获得清晰成像。';
+            payload = { uNum: Math.max(5, Math.min(120, uVal + 5)) };
+          } else if (Math.abs(m) > 1.2) {
+            tip = '试试增大物距 u 或减小焦距 f，观察放大率 |m| 如何变化。';
+            payload = { uNum: Math.max(5, Math.min(120, uVal + 10)) };
+          } else {
+            tip = '试试把物距 u 调到约 2f，理论上会出现等大倒立实像。';
+            payload = { uNum: Math.max(5, Math.min(120, 2 * fAbs)) };
+          }
+          ChatWidget.suggest(tip, payload);
+        }, 600);
+      }
+
+      // 画布
+      const w = view.clientWidth, h = view.clientHeight;
+      view.width = w; view.height = h;
+      ctx.clearRect(0, 0, w, h);
+
+      // 尺度：1 cm -> s px
+      const s = Math.max(2, Math.min(8, w / 300)); // 自适应缩放
+      const cx = Math.round(w/2); // 透镜中心 x=0 对应屏幕中心
+      const cy = Math.round(h/2);
+
+      // 主光轴
+      ctx.strokeStyle = '#8ab4ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+
+      // 透镜
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx, 20); ctx.lineTo(cx, h-20); ctx.stroke();
+
+      // 焦点标记
+      const fpx = cx + (f * s); // 右焦点
+      const fpxL = cx - (f * s); // 左焦点
+      drawFocus(fpx, cy, '#ffffff');
+      drawFocus(fpxL, cy, '#ffffff');
+
+      // 物体（左侧，x = -u）
+      const objX = cx - (u * s);
+      const objH = -H * s; // 向上为负 y
+      drawArrow(objX, cy, objX, cy + objH, '#ffffff'); // 物体白色
+
+      // 计算像位置像高
+      let imgX = cx + (v * s);
+      const imgH = -Himg * s;
+
+      // 主光线作图（紫：入射；绿：透过或延长）
+      const P = { x: objX, y: cy + objH };
+      const Fleft = { x: cx - Math.abs(f) * s, y: cy };
+      const Fright = { x: cx + Math.abs(f) * s, y: cy };
+
+      // 1) 平行主轴 → 凸：过右焦点；凹：发散，反向延长过左焦点
+      rayParallel(P, f, Fleft, Fright);
+
+      // 2) 过光心 → 近似直线不偏折
+      rayThroughCenter(P);
+
+      // 3) 过焦点 → 透镜后平行主轴（凹：指向右焦点入射）
+      rayThroughFocus(P, f, Fleft, Fright);
+
+      // 像（若为虚像，在左侧，建议用虚线箭头）
+      if (isFinite(v)) {
+        const isReal = v > 0;
+        drawArrow(imgX, cy, imgX, cy + imgH, isReal ? '#7af0b9' : '#7af0b977', isReal ? 3 : 2, !isReal);
+        
+        // 在虚像情况下，添加一个小圆点标记虚像位置，使其更明显
+        if (!isReal) {
+          ctx.fillStyle = '#ff6b6b';
+          ctx.beginPath();
+          ctx.arc(imgX, cy + imgH, 4, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+
+      // 辅助函数
+      function drawFocus(x, y, color) {
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
+        ctx.font = '12px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fillText('F', x + 8, y - 8);
+      }
+      function drawArrow(x1,y1,x2,y2,color,w=3,dashed=false) {
+        if (dashed) ctx.setLineDash([6,4]);
+        ctx.strokeStyle = color; ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+        ctx.setLineDash([]);
+        const ang = Math.atan2(y2-y1, x2-x1);
+        const L = 10;
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - L*Math.cos(ang - Math.PI/6), y2 - L*Math.sin(ang - Math.PI/6));
+        ctx.lineTo(x2 - L*Math.cos(ang + Math.PI/6), y2 - L*Math.sin(ang + Math.PI/6));
+        ctx.closePath();
+        ctx.fillStyle = color; ctx.fill();
+      }
+      function drawRay(x1,y1,x2,y2,color,w=2) {
+        ctx.strokeStyle = color; ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      }
+      // 标准主光线实现
+      function rayParallel(P, f, Fleft, Fright) {
+        // 入射：平行主轴到透镜
+        const hit = { x: cx, y: P.y };
+        drawRay(P.x, P.y, hit.x, hit.y, '#b099ff', 2);
+        if (f > 0) {
+          // 凸：透过右焦点
+          const dir = norm({ x: Fright.x - hit.x, y: Fright.y - hit.y });
+          const yEnd = hit.y + (w - hit.x) * (dir.y / Math.max(1e-6, dir.x));
+          drawRay(hit.x, hit.y, w, yEnd, '#7af0b9', 2);
+          
+          // 如果是虚像情况，添加反向延长线到虚像位置
+          const { v } = compute();
+          if (v < 0 && isFinite(v)) {
+            const imgX = cx + (v * s);
+            // 计算光线与虚像位置的交点
+            // 从透镜到右焦点的方向
+            const dirToF = norm({ x: Fright.x - hit.x, y: Fright.y - hit.y });
+            // 计算该方向上的点与虚像x坐标的交点
+            const t = (imgX - hit.x) / dirToF.x;
+            const intersectY = hit.y + dirToF.y * t;
+            
+            // 绘制反向延长线（红色虚线）
+            ctx.setLineDash([6,4]);
+            drawRay(hit.x, hit.y, imgX, intersectY, '#ff6b6b', 1.5);
+            ctx.setLineDash([]);
+          }
+        } else {
+          // 凹：发散，反向延长过左焦点
+          const dir = norm({ x: hit.x - Fleft.x, y: hit.y - Fleft.y });
+          const yEnd = hit.y + (w - hit.x) * (dir.y / Math.max(1e-6, dir.x));
+          drawRay(hit.x, hit.y, w, yEnd, '#7af0b9', 2);
+          ctx.setLineDash([6,4]);
+          drawRay(hit.x, hit.y, Fleft.x, Fleft.y, '#ff6b6b', 1.5);
+          ctx.setLineDash([]);
+        }
+      }
+      function rayThroughCenter(P) {
+        const dir = norm({ x: cx - P.x, y: cy - P.y });
+        const yEnd = P.y + (w - P.x) * (dir.y / Math.max(1e-6, dir.x));
+        drawRay(P.x, P.y, w, yEnd, '#b099ff', 2);
+        
+        // 如果是虚像情况，添加反向延长线到虚像位置
+        const { v } = compute();
+        if (v < 0 && isFinite(v)) {
+          const imgX = cx + (v * s);
+          // 计算光线与虚像位置的交点
+          // 由于过光心的光线不发生偏折，所以延长线就是原光线的延长
+          const dirExtend = dir;
+          // 计算该方向上的点与虚像x坐标的交点
+          const t = (imgX - cx) / dirExtend.x;
+          const intersectY = cy + dirExtend.y * t;
+          
+          // 绘制反向延长线（红色虚线）
+          ctx.setLineDash([6,4]);
+          drawRay(cx, cy, imgX, intersectY, '#ff6b6b', 1.5);
+          ctx.setLineDash([]);
+        }
+      }
+      function rayThroughFocus(P, f, Fleft, Fright) {
+        const target = f > 0 ? Fleft : Fright;
+        // 入射：指向对应焦点到透镜
+        const dirIn = { x: target.x - P.x, y: target.y - P.y };
+        const u = (cx - P.x) / Math.max(1e-6, dirIn.x);
+        const hit = { x: cx, y: P.y + u * dirIn.y };
+        drawRay(P.x, P.y, hit.x, hit.y, '#b099ff', 2);
+        // 透过后：与主轴平行（水平线）
+        drawRay(hit.x, hit.y, w, hit.y, '#7af0b9', 2);
+        
+        // 如果是虚像情况，添加反向延长线到虚像位置
+        const { v } = compute();
+        if (v < 0 && isFinite(v)) {
+          const imgX = cx + (v * s);
+          // 计算水平光线与虚像位置的交点
+          const imgH = -compute().Himg * s;
+          const targetY = cy + imgH; // 虚像顶点的y坐标
+          
+          // 从透镜到虚像顶点的方向
+          ctx.setLineDash([6,4]);
+          // 水平光线的反向延长线
+          drawRay(hit.x, hit.y, imgX, hit.y, '#ff6b6b', 1.5);
+          ctx.setLineDash([]);
+        }
+      }
+      function norm(v) { const L = Math.hypot(v.x, v.y)||1; return { x: v.x/L, y: v.y/L }; }
+    }
+
+    function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+    // 事件
+    lensType.addEventListener('change', redraw);
+    window.addEventListener('resize', redraw);
+
+    // 初始
+    redraw();
+
+    // 初始化 Chat Widget
+    ChatWidget.init({
+      title: '薄透镜 AI 助手',
+      tts: true,
+      stt: true,
+      systemPrompt: '你是光学实验助手，擅长薄透镜成像与误差分析。请用高中生易懂的方式解答，并给出操作建议与注意事项。',
+      context: 'thin_lens_education'
+    });
+
+    // 实验上下文：供聊天挂件读取
+    window.getExperimentContext = function () {
+      const p = params();
+      const c = compute();
+      return {
+        experiment: 'thin_lens',
+        lensType: lensType.value,
+        f_cm: +p.f.toFixed(2),
+        u_cm: +p.u.toFixed(2),
+        H_cm: +p.H.toFixed(2),
+        v_cm: isFinite(c.v) ? +c.v.toFixed(2) : null,
+        m: isFinite(c.m) ? +c.m.toFixed(3) : null,
+        nature: c.nature
+      };
+    };
+  </script>
+</body>
+</html>

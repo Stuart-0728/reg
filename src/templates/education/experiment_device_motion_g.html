@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>使用手机传感器测重力加速度</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs/%3E%3Crect width='64' height='64' rx='12' fill='%23121a2b'/%3E%3Ccircle cx='32' cy='32' r='22' fill='%238ab4ff' opacity='0.15'/%3E%3Ctext x='32' y='38' font-size='22' text-anchor='middle' fill='%237af0b9' font-family='system-ui, -apple-system, Segoe UI, Roboto, Arial' font-weight='700'%3EAI%3C/text%3E%3C/svg%3E"/>
+  <link rel="stylesheet" href="assets/ui.css" />
+  <style>
+    .legend { font-size: 12px; color: var(--muted); }
+    canvas.display { height: 320px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="{{ url_for('education.resources') }}" class="btn secondary" style="margin-right:8px;">← 返回资源页</a>
+      <div class="title">使用手机传感器测重力加速度</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <section class="card">
+        <h2>实验控制</h2>
+        <p class="subtle">将手机平放在稳定桌面，点击“请求权限并开始”，采集加速度（含重力），通过低通滤波估计 |g|。</p>
+
+        <div class="panel-row">
+          <div>
+            <label>平滑系数 α (0~1，越大越平滑)</label>
+            <input id="alpha" type="range" min="0" max="1" step="0.05" value="0.3" class="range" />
+          </div>
+          <div>
+            <label>绘图窗口时长 (秒)</label>
+            <input id="win" type="number" class="input" min="3" max="20" step="1" value="8" />
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <div>
+            <label>当地重力加速度 (m/s²)</label>
+            <input id="local-g" type="number" class="input" min="9.5" max="10.0" step="0.01" value="9.79" />
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <label for="use-calib">启用校准</label>
+            <input id="use-calib" type="checkbox" />
+          </div>
+        </div>
+
+        <div class="panel-row">
+          <button id="start" class="btn">请求权限并开始</button>
+          <button id="stop" class="btn danger" disabled>停止</button>
+          <button id="mark" class="btn secondary" disabled>打标记</button>
+        </div>
+
+        <div class="kpi" style="margin-top: 12px;">
+          <div class="item">
+            <div class="val" id="k-g-now">-- m/s²</div>
+            <div class="lab">当前 |a| 低通</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-g-avg">-- m/s²</div>
+            <div class="lab">平均值</div>
+          </div>
+          <div class="item">
+            <div class="val" id="k-sigma">--</div>
+            <div class="lab">标准差</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 12px;">
+          <h3>实时曲线：|a|（含重力）</h3>
+          <canvas id="plot" class="display"></canvas>
+          <div class="legend">蓝线：|a| 低通；白点：标记时刻；虚线：参考 9.81 m/s²</div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3>实验原理</h3>
+        <p>手机的加速度传感器可以测量包括重力在内的合加速度。当手机静止时，加速度的模长约等于重力加速度 g。通过低通滤波可以减少噪声影响，得到更准确的估计。</p>
+        <h3>最佳实践步骤</h3>
+        <ol>
+          <li>选择一个安静、无振动的环境，将手机平放在稳定桌面上，确保不滑动。</li>
+          <li>调整平滑系数 α（推荐 0.3-0.5）和绘图窗口时长（推荐 8-15 秒）。</li>
+          <li>点击“请求权限并开始”，观察实时曲线稳定后记录数据。</li>
+          <li>使用“打标记”功能记录不同放置方式或表面，比较平均值和标准差。</li>
+          <li>采集至少 30 秒数据，计算平均 g 值，并分析标准差以评估测量精度。</li>
+          <li>重复实验 3-5 次，取平均以提高准确性。注意手机温度和电池水平可能影响传感器。</li>
+        </ol>
+        <h3>注意事项</h3>
+        <ul>
+          <li>避免手机运动或外部干扰。</li>
+          <li>如果标准差过大，检查环境稳定性或增加平滑系数。</li>
+          <li>参考值：标准 g = 9.81 m/s²，实际测量可能有 1-5% 偏差。</li>
+          <li>不同地区的重力加速度有微小差异，如重庆约为9.79 m/s²。</li>
+          <li>确保手机完全水平放置，避免倾斜导致测量值偏小。</li>
+          <li>使用校准功能可以提高测量精度，校准后会显示校准值和原始值。</li>
+        </ul>
+        <div style="height:10px;"></div>
+        <h3>AI 实验助手</h3>
+        <p class="subtle">右下角“AI”按钮可打开问答面板。</p>
+      </aside>
+    </div>
+  </main>
+
+  <script src="assets/ai.js"></script>
+  <script src="assets/chat-widget.js"></script>
+  <script>
+    // DOM
+    const el = id => document.getElementById(id);
+    const startBtn = el('start'), stopBtn = el('stop'), markBtn = el('mark');
+    const alphaR = el('alpha'); const winInput = el('win');
+    const kNow = el('k-g-now'), kAvg = el('k-g-avg'), kSig = el('k-sigma');
+    const plot = el('plot'); const pctx = plot.getContext('2d');
+
+    // 状态
+    let running = false;
+    let raf = null;
+    let alpha = parseFloat(alphaR.value);
+    let windowSec = parseFloat(winInput.value);
+    let series = []; // {t, aLP, mark?}
+    let aLP = null; // 低通后的 |a|
+    let startT = 0;
+    let calibrationFactor = 1.0; // 默认为1.0，无校准
+    let useCalibration = false;
+
+    // 权限兼容
+    async function requestMotionPermission() {
+      const iOS = typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function';
+      if (iOS) {
+        try {
+          const r = await DeviceMotionEvent.requestPermission();
+          return r === 'granted';
+        } catch (_) { return false; }
+      }
+      return true; // 非 iOS 需用户手势即可
+    }
+
+    function onMotion(ev) {
+      if (!running) return;
+      const a = ev.accelerationIncludingGravity || ev.acceleration || {};
+      const ax = a.x || 0, ay = a.y || 0, az = a.z || 0;
+      const mag = Math.hypot(ax, ay, az);
+      aLP = aLP == null ? mag : alpha * mag + (1 - alpha) * aLP;
+      const t = performance.now() / 1000 - startT;
+      series.push({ t, aLP });
+      // 保持窗口
+      const tmin = t - windowSec;
+      while (series.length && series[0].t < tmin) series.shift();
+    }
+
+    function draw() {
+      raf = requestAnimationFrame(draw);
+      // 自适应像素
+      const w = plot.clientWidth, h = plot.clientHeight;
+      plot.width = w; plot.height = h;
+      pctx.clearRect(0, 0, w, h);
+
+      // 坐标范围
+      const ys = series.map(p => p.aLP);
+      if (!ys.length) return;
+      const ymin = Math.min(7.5, Math.min(...ys));
+      const ymax = Math.max(12, Math.max(...ys));
+      const t0 = series[0].t, t1 = series[series.length - 1].t;
+
+      // 参考 9.81
+      pctx.strokeStyle = 'rgba(255,255,255,0.4)';
+      pctx.setLineDash([6,4]);
+      const yRef = mapY(9.81, ymin, ymax, h);
+      pctx.beginPath(); pctx.moveTo(10, yRef); pctx.lineTo(w-10, yRef); pctx.stroke();
+      pctx.setLineDash([]);
+
+      // 曲线
+      pctx.strokeStyle = '#8ab4ff';
+      pctx.lineWidth = 2;
+      pctx.beginPath();
+      series.forEach((p, i) => {
+        const x = mapX(p.t, t0, t1, w);
+        const y = mapY(p.aLP, ymin, ymax, h);
+        if (i === 0) pctx.moveTo(x, y); else pctx.lineTo(x, y);
+      });
+      pctx.stroke();
+
+      // KPI
+      const mean = avg(ys);
+      const sigma = std(ys, mean);
+      
+      // 应用校准
+      const displayLP = useCalibration ? aLP * calibrationFactor : aLP;
+      const displayMean = useCalibration ? mean * calibrationFactor : mean;
+      
+      // 显示值
+      kNow.textContent = aLP ? (useCalibration ? 
+        displayLP.toFixed(3) + ' m/s² (原始: ' + aLP.toFixed(3) + ')' : 
+        aLP.toFixed(3) + ' m/s²') : '--';
+      kAvg.textContent = mean ? (useCalibration ? 
+        displayMean.toFixed(3) + ' m/s² (原始: ' + mean.toFixed(3) + ')' : 
+        mean.toFixed(3) + ' m/s²') : '--';
+      kSig.textContent = sigma.toFixed(3);
+
+      // 标记点（简单：每次按钮点击时在尾部插入带 mark 的点）
+      series.forEach(p => {
+        if (p.mark) {
+          const x = mapX(p.t, t0, t1, w);
+          const y = mapY(p.aLP, ymin, ymax, h);
+          pctx.fillStyle = '#ffffff';
+          pctx.beginPath(); pctx.arc(x, y, 3, 0, Math.PI*2); pctx.fill();
+        }
+      });
+    }
+
+    function mapX(t, t0, t1, w) {
+      if (t1 - t0 < 1e-6) return w - 10;
+      return 10 + (t - t0) / (t1 - t0) * (w - 20);
+    }
+    function mapY(v, vmin, vmax, h) {
+      if (vmax - vmin < 1e-6) return h / 2;
+      return h - 10 - (v - vmin) / (vmax - vmin) * (h - 20);
+    }
+    function avg(arr) { return arr.reduce((a,b)=>a+b,0) / arr.length; }
+    function std(arr, m) { const v = arr.reduce((s,x)=>s+(x-m)*(x-m),0)/arr.length; return Math.sqrt(v); }
+
+    async function start() {
+      if (running) return;
+      startBtn.disabled = true;
+      const ok = await requestMotionPermission();
+      if (!ok) { alert('未授予运动传感器权限'); startBtn.disabled = false; return; }
+
+      window.addEventListener('devicemotion', onMotion, { passive: true });
+      running = true; stopBtn.disabled = false; markBtn.disabled = false;
+      startT = performance.now() / 1000;
+      aLP = null; series = [];
+      alpha = parseFloat(alphaR.value);
+      windowSec = parseFloat(winInput.value);
+      draw();
+    }
+
+    function stop() {
+      if (!running) return;
+      running = false;
+      window.removeEventListener('devicemotion', onMotion);
+      if (raf) cancelAnimationFrame(raf); raf = null;
+      stopBtn.disabled = true; markBtn.disabled = true; startBtn.disabled = false;
+    }
+
+    // 事件
+    startBtn.addEventListener('click', start);
+    stopBtn.addEventListener('click', stop);
+    markBtn.addEventListener('click', () => {
+      if (!series.length) return;
+      series[series.length - 1].mark = true;
+    });
+    alphaR.addEventListener('input', () => alpha = parseFloat(alphaR.value));
+    winInput.addEventListener('change', () => windowSec = Math.max(3, Math.min(20, parseFloat(winInput.value)||8)));
+    
+    // 校准相关
+    const localGInput = document.getElementById('local-g');
+    const useCalibCheck = document.getElementById('use-calib');
+    
+    // 更新校准系数
+    function updateCalibration() {
+      useCalibration = useCalibCheck.checked;
+      if (useCalibration && aLP) {
+        const localG = parseFloat(localGInput.value);
+        calibrationFactor = localG / aLP;
+      }
+    }
+    
+    // 添加事件监听
+    useCalibCheck.addEventListener('change', updateCalibration);
+    localGInput.addEventListener('change', () => {
+      if (useCalibration) updateCalibration();
+    });
+
+    window.addEventListener('beforeunload', () => stop());
+
+    // 初始化 Chat Widget
+    ChatWidget.init({
+      title: '重力加速度 AI 助手',
+      tts: true,
+      stt: true,
+      systemPrompt: '你是物理实验助手，专长传感器与误差分析。解释 DeviceMotion 噪声来源、滤波、统计与不确定度估计。',
+      context: 'device_motion_g_education'
+    });
+
+    // 实验上下文：供聊天挂件读取（仅聊天面板播报时使用）
+    window.getExperimentContext = function () {
+      const samples = series.length;
+      const now = aLP;
+      let mean = null, sigma = null;
+      if (samples > 0) {
+        const ys = series.map(p => p.aLP).filter(v => typeof v === 'number' && isFinite(v));
+        if (ys.length) {
+          mean = avg(ys);
+          sigma = std(ys, mean);
+        }
+      }
+      return {
+        experiment: 'device_motion_g',
+        alpha: parseFloat(alphaR.value),
+        windowSec: parseFloat(winInput.value),
+        running: !!running,
+        samples,
+        g_now: now != null && isFinite(now) ? +(useCalibration ? now * calibrationFactor : now).toFixed(3) : null,
+        g_avg: mean != null ? +(useCalibration ? mean * calibrationFactor : mean).toFixed(3) : null,
+        g_sigma: sigma != null ? +sigma.toFixed(3) : null,
+        calibrated: useCalibration,
+        calibrationFactor: calibrationFactor,
+        localG: parseFloat(localGInput.value)
+      };
+    };
+  </script>
+</body>
+</html>

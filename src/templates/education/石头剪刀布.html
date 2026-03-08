@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>石头剪刀布AI游戏 - 重庆市沙坪坝区人工智能科普基地</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <!-- 使用特定版本的 MediaPipe Hands 以确保稳定性 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"
+        crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <style>
+        body {
+            background-color: #0f172a;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            aspect-ratio: 4/3;
+            border-radius: 1rem;
+            overflow: hidden;
+            background: #000;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.6);
+            border: 2px solid #334155;
+        }
+
+        .input_video {
+            display: none;
+        }
+
+        .output_canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            /* 镜像翻转：让用户像照镜子一样 */
+        }
+
+        /* 顶部和底部的 UI 容器 */
+        .ui-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        /* 状态条 */
+        .status-bar {
+            align-self: center;
+            background: rgba(15, 23, 42, 0.85);
+            padding: 8px 24px;
+            border-radius: 999px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            min-width: 300px;
+            transition: all 0.2s;
+        }
+
+        /* 中心大字 (改用 Flexbox 绝对居中，不再依赖 transform) */
+        .center-display {
+            position: absolute;
+            inset: 0;
+            /* 上下左右全部贴边，铺满容器 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            /* 垂直居中 */
+            align-items: center;
+            /* 水平居中 */
+            z-index: 50;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 1);
+            pointer-events: none;
+            text-align: center;
+        }
+
+        .countdown-text {
+            font-size: 8rem;
+            font-weight: 900;
+            color: #fbbf24;
+            animation: pulse 0.8s infinite;
+            line-height: 1;
+        }
+
+        .result-title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            line-height: 1.2;
+        }
+
+        .result-subtitle {
+            font-size: 1.2rem;
+            color: #cbd5e1;
+            background: rgba(0, 0, 0, 0.6);
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 8px;
+        }
+
+        /* AI 对手的手势气泡 */
+        .ai-hand-bubble {
+            position: absolute;
+            top: 15%;
+            right: 10%;
+            width: 140px;
+            height: 140px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 5rem;
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.6);
+            transform: scale(0);
+            transition: transform 0.2s;
+            /* 更快的动画，适应实时变化 */
+            z-index: 15;
+            border: 6px solid #3b82f6;
+        }
+
+        .ai-hand-bubble.show {
+            transform: scale(1);
+        }
+
+        /* 判定进度条 */
+        .scanning-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: #22c55e;
+            transform-origin: left;
+            transform: scaleX(0);
+            transition: transform 0.05s linear;
+        }
+
+        /* 玩家标签 */
+        .player-tag {
+            position: absolute;
+            bottom: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            border-left: 4px solid #3b82f6;
+            font-weight: bold;
+        }
+
+        @keyframes countdown-pop {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+
+            60% {
+                transform: scale(1.1);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+            box-shadow: 0 4px 0 #1d4ed8;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+
+        .mode-selector {
+            background: #1e293b;
+            padding: 6px;
+            border-radius: 16px;
+            display: inline-flex;
+            gap: 6px;
+        }
+
+        .mode-btn {
+            padding: 8px 20px;
+            border-radius: 12px;
+            color: #94a3b8;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            background: #334155;
+            color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        /* --- 悬浮 UI 样式 --- */
+
+        /* 返回按钮 */
+        .floating-back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .floating-back-btn:hover {
+            background: rgba(30, 41, 59, 0.8);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            color: white;
+        }
+
+        /* AI 悬浮球 */
+        .ai-fab {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #8b5cf6, #ec4899);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            box-shadow: 0 10px 25px rgba(139, 92, 246, 0.5);
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .ai-fab:hover {
+            transform: scale(1.1) rotate(5deg);
+            box-shadow: 0 15px 35px rgba(139, 92, 246, 0.6);
+        }
+
+        .ai-fab:active {
+            transform: scale(0.95);
+        }
+
+        /* AI 聊天窗口 */
+        .chat-window {
+            position: fixed;
+            bottom: 100px;
+            right: 30px;
+            width: 380px;
+            height: 500px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            z-index: 99;
+            transform-origin: bottom right;
+            transform: scale(0);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .chat-window.open {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        .chat-header {
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-body {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+        }
+
+        .chat-body::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-body::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .chat-footer {
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px 14px;
+            color: white;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .chat-input:focus {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(139, 92, 246, 0.5);
+        }
+
+        .chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .send-btn {
+            background: #8b5cf6;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            width: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .send-btn:hover {
+            background: #7c3aed;
+        }
+
+        /* 消息气泡样式调整 */
+        .msg-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+
+        .msg-user {
+            align-self: flex-end;
+            background: #8b5cf6;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-ai {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+            border-bottom-left-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .ai-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="flex flex-col items-center min-h-screen p-6">
+
+    <!-- 悬浮返回按钮 -->
+    <a href="{{ url_for('education.resources') }}" class="floating-back-btn">
+        <i class="fas fa-chevron-left"></i>
+        <span>返回资源页</span>
+    </a>
+
+    <div class="w-full max-w-4xl flex flex-col items-center gap-6 mt-8">
+
+        <div class="flex flex-col items-center gap-2">
+            <h1 class="text-3xl font-black tracking-tight text-white drop-shadow-lg">
+                <span class="text-blue-500">AI</span> 实时竞赛 & <span class="text-green-500">PVP</span> 裁判
+            </h1>
+            <div class="mode-selector">
+                <button id="mode-ai" class="mode-btn active" onclick="switchMode('AI')">🎮 AI 实时必胜</button>
+                <button id="mode-pvp" class="mode-btn" onclick="switchMode('PVP')">⚖️ 双人防作弊</button>
+            </div>
+        </div>
+
+        <!-- 游戏主画面 -->
+        <div class="game-container">
+            <video class="input_video"></video>
+            <canvas class="output_canvas"></canvas>
+
+            <!-- 扫描判定条 -->
+            <div id="scan-line" class="scanning-line"></div>
+
+            <!-- UI Overlay: 负责顶部状态条和底部标签 -->
+            <div class="ui-overlay">
+                <!-- 顶部状态 -->
+                <div id="status-bar" class="status-bar">等待摄像头连接...</div>
+
+                <!-- AI 出拳气泡 -->
+                <div id="ai-bubble" class="ai-hand-bubble">👊</div>
+
+                <!-- 玩家标记 (PVP模式显示) -->
+                <!-- P1 实际上是画面左边，P2 是画面右边 -->
+                <div id="p1-tag" class="player-tag hidden" style="left: 20px; border-color: #f43f5e;">P1 (左侧玩家)</div>
+                <div id="p2-tag" class="player-tag hidden" style="right: 20px; border-color: #3b82f6;">P2 (右侧玩家)</div>
+            </div>
+
+            <!-- 中心显示区域 (移出 ui-overlay，防止 Flex 布局影响居中) -->
+            <div id="center-display" class="center-display"></div>
+        </div>
+
+        <button onclick="startGame()" class="btn-primary text-xl px-10 py-4 mt-2">
+            🚀 开始 (空格键)
+        </button>
+
+    </div>
+
+    <!-- AI 悬浮球 -->
+    <button id="aiFab" class="ai-fab" title="AI 助手">
+        <i class="fas fa-robot"></i>
+    </button>
+
+    <!-- AI 聊天悬浮窗 -->
+    <div id="chatWindow" class="chat-window">
+        <div class="chat-header">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-robot text-purple-400"></i>
+                <span class="font-bold text-white">AI 游戏助手</span>
+            </div>
+            <button id="closeChatBtn" class="text-gray-400 hover:text-white transition-colors">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div id="chatHistory" class="chat-body">
+            <div class="text-center text-gray-400 text-sm my-4" id="chatWelcome">
+                <div class="mb-2 text-2xl">👋</div>
+                <p>我是你的 AI 助手</p>
+                <p class="mt-1 text-xs opacity-70">问我关于手势识别、MediaPipe<br>或游戏原理的问题吧！</p>
+            </div>
+        </div>
+
+        <div class="chat-footer">
+            <input type="text" id="aiQuestionInput" class="chat-input" placeholder="输入问题..." />
+            <button id="askAIButton" class="send-btn">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 核心配置 ---
+        const CONFIG = {
+            countdown: 3,
+            detectionWindowMs: 800, // PVP 用：持续检测窗口
+            cheatThresholdMs: 350,  // PVP 用：慢出拳判定阈值
+        };
+
+        const GESTURES = { 0: '✊', 1: '✋', 2: '✌️' };
+        const GESTURE_NAMES = { 0: '石头', 1: '布', 2: '剪刀' };
+
+        // --- 全局状态 ---
+        let currentMode = 'AI'; // 'AI', 'PVP'
+        let gameState = 'IDLE'; // IDLE, COUNTDOWN, DETECTING (PVP), ACTIVE (AI), LOCKED (PVP End)
+        let detectionStartTime = 0;
+
+        let pvpStats = {
+            p1: { gesture: null, changeTime: 0 },
+            p2: { gesture: null, changeTime: 0 }
+        };
+
+        // DOM 元素
+        const videoElement = document.getElementsByClassName('input_video')[0];
+        const canvasElement = document.getElementsByClassName('output_canvas')[0];
+        const ctx = canvasElement.getContext('2d');
+        const statusBar = document.getElementById('status-bar');
+        const centerDisplay = document.getElementById('center-display');
+        const aiBubble = document.getElementById('ai-bubble');
+        const scanLine = document.getElementById('scan-line');
+        const p1Tag = document.getElementById('p1-tag');
+        const p2Tag = document.getElementById('p2-tag');
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.getElementById('mode-ai').className = `mode-btn ${mode === 'AI' ? 'active' : ''}`;
+            document.getElementById('mode-pvp').className = `mode-btn ${mode === 'PVP' ? 'active' : ''}`;
+
+            if (mode === 'PVP') {
+                p1Tag.classList.remove('hidden');
+                p2Tag.classList.remove('hidden');
+            } else {
+                p1Tag.classList.add('hidden');
+                p2Tag.classList.add('hidden');
+            }
+            resetGame();
+        }
+
+        function resetGame() {
+            gameState = 'IDLE';
+            statusBar.innerText = "准备就绪，按空格或点击开始";
+            statusBar.style.color = "#e2e8f0";
+            centerDisplay.innerHTML = "";
+            aiBubble.classList.remove('show');
+            scanLine.style.transform = 'scaleX(0)';
+            pvpStats = {
+                p1: { gesture: null, changeTime: 0 },
+                p2: { gesture: null, changeTime: 0 }
+            };
+        }
+
+        function startGame() {
+            if (gameState === 'COUNTDOWN') return;
+
+            resetGame();
+            gameState = 'COUNTDOWN';
+            let count = CONFIG.countdown;
+
+            updateCenterText(count, "8rem", "#fbbf24");
+
+            let timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    updateCenterText(count, "8rem", "#fbbf24");
+                } else {
+                    clearInterval(timer);
+                    updateCenterText("出拳!", "6rem", "#ef4444");
+
+                    if (currentMode === 'AI') {
+                        startAIPhase();
+                    } else {
+                        startPVPDetectionPhase();
+                    }
+                }
+            }, 1000);
+        }
+
+        function startAIPhase() {
+            gameState = 'ACTIVE'; // AI 模式进入持续活动状态，不自动结束
+            statusBar.innerText = "🤖 AI 出拳中...";
+            statusBar.style.color = "#3b82f6";
+
+            // 清除中间的大字，以免挡住视线，或者留着“AI获胜”
+            setTimeout(() => {
+                if (gameState === 'ACTIVE') centerDisplay.innerHTML = "";
+            }, 1000);
+        }
+
+        function startPVPDetectionPhase() {
+            gameState = 'DETECTING';
+            detectionStartTime = performance.now();
+            statusBar.innerText = "⚖️ 正在裁决...";
+            statusBar.style.color = "#3b82f6";
+
+            scanLine.style.transition = `transform ${CONFIG.detectionWindowMs}ms linear`;
+            scanLine.style.transform = 'scaleX(1)';
+
+            setTimeout(resolvePVP, CONFIG.detectionWindowMs);
+        }
+
+        // --- 手势识别 ---
+        function getGesture(landmarks) {
+            const tips = [8, 12, 16, 20];
+            const pips = [6, 10, 14, 18];
+            let openFingers = 0;
+
+            for (let i = 0; i < 4; i++) {
+                if (distance(landmarks[tips[i]], landmarks[0]) > distance(landmarks[pips[i]], landmarks[0])) {
+                    openFingers++;
+                }
+            }
+
+            let thumbOpen = false;
+            // 简单几何：拇指尖离小指根部的距离 vs 拇指关节离小指根部的距离
+            if (distance(landmarks[4], landmarks[17]) > distance(landmarks[3], landmarks[17]) * 1.2) {
+                thumbOpen = true;
+            }
+
+            if (openFingers === 0) return 0; // Rock
+            if (openFingers >= 3) return 1;  // Paper
+            if (openFingers === 2 && !thumbOpen) return 2; // Scissors
+            if (openFingers === 1 || openFingers === 2) return 2; // Loose Scissors
+            return 1;
+        }
+
+        function distance(p1, p2) {
+            return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        }
+
+        // --- MediaPipe Loop ---
+        function onResults(results) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            ctx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            const now = performance.now();
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // 绘制手部
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#ffffff', lineWidth: 2 });
+                    drawLandmarks(ctx, landmarks, { color: '#3b82f6', lineWidth: 1, radius: 2 });
+                }
+
+                // === AI 模式逻辑 (持续运行) ===
+                if (currentMode === 'AI' && gameState === 'ACTIVE') {
+                    // 只要检测到手，就立刻反应
+                    const gesture = getGesture(results.multiHandLandmarks[0]);
+
+                    // 必胜逻辑
+                    const aiMove = (gesture + 1) % 3;
+
+                    aiBubble.innerText = GESTURES[aiMove];
+                    aiBubble.classList.add('show');
+
+                    // 实时更新状态栏，而不是锁定大屏幕
+                    statusBar.innerText = `你: ${GESTURE_NAMES[gesture]}  vs  AI: ${GESTURE_NAMES[aiMove]} (AI胜)`;
+                }
+
+                // === PVP 模式逻辑 (倒计时后的一段时间窗口) ===
+                else if (currentMode === 'PVP' && gameState === 'DETECTING' && results.multiHandLandmarks.length === 2) {
+                    const elapsed = now - detectionStartTime;
+
+                    let h1 = results.multiHandLandmarks[0];
+                    let h2 = results.multiHandLandmarks[1];
+
+                    // 左右手纠正逻辑：
+                    // Canvas 被 scaleX(-1) 镜像翻转了。
+                    // 视频原始坐标 x=0 (左边) -> 渲染在画布最右边。
+                    // 视频原始坐标 x=1 (右边) -> 渲染在画布最左边。
+                    // 我们希望 P1 是"视觉上的左边"，也就是 x 坐标较大的那个 (接近1)。
+                    // 我们希望 P2 是"视觉上的右边"，也就是 x 坐标较小的那个 (接近0)。
+
+                    if (h1[0].x < h2[0].x) {
+                        [h1, h2] = [h2, h1]; // 交换，确保 h1 是坐标大的那个 (Visual Left/P1)
+                    }
+
+                    const g1 = getGesture(h1);
+                    const g2 = getGesture(h2);
+
+                    // 实时更新当前手势（无论是不是石头，只要检测到就更新）
+                    pvpStats.p1.gesture = g1;
+                    pvpStats.p2.gesture = g2;
+
+                    // 记录慢动作：如果手势不是石头，且changeTime还是初始值(0)，说明刚变招
+                    if (g1 !== 0 && pvpStats.p1.changeTime === 0) {
+                        pvpStats.p1.changeTime = elapsed;
+                    }
+                    if (g2 !== 0 && pvpStats.p2.changeTime === 0) {
+                        pvpStats.p2.changeTime = elapsed;
+                    }
+                }
+            } else {
+                // 如果 AI 模式下手移出了屏幕，隐藏气泡
+                if (currentMode === 'AI' && gameState === 'ACTIVE') {
+                    aiBubble.classList.remove('show');
+                }
+            }
+            ctx.restore();
+        }
+
+        // PVP 最终结算
+        function resolvePVP() {
+            if (gameState !== 'DETECTING') return;
+            gameState = 'LOCKED';
+            scanLine.style.transform = 'scaleX(0)';
+            scanLine.style.transition = 'none';
+
+            const p1 = pvpStats.p1;
+            const p2 = pvpStats.p2;
+
+            // 1. 检查是否检测到双手 (修正：如果是 null，说明一直没检测到)
+            if (p1.gesture === null || p2.gesture === null) {
+                centerDisplay.innerHTML = `<div class="result-title text-gray-400">❓ 未检测到双手</div>`;
+                statusBar.innerText = "请确保两名玩家的手都在画面中";
+                return;
+            }
+
+            // 2. 只有当玩家最终出拳不是石头，且变招时间超过阈值时，才判定为慢
+            let p1Slow = (p1.gesture !== 0 && p1.changeTime > CONFIG.cheatThresholdMs);
+            let p2Slow = (p2.gesture !== 0 && p2.changeTime > CONFIG.cheatThresholdMs);
+
+            let resultHTML = "";
+            let statusText = "";
+
+            if (p1Slow || p2Slow) {
+                let cheatMsg = "";
+                if (p1Slow && p2Slow) cheatMsg = "双方都太慢了 (无效)";
+                else if (p1Slow) cheatMsg = "P1 (左) 犯规：出拳太慢";
+                else cheatMsg = "P2 (右) 犯规：出拳太慢";
+
+                resultHTML = `<div class="result-title text-yellow-500">🚫 犯规</div>
+                              <div class="result-subtitle">${cheatMsg}</div>`;
+                statusText = "检测到作弊行为";
+            } else {
+                const g1 = p1.gesture;
+                const g2 = p2.gesture;
+
+                let winner = "";
+                let wColor = "text-white";
+
+                if (g1 === g2) {
+                    winner = "🤝 平局";
+                    wColor = "text-gray-300";
+                } else if ((g1 === 0 && g2 === 2) || (g1 === 1 && g2 === 0) || (g1 === 2 && g2 === 1)) {
+                    winner = "🏆 P1 (左) 获胜";
+                    wColor = "text-rose-500";
+                } else {
+                    winner = "🏆 P2 (右) 获胜";
+                    wColor = "text-blue-500";
+                }
+
+                resultHTML = `<div class="result-title ${wColor}">${winner}</div>
+                              <div class="flex gap-8 mt-4 justify-center">
+                                <div class="flex flex-col items-center bg-gray-800 p-3 rounded-lg">
+                                    <span class="text-xs text-gray-400 mb-1">P1 (左)</span>
+                                    <span class="text-4xl">${GESTURES[g1]}</span>
+                                </div>
+                                <div class="flex flex-col items-center bg-gray-800 p-3 rounded-lg">
+                                    <span class="text-xs text-gray-400 mb-1">P2 (右)</span>
+                                    <span class="text-4xl">${GESTURES[g2]}</span>
+                                </div>
+                              </div>`;
+                statusText = "判定完成";
+            }
+
+            centerDisplay.innerHTML = resultHTML;
+            statusBar.innerText = statusText;
+        }
+
+        function updateCenterText(text, size, color) {
+            centerDisplay.innerHTML = `<div class="countdown-text" style="font-size:${size}; color:${color}">${text}</div>`;
+        }
+
+        window.addEventListener('keydown', (e) => {
+            // 如果正在输入问题，不触发开始游戏
+            if (document.activeElement === aiQuestionInput) return;
+            if (e.code === 'Space') {
+                e.preventDefault(); // 防止页面滚动
+                startGame();
+            }
+        });
+
+        // --- MediaPipe Init ---
+        // 使用与 script 标签一致的特定版本，防止路径错误
+        const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}` });
+
+        hands.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        hands.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({ image: videoElement }); },
+            width: 1280, height: 720
+        });
+        camera.start().then(() => statusBar.innerText = "摄像头已连接");
+
+        function resize() {
+            canvasElement.width = videoElement.videoWidth || 640;
+            canvasElement.height = videoElement.videoHeight || 480;
+        }
+        videoElement.addEventListener('loadeddata', resize);
+        window.addEventListener('resize', resize);
+
+        // --- AI 问答功能 (悬浮窗版) ---
+        let chatHistory = [];
+        let isAiResponding = false;
+
+        const aiFab = document.getElementById('aiFab');
+        const chatWindow = document.getElementById('chatWindow');
+        const closeChatBtn = document.getElementById('closeChatBtn');
+        const aiQuestionInput = document.getElementById('aiQuestionInput');
+        const askAIButton = document.getElementById('askAIButton');
+        const chatHistoryDiv = document.getElementById('chatHistory');
+        const chatWelcome = document.getElementById('chatWelcome');
+
+        // 切换聊天窗口显示
+        function toggleChat() {
+            chatWindow.classList.toggle('open');
+            if (chatWindow.classList.contains('open')) {
+                setTimeout(() => aiQuestionInput.focus(), 300);
+            }
+        }
+
+        aiFab.addEventListener('click', toggleChat);
+        closeChatBtn.addEventListener('click', toggleChat);
+
+        // 添加消息到对话框
+        function addMessageToChat(role, content, isTemporary = false) {
+            if (chatWelcome) {
+                chatWelcome.style.display = 'none';
+            }
+
+            const messageId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            const messageDiv = document.createElement('div');
+            messageDiv.id = messageId;
+            messageDiv.className = `msg-bubble ${role === 'user' ? 'msg-user' : 'msg-ai'}`;
+
+            if (isTemporary) {
+                messageDiv.innerHTML = `<div class="flex items-center gap-2"><div class="ai-spinner"></div><span>${content}</span></div>`;
+            } else {
+                messageDiv.textContent = content;
+            }
+
+            chatHistoryDiv.appendChild(messageDiv);
+            chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+
+            return messageId;
+        }
+
+        // 更新对话框中的消息
+        function updateChatMessage(messageId, newContent) {
+            const messageElement = document.getElementById(messageId);
+            if (messageElement) {
+                messageElement.textContent = newContent;
+                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+            }
+        }
+
+        // 设置按钮为加载状态
+        function setButtonLoading(button) {
+            button.disabled = true;
+            button.innerHTML = `<div class="ai-spinner"></div>`;
+        }
+
+        // 恢复按钮状态
+        function resetButton(button) {
+            button.disabled = false;
+            button.innerHTML = `<i class="fas fa-paper-plane"></i>`;
+        }
+
+        // 调用AI API
+        async function callAIAPI(prompt, history = []) {
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    message: prompt,
+                    context: history.length > 0 ? 'education_chat' : undefined,
+                    history: history
+                })
+            });
+
+            if (!response.ok) throw new Error(`API请求失败: ${response.status}`);
+            const result = await response.json();
+
+            if (result.response) {
+                return result.response;
+            } else {
+                throw new Error("AI未能生成有效的回复。");
+            }
+        }
+
+        // 处理AI问答
+        async function askAiQuestion() {
+            const question = aiQuestionInput.value.trim();
+            if (!question) return;
+
+            if (isAiResponding) return;
+
+            addMessageToChat('user', question);
+            aiQuestionInput.value = '';
+
+            isAiResponding = true;
+            setButtonLoading(askAIButton);
+
+            const thinkingMessageId = addMessageToChat('ai', '思考中...', true);
+
+            try {
+                let contextPrompt = '';
+                if (chatHistory.length > 1) {
+                    const recentHistory = chatHistory.slice(-6);
+                    contextPrompt = '\n\n对话历史：\n' + recentHistory.map(msg =>
+                        `${msg.role === 'user' ? '用户' : 'AI'}：${msg.content}`
+                    ).join('\n') + '\n\n';
+                }
+
+                const prompt = `你是一个专业的AI和计算机视觉教学助手，特别擅长解释手势识别、MediaPipe、机器学习等技术。这是一个基于MediaPipe Hands的石头剪刀布游戏，支持AI实时必胜和双人防作弊裁判。请基于对话历史，用通俗易懂的语言回答用户的问题。${contextPrompt}当前问题：${question}`;
+
+                const response = await callAIAPI(prompt, chatHistory);
+                updateChatMessage(thinkingMessageId, response);
+
+                chatHistory.push({ role: 'user', content: question });
+                chatHistory.push({ role: 'ai', content: response });
+            } catch (error) {
+                updateChatMessage(thinkingMessageId, `回答失败: ${error.message}`);
+            } finally {
+                isAiResponding = false;
+                resetButton(askAIButton);
+            }
+        }
+
+        // 绑定事件监听器
+        askAIButton.addEventListener('click', askAiQuestion);
+        aiQuestionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                askAiQuestion();
+            }
+        });
+
+    </script>
+</body>
+
+</html>

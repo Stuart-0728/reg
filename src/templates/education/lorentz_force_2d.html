@@ -3,8 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洛伦兹力2D横截面仿真</title>
-    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>洛伦兹力2D横截面仿真 - 重庆市沙坪坝区人工智能科普基地</title>
+    <meta name="description" content="通过2D仿真实验学习洛伦兹力的物理原理，包括带电粒子在磁场中的运动轨迹、偏转半径计算等。免费的物理教育资源。">
+    <meta name="keywords" content="洛伦兹力,物理仿真,2D实验,磁场,带电粒子,物理教育,科普">
+
+    <!-- 结构化数据 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Course",
+      "name": "洛伦兹力2D仿真实验",
+      "description": "通过2D仿真实验学习洛伦兹力的物理原理，包括带电粒子在磁场中的运动轨迹、偏转半径计算等互动学习内容",
+      "provider": {
+        "@type": "EducationalOrganization",
+        "name": "重庆市沙坪坝区人工智能科普基地",
+        "url": "https://cqaibase.cn"
+      },
+      "hasCourseInstance": [
+        {
+          "@type": "CourseInstance",
+          "name": "洛伦兹力2D仿真实验",
+          "description": "交互式2D洛伦兹力仿真，支持参数调节和AI助教功能",
+          "url": "https://cqaibase.cn/education/lorentz_force_2d.html",
+          "courseMode": "online",
+          "instructor": {
+            "@type": "Person",
+            "name": "AI科普基地教学团队"
+          },
+          "courseWorkload": "PT30M"
+        }
+      ],
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY",
+        "availability": "https://schema.org/InStock",
+        "category": "物理教育",
+        "description": "免费提供的洛伦兹力2D仿真实验"
+      },
+      "educationalLevel": "高中及以上",
+      "teaches": "洛伦兹力原理、磁场中带电粒子运动",
+      "learningResourceType": "仿真实验",
+      "interactivityType": "active"
+    }
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         html, body { height: 100%; margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
@@ -13,11 +56,13 @@
             #container { flex-direction: row; }
         }
 
-        .control-group { margin-bottom: 1rem; }
-        label { display: block; font-weight: bold; margin-bottom: 0.5rem; color: #374151; }
+        .control-group { margin-bottom: 0.75rem; } /* Reduced from 1rem to 0.75rem */
+        label { display: block; font-weight: bold; margin-bottom: 0.25rem; color: #374151; } /* Reduced from 0.5rem to 0.25rem */
         input[type="range"] { width: 100%; }
         input[type="number"] { width: 6rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; }
         .value-display { font-weight: 600; color: #1f2937; }
+        .realtime-values { font-size: 1.1rem; line-height: 1.6; }
+        .realtime-values .value-display { font-size: 1.2rem; font-weight: 700; }
         /* Custom styles for rounded corners and shadows */
         .rounded-lg { border-radius: 0.75rem; }
         .shadow-md { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
@@ -59,7 +104,7 @@
         /* Canvas container responsiveness */
         #canvas-container {
             width: 100%;
-            height: 50%; /* On small screens, canvas takes half height */
+            height: 65%; /* On small screens, canvas takes 65% height (increased from 50%) */
             background-color: #f0f4f8; /* Match body background */
             display: flex;
             justify-content: center;
@@ -69,7 +114,7 @@
         }
         @media (min-width: 1024px) {
             #canvas-container {
-                width: 30%; /* Take 30% width on large screens */
+                width: 60%; /* Take 60% width on large screens (increased from 30%) */
                 height: 100%; /* Take full height on large screens */
             }
         }
@@ -77,9 +122,9 @@
         /* Controls panel responsiveness */
         #controls-panel {
             width: 100%;
-            height: 50%; /* On small screens, controls take half height */
+            height: 35%; /* On small screens, controls take 35% height (reduced from 50%) */
             overflow-y: auto; /* Enable scrolling for controls */
-            padding: 1.5rem;
+            padding: 1rem; /* Reduced padding from 1.5rem to 1rem */
             background-color: #ffffff;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             border-radius: 0.75rem;
@@ -87,8 +132,9 @@
         }
         @media (min-width: 1024px) {
             #controls-panel {
-                width: 70%; /* Take 70% width on large screens */
+                width: 40%; /* Take 40% width on large screens (reduced from 70%) */
                 height: 100%; /* Take full height on large screens */
+                padding: 1.5rem; /* Keep larger padding on desktop */
             }
         }
 
@@ -151,31 +197,26 @@
     </header>
 
     <div id="container">
-        <!-- Canvas for 2D simulation -->
-        <div id="canvas-container">
-            <canvas id="simulationCanvas"></canvas>
-        </div>
-
         <!-- Controls and Information Panel -->
-        <div id="controls-panel"> <!-- Added ID for easier targeting in CSS -->
-            <h1 class="text-2xl font-bold mb-6 text-center text-gray-800">洛伦兹力2D仿真</h1>
+        <div id="controls-panel" style="padding-bottom: 2rem;"> <!-- Added ID for easier targeting in CSS -->
+            <h1 class="text-xl font-bold mb-3 text-center text-gray-800">洛伦兹力2D仿真</h1>
             <div class="control-group">
-                <label for="charge">电子电荷 (q): <span id="chargeValue" class="value-display">1.0</span></label>
+                <label for="charge">电子电荷 (q): <span id="chargeValue" class="value-display">1.0</span> e</label>
                 <input type="range" id="charge" min="-2" max="2" value="1" step="0.1" class="accent-blue-500">
             </div>
 
             <div class="control-group">
-                <label for="mass">电子质量 (m): <span id="massValue" class="value-display">1.0</span></label>
+                <label for="mass">电子质量 (m): <span id="massValue" class="value-display">1.0</span> u</label>
                 <input type="range" id="mass" min="0.1" max="5" value="1" step="0.1" class="accent-blue-500">
             </div>
 
             <div class="control-group">
-                <label for="initialVelocityMagnitude">初始速度大小 (|v|): <span id="initialVelocityMagnitudeValue" class="value-display">5.0</span></label>
+                <label for="initialVelocityMagnitude">初始速度大小 (|v|): <span id="initialVelocityMagnitudeValue" class="value-display">5.0</span> m/s</label>
                 <input type="range" id="initialVelocityMagnitude" min="1" max="10" value="5" step="0.1" class="accent-blue-500">
             </div>
 
             <div class="control-group">
-                <label for="magneticFieldMagnitude">磁场强度 (|B|): <span id="magneticFieldMagnitudeValue" class="value-display">2.0</span></label>
+                <label for="magneticFieldMagnitude">磁场强度 (|B|): <span id="magneticFieldMagnitudeValue" class="value-display">2.0</span> T</label>
                 <input type="range" id="magneticFieldMagnitude" min="0" max="5" value="2" step="0.1" class="accent-blue-500">
             </div>
 
@@ -188,18 +229,18 @@
                 <label for="magneticFieldDirectionRadio">磁场方向 (垂直于屏幕):</label>
                 <div id="magneticFieldDirection" class="flex items-center gap-4">
                     <input type="radio" id="bIn" name="bDirection" value="in" checked>
-                    <label for="bIn" class="mb-0">⊗ (入屏)</label>
+                    <label for="bIn" class="mb-0">× (入屏)</label>
                     <input type="radio" id="bOut" name="bDirection" value="out">
-                    <label for="bOut" class="mb-0">☉ (出屏)</label>
+                    <label for="bOut" class="mb-0">· (出屏)</label>
                 </div>
             </div>
 
-            <div class="control-group mt-4">
-                <label class="text-gray-700">实时计算值:</label>
-                <p>洛伦兹力大小 (|F|): <span id="forceMagnitudeDisplay" class="value-display">0.00</span></p>
-                <p>理论偏转半径 (R): <span id="theoreticalRadiusDisplay" class="value-display">NaN</span></p>
-                <p>当前速度大小 (|v|): <span id="currentVelocityMagnitudeDisplay" class="value-display">0.00</span></p>
-                <p>当前位置 (x, y): <span id="currentPositionDisplay" class="value-display">(0.00, 0.00)</span></p>
+            <div class="control-group mt-4 realtime-values">
+                <label class="text-gray-700 text-lg font-bold">实时计算值:</label>
+                <p>洛伦兹力大小 (|F|): <span id="forceMagnitudeDisplay" class="value-display">0.00</span> N</p>
+                <p>理论偏转半径 (R): <span id="theoreticalRadiusDisplay" class="value-display">NaN</span> m</p>
+                <p>当前速度大小 (|v|): <span id="currentVelocityMagnitudeDisplay" class="value-display">0.00</span> m/s</p>
+                <p>当前位置 (x, y): <span id="currentPositionDisplay" class="value-display">(0.00, 0.00)</span> m</p>
             </div>
 
             <button id="resetButton" class="w-full mt-6 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md">
@@ -207,23 +248,23 @@
             </button>
 
             <!-- AI integration feature 1: Physics Insight -->
-            <h2 id="ai-assistant" class="text-xl font-semibold mt-8 mb-4 text-gray-800">物理洞察</h2>
-            <button id="getInsightButton" class="w-full mt-4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-md">
+            <h2 id="ai-assistant" class="text-lg font-semibold mt-4 mb-2 text-gray-800">物理洞察</h2>
+            <button id="getInsightButton" class="w-full mt-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-md">
                 ✨ 获取物理洞察 ✨
             </button>
-            <div id="insightDisplay" class="gemini-response mt-4">
+            <div id="insightDisplay" class="gemini-response mt-2">
                 点击 "获取物理洞察" 按钮获取当前模拟的解释和影响分析。
             </div>
 
             <!-- AI integration feature 2: Q&A -->
-            <div class="control-group mt-6">
+            <div class="control-group mt-4">
                 <label for="physicsQuestion">向AI助手提问:</label>
                 <textarea id="physicsQuestion" class="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" rows="3" placeholder="例如：为什么粒子会做圆周运动？"></textarea>
             </div>
             <button id="askQuestionButton" class="w-full mt-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 shadow-md">
                 ✨ 提交问题 ✨
             </button>
-            <div id="answerDisplay" class="gemini-response mt-4">
+            <div id="answerDisplay" class="gemini-response mt-4 mb-8">
                 在这里获取问题解答。
             </div>
 
@@ -236,6 +277,11 @@
                 </div>
             </div>
 
+        </div>
+
+        <!-- Canvas for 2D simulation -->
+        <div id="canvas-container">
+            <canvas id="simulationCanvas"></canvas>
         </div>
     </div>
 
@@ -321,6 +367,8 @@
             document.getElementById('getInsightButton').addEventListener('click', getPhysicsInsight);
             document.getElementById('askQuestionButton').addEventListener('click', askPhysicsQuestion);
         }
+
+
 
         // Update simulation parameters from UI and reset
         function updateParameters() {
@@ -468,16 +516,16 @@
             ctx.moveTo(0, CANVAS_CENTER_Y); ctx.lineTo(CANVAS_WIDTH, CANVAS_CENTER_Y); ctx.stroke(); // X-axis
 
             // Draw magnetic field symbols (dots or crosses)
-            const symbolSize = 10;
-            const symbolSpacing = 50; // Pixels
-            ctx.fillStyle = '#00c000'; // Green for magnetic field
-            ctx.strokeStyle = '#00c000'; // Green for magnetic field outline
+            const symbolSize = 12;
+            const symbolSpacing = 80; // Pixels - increased spacing to reduce density
+            ctx.fillStyle = '#000000'; // Black for magnetic field
+            ctx.strokeStyle = '#000000'; // Black for magnetic field outline
 
             for (let i = 0; i < CANVAS_WIDTH; i += symbolSpacing) {
                 for (let j = 0; j < CANVAS_HEIGHT; j += symbolSpacing) {
                     ctx.save();
                     ctx.translate(i + symbolSpacing / 2, j + symbolSpacing / 2);
-                    if (B_direction === -1) { // In (⊗)
+                    if (B_direction === -1) { // In (X)
                         ctx.lineWidth = 2;
                         ctx.beginPath();
                         ctx.moveTo(-symbolSize / 2, -symbolSize / 2);
@@ -485,16 +533,10 @@
                         ctx.moveTo(symbolSize / 2, -symbolSize / 2);
                         ctx.lineTo(-symbolSize / 2, symbolSize / 2);
                         ctx.stroke();
+                    } else { // Out (·)
                         ctx.beginPath();
-                        ctx.arc(0, 0, symbolSize / 2 + 3, 0, Math.PI * 2);
-                        ctx.stroke();
-                    } else { // Out (☉)
-                        ctx.beginPath();
-                        ctx.arc(0, 0, symbolSize / 2, 0, Math.PI * 2);
+                        ctx.arc(0, 0, symbolSize / 2.5, 0, Math.PI * 2);
                         ctx.fill();
-                        ctx.beginPath();
-                        ctx.arc(0, 0, symbolSize / 2 + 3, 0, Math.PI * 2);
-                        ctx.stroke();
                     }
                     ctx.restore();
                 }
@@ -590,11 +632,11 @@
             const padding = 10;
             let currentY = padding;
 
-            const radiusText = `R: ${isNaN(currentTheoreticalRadius) ? '无限' : currentTheoreticalRadius.toFixed(2)}`;
+            const radiusText = `R: ${isNaN(currentTheoreticalRadius) ? '无限' : currentTheoreticalRadius.toFixed(2)} m`;
             ctx.fillText(radiusText, CANVAS_WIDTH - padding, currentY);
             currentY += 20; // Move down for the next line
 
-            const periodText = `T: ${isNaN(currentPeriod) ? '无限' : currentPeriod.toFixed(2)}`;
+            const periodText = `T: ${isNaN(currentPeriod) ? '无限' : currentPeriod.toFixed(2)} s`;
             ctx.fillText(periodText, CANVAS_WIDTH - padding, currentY);
         }
 
@@ -616,38 +658,41 @@
 
             const prompt = `
                 一个带电粒子在二维平面磁场中运动。
-                粒子电荷 (q): ${q.toFixed(1)}
-                粒子质量 (m): ${m.toFixed(1)}
-                初始速度大小 (|v|): ${v_mag.toFixed(1)}
-                磁场强度 (|B|): ${B_mag.toFixed(1)}
+                粒子电荷 (q): ${q.toFixed(1)} e
+                粒子质量 (m): ${m.toFixed(1)} u
+                初始速度大小 (|v|): ${v_mag.toFixed(1)} m/s
+                磁场强度 (|B|): ${B_mag.toFixed(1)} T
                 初始速度方向 (角度): ${initialVelocityAngle.toFixed(0)}度 (0度为X轴正向，90度为Y轴正向)
-                磁场方向: ${B_direction === -1 ? '垂直入屏 (⊗)' : '垂直出屏 (☉)'}
-                当前洛伦兹力大小 (|F|): ${currentForceMagnitude.toFixed(2)}
-                理论偏转半径 (R): ${isNaN(currentTheoreticalRadius) ? '无限或不适用' : currentTheoreticalRadius.toFixed(2)}
-                理论周期 (T): ${isNaN(currentPeriod) ? '无限或不适用' : currentPeriod.toFixed(2)}
+                磁场方向: ${B_direction === -1 ? '垂直入屏 (×)' : '垂直出屏 (·)'}
+                当前洛伦兹力大小 (|F|): ${currentForceMagnitude.toFixed(2)} N
+                理论偏转半径 (R): ${isNaN(currentTheoreticalRadius) ? '无限或不适用' : currentTheoreticalRadius.toFixed(2) + ' m'}
+                理论周期 (T): ${isNaN(currentPeriod) ? '无限或不适用' : currentPeriod.toFixed(2) + ' s'}
 
                 请根据这些参数，用中文解释粒子当前的运动轨迹（例如，是直线、圆周或无运动），并简要说明如果磁场强度加倍，粒子的运动会如何变化。请只在解释中提及2D的上下文。
             `;
 
             try {
-                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-                const response = await fetch('/education/api/gemini', {
+                const response = await fetch('/api/ai/chat', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ prompt: prompt })
+                    credentials: 'include',
+                    body: JSON.stringify({ message: prompt })
                 });
 
                 hideLoadingModal();
 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const result = await response.json();
-                
-                if (result.success) {
-                    insightDisplay.textContent = result.content;
+
+                if (result.response) {
+                    insightDisplay.textContent = result.response;
                 } else {
-                    insightDisplay.textContent = "获取洞察失败：" + (result.content || "未知错误");
+                    insightDisplay.textContent = "获取洞察失败：AI服务暂时不可用";
                     console.error("API error:", result);
                 }
             } catch (error) {
@@ -675,38 +720,41 @@
                 用户问题: ${userQuestion}
 
                 当前洛伦兹力2D仿真实验的参数如下：
-                粒子电荷 (q): ${q.toFixed(1)}
-                粒子质量 (m): ${m.toFixed(1)}
-                初始速度大小 (|v|): ${v_mag.toFixed(1)}
-                磁场强度 (|B|): ${B_mag.toFixed(1)}
+                粒子电荷 (q): ${q.toFixed(1)} e
+                粒子质量 (m): ${m.toFixed(1)} u
+                初始速度大小 (|v|): ${v_mag.toFixed(1)} m/s
+                磁场强度 (|B|): ${B_mag.toFixed(1)} T
                 初始速度方向 (角度): ${initialVelocityAngle.toFixed(0)}度 (0度为X轴正向，90度为Y轴正向)
-                磁场方向: ${B_direction === -1 ? '垂直入屏 (⊗)' : '垂直出屏 (☉)'}
-                当前洛伦兹力大小 (|F|): ${currentForceMagnitude.toFixed(2)}
-                理论偏转半径 (R): ${isNaN(currentTheoreticalRadius) ? '无限或不适用' : currentTheoreticalRadius.toFixed(2)}
-                理论周期 (T): ${isNaN(currentPeriod) ? '无限或不适用' : currentPeriod.toFixed(2)}
+                磁场方向: ${B_direction === -1 ? '垂直入屏 (×)' : '垂直出屏 (·)'}
+                当前洛伦兹力大小 (|F|): ${currentForceMagnitude.toFixed(2)} N
+                理论偏转半径 (R): ${isNaN(currentTheoreticalRadius) ? '无限或不适用' : currentTheoreticalRadius.toFixed(2) + ' m'}
+                理论周期 (T): ${isNaN(currentPeriod) ? '无限或不适用' : currentPeriod.toFixed(2) + ' s'}
 
                 请根据这些参数和洛伦兹力相关的物理知识，用中文详细地回答用户的问题。请确保答案与2D模拟的上下文相关。
             `;
 
             try {
-                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-                const response = await fetch('/education/api/gemini', {
+                const response = await fetch('/api/ai/chat', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ prompt: prompt })
+                    credentials: 'include',
+                    body: JSON.stringify({ message: prompt })
                 });
-                
+
                 hideLoadingModal();
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
 
                 const result = await response.json();
 
-                if (result.success) {
-                    answerDisplay.textContent = result.content;
+                if (result.response) {
+                    answerDisplay.textContent = result.response;
                 } else {
-                    answerDisplay.textContent = "获取解答失败：" + (result.content || "未知错误");
+                    answerDisplay.textContent = "获取解答失败：AI服务暂时不可用";
                     console.error("API error:", result);
                 }
             } catch (error) {
