@@ -11,7 +11,7 @@ import io
 from io import BytesIO  # 添加BytesIO导入
 import csv
 import qrcode
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import base64
 import pandas as pd  # 添加pandas导入
 import tempfile  # 添加tempfile导入
@@ -189,6 +189,108 @@ def _attach_ai_poster_from_url(activity, image_url):
     activity.poster_mimetype = mime_type
     return True
 
+def _find_available_font(size):
+    font_candidates = [
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+        '/System/Library/Fonts/PingFang.ttc',
+        '/System/Library/Fonts/STHeiti Medium.ttc',
+    ]
+    for font_path in font_candidates:
+        try:
+            return ImageFont.truetype(font_path, size=size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+def _build_share_poster_image(activity, detail_url):
+    target_width = 1080
+    target_height = 1520
+    bottom_panel_height = 340
+    top_panel_height = target_height - bottom_panel_height
+
+    source_image = None
+    if activity.poster_data:
+        source_image = Image.open(BytesIO(activity.poster_data)).convert('RGB')
+    else:
+        static_folder = current_app.static_folder or ''
+        candidate_paths = []
+        poster_name = str(activity.poster_image or '').strip()
+        if poster_name:
+            if 'banner' in poster_name:
+                candidate_paths.append(os.path.join(static_folder, 'img', poster_name))
+            candidate_paths.append(os.path.join(static_folder, 'uploads', 'posters', poster_name))
+        candidate_paths.append(os.path.join(static_folder, 'img', 'landscape.jpg'))
+
+        for candidate in candidate_paths:
+            if candidate and os.path.exists(candidate):
+                source_image = Image.open(candidate).convert('RGB')
+                break
+
+    if source_image is None:
+        source_image = Image.new('RGB', (target_width, top_panel_height), '#f5f6fa')
+
+    src_w, src_h = source_image.size
+    scale = max(target_width / src_w, top_panel_height / src_h)
+    resized_w = int(src_w * scale)
+    resized_h = int(src_h * scale)
+    poster_resized = source_image.resize((resized_w, resized_h), Image.Resampling.LANCZOS)
+    crop_left = (resized_w - target_width) // 2
+    crop_top = (resized_h - top_panel_height) // 2
+    poster_cropped = poster_resized.crop((crop_left, crop_top, crop_left + target_width, crop_top + top_panel_height))
+
+    final_image = Image.new('RGB', (target_width, target_height), 'white')
+    final_image.paste(poster_cropped, (0, 0))
+
+    panel = Image.new('RGB', (target_width, bottom_panel_height), 'white')
+    final_image.paste(panel, (0, top_panel_height))
+
+    draw = ImageDraw.Draw(final_image)
+    title_font = _find_available_font(52)
+    hint_font = _find_available_font(34)
+
+    title = (activity.title or '活动报名').strip()
+    max_title_width = 670
+    wrapped_lines = []
+    current = ''
+    for ch in title:
+        test_line = f"{current}{ch}"
+        line_width = draw.textbbox((0, 0), test_line, font=title_font)[2]
+        if line_width <= max_title_width:
+            current = test_line
+        else:
+            if current:
+                wrapped_lines.append(current)
+            current = ch
+        if len(wrapped_lines) >= 2:
+            break
+    if current and len(wrapped_lines) < 2:
+        wrapped_lines.append(current)
+    if len(title) > sum(len(line) for line in wrapped_lines) and wrapped_lines:
+        wrapped_lines[-1] = wrapped_lines[-1].rstrip() + '…'
+
+    text_x = 60
+    title_y = top_panel_height + 56
+    for idx, line in enumerate(wrapped_lines[:2]):
+        draw.text((text_x, title_y + idx * 68), line, font=title_font, fill='#1f2937')
+
+    draw.text((text_x, top_panel_height + 210), '扫码查看活动详情并报名', font=hint_font, fill='#4b5563')
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=3,
+    )
+    qr.add_data(detail_url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color='black', back_color='white').convert('RGB')
+    qr_img = qr_img.resize((220, 220), Image.Resampling.NEAREST)
+    final_image.paste(qr_img, (target_width - 280, top_panel_height + 58))
+
+    return final_image
+
 def _generate_poster_via_ark(prompt, model_name):
     api_key = os.environ.get("ARK_API_KEY") or current_app.config.get('VOLCANO_API_KEY')
     if not api_key:
@@ -343,6 +445,30 @@ def ai_generate_activity_poster():
         if isinstance(e, requests.exceptions.Timeout):
             return jsonify({'success': False, 'message': 'AI生图超时，请稍后重试'}), 504
         return jsonify({'success': False, 'message': f'生成海报失败: {str(e)}'}), 500
+
+@admin_bp.route('/activity/<int:id>/share-poster')
+@admin_required
+def export_activity_share_poster(id):
+    try:
+        activity = db.get_or_404(Activity, id)
+        detail_url = url_for('main.activity_detail', activity_id=id, _external=True)
+        share_image = _build_share_poster_image(activity, detail_url)
+
+        output = BytesIO()
+        share_image.save(output, format='PNG', optimize=True)
+        output.seek(0)
+
+        safe_title = re.sub(r'[^\w\u4e00-\u9fff-]+', '_', (activity.title or 'activity')).strip('_') or 'activity'
+        return send_file(
+            output,
+            mimetype='image/png',
+            as_attachment=True,
+            download_name=f'{safe_title}_分享海报.png'
+        )
+    except Exception as e:
+        logger.error(f"导出活动分享海报失败: {e}")
+        flash('生成分享海报失败，请稍后重试', 'danger')
+        return redirect(url_for('admin.activity_view', id=id))
 
 def handle_poster_upload(file_data, activity_id):
     """处理活动海报上传
