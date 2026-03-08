@@ -4,167 +4,260 @@
 
 {% block styles %}
 <style>
-    .edu-header {
-        background: linear-gradient(135deg, rgba(67, 97, 238, 0.10), rgba(14, 165, 233, 0.12));
-        border: 1px solid rgba(67, 97, 238, 0.12);
-        border-radius: 18px;
-        padding: 22px 20px;
-    }
-
-    .edu-section-card {
-        border-radius: 18px;
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        background: #fff;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-    }
-
-    .edu-resource-card {
-        border-radius: 14px;
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        background: #fff;
-        transition: transform .2s ease, box-shadow .2s ease;
+    .resource-card {
+        border-radius: 20px !important;
+        backdrop-filter: blur(15px) !important;
+        background: rgba(255, 255, 255, 0.85) !important;
+        border: none !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05) !important;
+        transition: transform 0.3s ease, box-shadow 0.3s ease !important;
         height: 100%;
+        overflow: hidden;
     }
 
-    .edu-resource-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10);
+    .resource-card:hover {
+        transform: translateY(-8px) !important;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1) !important;
     }
 
-    .edu-icon {
-        width: 52px;
-        height: 52px;
-        border-radius: 50%;
-        display: inline-flex;
+    .resource-icon {
+        font-size: 2.5rem;
+        width: 80px;
+        height: 80px;
+        display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.2rem;
-        margin-bottom: 10px;
+        border-radius: 50%;
+        margin: 0 auto 1rem auto;
     }
 
-    .edu-icon-online {
-        background: rgba(37, 99, 235, 0.12);
-        color: #1d4ed8;
+    .online-icon {
+        background: linear-gradient(135deg, #4361ee, #3a56d4);
+        color: white;
     }
 
-    .edu-icon-local {
-        background: rgba(219, 39, 119, 0.12);
-        color: #be185d;
+    .local-icon {
+        background: linear-gradient(135deg, #f72585, #b5179e);
+        color: white;
     }
 
-    .edu-help-box {
+    .section-title {
+        position: relative;
+        padding-bottom: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .section-title::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 100px;
+        height: 4px;
+        background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+    }
+
+    .card-title {
+        font-weight: 600;
+        margin-top: 0.5rem;
+    }
+
+    .card-text {
+        color: var(--text-muted);
+    }
+
+    .resource-nav {
+        background: rgba(255,255,255,0.7) !important;
+        backdrop-filter: blur(10px) !important;
+        border-radius: 50px !important;
+        padding: 5px !important;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05) !important;
+        display: flex;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .resource-nav-item {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin: 0 0.5rem;
+    }
+
+    .resource-nav-item.active {
+        background: linear-gradient(135deg, #4f46e5, #0ea5e9) !important;
+        border-radius: 50px !important;
+        color: white !important;
+        box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3) !important;
+    }
+
+    .resource-nav-item:not(.active) {
+        background-color: transparent !important;
+        border-radius: 50px !important;
+        color: #64748b;
+    }
+
+    .resource-nav-item:not(.active):hover {
+        background-color: #e2e8f0;
+    }
+
+    .resource-container {
+        display: none;
+    }
+
+    .resource-container.active {
+        display: block;
+    }
+
+    .resource-tip {
+        padding: 10px 14px;
         border-radius: 12px;
-        border: 1px dashed rgba(15, 23, 42, 0.18);
-        background: rgba(248, 250, 252, 0.9);
-        padding: 10px 12px;
-        color: #475569;
-        font-size: 0.92rem;
+        border: 1px dashed rgba(79, 70, 229, 0.3);
+        background: #f8faff;
+        color: #4b5563;
+        margin-bottom: 1rem;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4" data-ai-auth="{{ '1' if current_user.is_authenticated else '0' }}">
-    <div class="edu-header mb-4">
-        <h1 class="h3 mb-2 fw-bold">教育资源汇总</h1>
-        <p class="text-muted mb-0">汇聚网络教学资源与本地互动实验，支持分页浏览与快速进入。</p>
-    </div>
 
-    <div class="edu-help-box mb-4">
-        <i class="fas fa-robot me-1"></i>
-        AI 助手仅登录后可用；未登录状态会禁用并提示“请登录后使用”。
-    </div>
-
-    <div class="card edu-section-card mb-4">
-        <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                <h2 class="h5 mb-0 fw-semibold">网络教育资源</h2>
-                <small class="text-muted">第 {{ online_pagination.page }} / {{ online_pagination.pages if online_pagination.pages > 0 else 1 }} 页，共 {{ online_pagination.total }} 条</small>
+<div class="row justify-content-center mb-4" data-aos="fade-up">
+    <div class="col-12 col-xl-10">
+        <div class="hero-glass" style="padding: 30px 40px; margin-top: 10px;">
+            <div class="hero-glass-content text-center mb-0">
+                <h1 class="display-5 fw-bolder mb-2 text-dark" style="letter-spacing: -1px;">教育资源中心</h1>
+                <p class="text-muted mb-0 fs-6">为您提供海量数字教育资源、模拟实验与前沿教学工具</p>
             </div>
-
-            <div class="row g-3">
-                {% for resource in online_pagination.items %}
-                <div class="col-12 col-md-6 col-xl-4">
-                    <div class="edu-resource-card p-3">
-                        <div class="edu-icon edu-icon-online">
-                            <i class="fas {{ resource.icon }}"></i>
-                        </div>
-                        <h3 class="h6 fw-semibold mb-2">{{ resource.name }}</h3>
-                        <p class="text-muted small mb-3">{{ resource.description }}</p>
-                        <a href="{{ resource.url }}" target="_blank" class="btn btn-sm btn-outline-primary">访问网站</a>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            {% if online_pagination.pages > 1 %}
-            <nav class="mt-3" aria-label="网络资源分页">
-                <ul class="pagination pagination-sm justify-content-center mb-0 flex-wrap">
-                    <li class="page-item {% if not online_pagination.has_prev %}disabled{% endif %}">
-                        <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.prev_num if online_pagination.has_prev else online_pagination.page, local_page=local_pagination.page) }}">上一页</a>
-                    </li>
-                    {% for p in online_pagination.iter_pages() %}
-                        {% if p %}
-                            <li class="page-item {% if p == online_pagination.page %}active{% endif %}">
-                                <a class="page-link" href="{{ url_for('education.resources', online_page=p, local_page=local_pagination.page) }}">{{ p }}</a>
-                            </li>
-                        {% else %}
-                            <li class="page-item disabled"><span class="page-link">…</span></li>
-                        {% endif %}
-                    {% endfor %}
-                    <li class="page-item {% if not online_pagination.has_next %}disabled{% endif %}">
-                        <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.next_num if online_pagination.has_next else online_pagination.page, local_page=local_pagination.page) }}">下一页</a>
-                    </li>
-                </ul>
-            </nav>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="card edu-section-card">
-        <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                <h2 class="h5 mb-0 fw-semibold">本地教育实验资源</h2>
-                <small class="text-muted">第 {{ local_pagination.page }} / {{ local_pagination.pages if local_pagination.pages > 0 else 1 }} 页，共 {{ local_pagination.total }} 条</small>
-            </div>
-
-            <div class="row g-3">
-                {% for resource in local_pagination.items %}
-                <div class="col-12 col-md-6 col-xl-4">
-                    <div class="edu-resource-card p-3">
-                        <div class="edu-icon edu-icon-local">
-                            <i class="fas {{ resource.icon }}"></i>
-                        </div>
-                        <h3 class="h6 fw-semibold mb-2">{{ resource.name }}</h3>
-                        <p class="text-muted small mb-3">{{ resource.description }}</p>
-                        <a href="{{ resource.url }}" class="btn btn-sm btn-outline-secondary">进入实验</a>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            {% if local_pagination.pages > 1 %}
-            <nav class="mt-3" aria-label="本地资源分页">
-                <ul class="pagination pagination-sm justify-content-center mb-0 flex-wrap">
-                    <li class="page-item {% if not local_pagination.has_prev %}disabled{% endif %}">
-                        <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=local_pagination.prev_num if local_pagination.has_prev else local_pagination.page) }}">上一页</a>
-                    </li>
-                    {% for p in local_pagination.iter_pages() %}
-                        {% if p %}
-                            <li class="page-item {% if p == local_pagination.page %}active{% endif %}">
-                                <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=p) }}">{{ p }}</a>
-                            </li>
-                        {% else %}
-                            <li class="page-item disabled"><span class="page-link">…</span></li>
-                        {% endif %}
-                    {% endfor %}
-                    <li class="page-item {% if not local_pagination.has_next %}disabled{% endif %}">
-                        <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=local_pagination.next_num if local_pagination.has_next else local_pagination.page) }}">下一页</a>
-                    </li>
-                </ul>
-            </nav>
-            {% endif %}
         </div>
     </div>
 </div>
+
+<div class="container">
+    <div class="resource-tip">
+        <i class="fas fa-robot me-1"></i>
+        AI 功能未登录不可用，提示后可前往
+        <a href="{{ url_for('auth.login') }}">登录页面</a>
+        继续使用。
+    </div>
+
+    <div class="resource-nav">
+        <div class="resource-nav-item active" data-target="online-resources">网络教育资源</div>
+        <div class="resource-nav-item" data-target="local-resources">本地教学资源</div>
+    </div>
+
+    <div id="online-resources" class="resource-container active">
+        <h2 class="section-title">网络教育资源</h2>
+        <p class="mb-3">精选优质教学平台，帮助拓展教育视野与课堂能力。</p>
+        <p class="text-muted small">第 {{ online_pagination.page }} / {{ online_pagination.pages if online_pagination.pages > 0 else 1 }} 页，共 {{ online_pagination.total }} 条</p>
+
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            {% for resource in online_pagination.items %}
+            <div class="col">
+                <div class="card resource-card h-100">
+                    <div class="card-body text-center">
+                        <div class="resource-icon online-icon">
+                            <i class="fas {{ resource.icon }}"></i>
+                        </div>
+                        <h5 class="card-title">{{ resource.name }}</h5>
+                        <p class="card-text">{{ resource.description }}</p>
+                    </div>
+                    <div class="card-footer bg-transparent border-0 text-center">
+                        <a href="{{ resource.url }}" target="_blank" class="btn btn-primary">访问网站</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if online_pagination.pages > 1 %}
+        <nav class="mt-4" aria-label="网络教育资源分页">
+            <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
+                <li class="page-item {% if not online_pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.prev_num if online_pagination.has_prev else online_pagination.page, local_page=local_pagination.page) }}">上一页</a>
+                </li>
+                {% for page_num in online_pagination.iter_pages() %}
+                    {% if page_num %}
+                        <li class="page-item {% if page_num == online_pagination.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('education.resources', online_page=page_num, local_page=local_pagination.page) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not online_pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.next_num if online_pagination.has_next else online_pagination.page, local_page=local_pagination.page) }}">下一页</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+
+    <div id="local-resources" class="resource-container">
+        <h2 class="section-title">本地教学资源</h2>
+        <p class="mb-3">本地交互式实验资源，提供更直观的学习体验。</p>
+        <p class="text-muted small">第 {{ local_pagination.page }} / {{ local_pagination.pages if local_pagination.pages > 0 else 1 }} 页，共 {{ local_pagination.total }} 条</p>
+
+        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            {% for resource in local_pagination.items %}
+            <div class="col">
+                <div class="card resource-card h-100">
+                    <div class="card-body text-center">
+                        <div class="resource-icon local-icon">
+                            <i class="fas {{ resource.icon }}"></i>
+                        </div>
+                        <h5 class="card-title">{{ resource.name }}</h5>
+                        <p class="card-text">{{ resource.description }}</p>
+                    </div>
+                    <div class="card-footer bg-transparent border-0 text-center">
+                        <a href="{{ resource.url }}" class="btn btn-secondary">查看资源</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if local_pagination.pages > 1 %}
+        <nav class="mt-4" aria-label="本地教学资源分页">
+            <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
+                <li class="page-item {% if not local_pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=local_pagination.prev_num if local_pagination.has_prev else local_pagination.page) }}">上一页</a>
+                </li>
+                {% for page_num in local_pagination.iter_pages() %}
+                    {% if page_num %}
+                        <li class="page-item {% if page_num == local_pagination.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=page_num) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not local_pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=local_pagination.next_num if local_pagination.has_next else local_pagination.page) }}">下一页</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const navItems = document.querySelectorAll('.resource-nav-item');
+        const resourceContainers = document.querySelectorAll('.resource-container');
+
+        navItems.forEach(item => {
+            item.addEventListener('click', function() {
+                navItems.forEach(nav => nav.classList.remove('active'));
+                resourceContainers.forEach(container => container.classList.remove('active'));
+
+                this.classList.add('active');
+                const targetId = this.getAttribute('data-target');
+                document.getElementById(targetId).classList.add('active');
+            });
+        });
+    });
+</script>
 {% endblock %}

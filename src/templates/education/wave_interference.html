@@ -377,7 +377,7 @@
             const isLoggedIn = await checkLoginStatus();
             if (!isLoggedIn) {
                 alert('请先登录后再使用AI助手功能！');
-                window.location.href = '/login';
+                window.location.href = '{{ url_for('auth.login') }}';
                 return;
             }
 

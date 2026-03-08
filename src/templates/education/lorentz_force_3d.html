@@ -618,7 +618,7 @@
             const isLoggedIn = await checkLoginStatus();
             if (!isLoggedIn) {
                 alert('请先登录后再使用AI助手功能！');
-                window.location.href = '/login';
+                window.location.href = '{{ url_for('auth.login') }}';
                 return;
             }
 
@@ -675,7 +675,7 @@
             const isLoggedIn = await checkLoginStatus();
             if (!isLoggedIn) {
                 alert('请先登录后再使用AI助手功能！');
-                window.location.href = '/login';
+                window.location.href = '{{ url_for('auth.login') }}';
                 return;
             }
 
@@ -746,7 +746,7 @@
                 insightDisplay.innerHTML = `
                     <div class="text-center text-gray-600">
                         <p class="mb-2">🔒 AI功能需要登录</p>
-                        <button onclick="window.location.href='/login'" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-all duration-300">
+                        <button onclick="window.location.href='{{ url_for('auth.login') }}'" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-all duration-300">
                             立即登录
                         </button>
                     </div>

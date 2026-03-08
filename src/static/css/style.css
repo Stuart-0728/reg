@@ -451,14 +451,45 @@ table tbody td {
     }
 }
 
-/* 分页样式 */
-.pagination .page-item.active .page-link {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
+/* 分页样式（全站统一） */
+.pagination {
+    gap: 0.4rem;
 }
 
 .pagination .page-link {
-    color: var(--primary-color);
+    border-radius: 12px !important;
+    border: 1px solid #d9e2f6 !important;
+    color: #4f46e5 !important;
+    min-width: 40px;
+    text-align: center;
+    padding: 0.42rem 0.78rem;
+    background: #ffffff;
+    font-weight: 500;
+    line-height: 1.2;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    transition: all 0.2s ease;
+}
+
+.pagination .page-link:hover {
+    background: #eef2ff;
+    border-color: #c7d2fe !important;
+    color: #4338ca !important;
+}
+
+.pagination .page-item.active .page-link,
+.pagination .page-item.active span.page-link {
+    background: linear-gradient(135deg, #4f46e5, #2563eb) !important;
+    border-color: #4f46e5 !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.28);
+}
+
+.pagination .page-item.disabled .page-link,
+.pagination .page-item.disabled span.page-link {
+    background: #f8faff !important;
+    border-color: #e6ecff !important;
+    color: #a0a7c7 !important;
+    box-shadow: none;
 }
 
 /* 首页轮播图样式 */
@@ -714,31 +745,10 @@ footer {
         overflow-x: auto;
     }
 
-    /* 统一简洁分页样式 */
-    .pagination {
-        gap: 6px;
-    }
-
     .pagination .page-link {
-        border-radius: 8px !important;
-        border: 1px solid #dbe4ff !important;
-        color: #4f46e5 !important;
         min-width: 36px;
-        text-align: center;
-        padding: 0.35rem 0.7rem;
-        background: #fff;
-    }
-
-    .pagination .page-item.active .page-link {
-        background: #4f46e5 !important;
-        border-color: #4f46e5 !important;
-        color: #fff !important;
-    }
-
-    .pagination .page-item.disabled .page-link {
-        background: #f5f7ff !important;
-        border-color: #e8edff !important;
-        color: #a0a7c7 !important;
+        padding: 0.32rem 0.62rem;
+        border-radius: 10px !important;
     }
     
     /* 管理面板中的按钮优化 */
