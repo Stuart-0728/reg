@@ -222,90 +222,6 @@ def _generate_poster_via_ark(prompt, model_name):
 
     return image_url
 
-def _generate_poster_via_gemini(prompt, model_name):
-    api_key = _get_gemini_api_key()
-    if not api_key:
-        raise ValueError('未配置GEMINI_API_KEY，无法生成海报')
-
-    base_url = current_app.config.get('AI_MODEL_API_URL', 'https://generativelanguage.googleapis.com').rstrip('/')
-    url = f"{base_url}/v1beta/models/{model_name}:generateContent?key={api_key}"
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"]
-        }
-    }
-
-    response = requests.post(url, json=payload, timeout=(8, 30))
-    response.raise_for_status()
-    result = response.json()
-
-    for candidate in result.get('candidates', []):
-        content = candidate.get('content') or {}
-        for part in content.get('parts', []):
-            inline_data = part.get('inlineData') or part.get('inline_data')
-            if not inline_data:
-                continue
-            image_b64 = inline_data.get('data')
-            mime_type = inline_data.get('mimeType') or inline_data.get('mime_type') or 'image/png'
-            if image_b64:
-                return f"data:{mime_type};base64,{image_b64}"
-
-    raise ValueError('Gemini已返回，但未拿到可用图片数据')
-
-def _get_gemini_api_key():
-    return (
-        os.environ.get('GEMINI_API_KEY')
-        or current_app.config.get('GEMINI_API_KEY')
-        or os.environ.get('GOOGLE_API_KEY')
-    )
-
-def _list_gemini_image_models():
-    api_key = _get_gemini_api_key()
-    if not api_key:
-        return []
-
-    base_url = current_app.config.get('AI_MODEL_API_URL', 'https://generativelanguage.googleapis.com').rstrip('/')
-    url = f"{base_url}/v1beta/models?key={api_key}"
-    # 降低超时时间，如果在国内网络环境无代理则快速失败回退，避免UI阻塞太久
-    response = requests.get(url, timeout=(1.5, 3))
-    response.raise_for_status()
-    payload = response.json() or {}
-
-    models = []
-    for item in payload.get('models', []):
-        name = str(item.get('name') or '').strip()
-        if not name.startswith('models/'):
-            continue
-
-        supported_methods = item.get('supportedGenerationMethods') or []
-        if 'generateContent' not in supported_methods:
-            continue
-
-        short_name = name.replace('models/', '', 1)
-        lower_name = short_name.lower()
-        if 'image' not in lower_name and 'imagen' not in lower_name:
-            continue
-
-        models.append(short_name)
-
-    if not models:
-        return []
-
-    priority = {
-        'gemini-2.5-flash-image': 0,
-        'gemini-2.0-flash-exp-image-generation': 1,
-        'gemini-3-pro-image-preview': 2
-    }
-    models = sorted(set(models), key=lambda name: (priority.get(name, 99), name))
-    return models
-
 @admin_bp.route('/activity/ai/poster-models', methods=['GET'])
 @admin_required
 def ai_poster_models():
@@ -329,27 +245,9 @@ def ai_poster_models():
             }
         ]
 
-        gemini_models = []
-        try:
-            for model_name in _list_gemini_image_models():
-                gemini_models.append({
-                    'value': f'gemini:{model_name}',
-                    'label': f'Gemini · {model_name}'
-                })
-        except Exception as gemini_error:
-            logger.warning(f"拉取Gemini模型列表失败，使用静态回退: {gemini_error}")
-
-        if not gemini_models:
-            gemini_models = [
-                {
-                    'value': 'gemini:gemini-2.5-flash-image',
-                    'label': 'Gemini · gemini-2.5-flash-image'
-                }
-            ]
-
         return jsonify({
             'success': True,
-            'models': static_models + gemini_models
+            'models': static_models
         })
     except Exception as e:
         logger.error(f"获取海报模型列表失败: {e}")
@@ -438,29 +336,12 @@ def ai_generate_activity_poster():
         if provider == 'ark':
             image_url = _generate_poster_via_ark(prompt, model_name)
             return jsonify({'success': True, 'image_url': image_url, 'prompt': prompt, 'model': model_value, 'model_used': model_value})
-        elif provider == 'gemini':
-            try:
-                image_url = _generate_poster_via_gemini(prompt, model_name)
-                return jsonify({'success': True, 'image_url': image_url, 'prompt': prompt, 'model': model_value, 'model_used': model_value})
-            except Exception as gemini_error:
-                logger.warning(f"Gemini生图失败，自动回退ARK: {gemini_error}")
-                fallback_model = 'ark:doubao-seedream-5-0-260128'
-                fallback_url = _generate_poster_via_ark(prompt, 'doubao-seedream-5-0-260128')
-                return jsonify({
-                    'success': True,
-                    'image_url': fallback_url,
-                    'prompt': prompt,
-                    'model': model_value,
-                    'model_used': fallback_model,
-                    'fallback': True,
-                    'message': 'Gemini暂时不可用，已自动切换到ARK模型生成'
-                })
         else:
             return jsonify({'success': False, 'message': '暂不支持该图片模型提供商'}), 400
     except Exception as e:
         logger.error(f"AI生成海报失败: {e}")
         if isinstance(e, requests.exceptions.Timeout):
-            return jsonify({'success': False, 'message': 'AI生图超时，请稍后重试或切换ARK模型'}), 504
+            return jsonify({'success': False, 'message': 'AI生图超时，请稍后重试'}), 504
         return jsonify({'success': False, 'message': f'生成海报失败: {str(e)}'}), 500
 
 def handle_poster_upload(file_data, activity_id):

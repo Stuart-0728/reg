@@ -207,10 +207,6 @@ class Config:
     
     # AI聊天功能配置
     AI_CHAT_ENABLED = True
-    # AI模型API URL（以/结尾）
-    AI_MODEL_API_URL = os.environ.get('AI_MODEL_API_URL') or 'https://generativelanguage.googleapis.com/'
-    # Google Gemini API 密钥
-    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY') or ''
     
     @classmethod
     def init_app(cls, app):
