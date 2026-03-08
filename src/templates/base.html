@@ -365,22 +365,34 @@
         
         /* 页脚样式优化 */
         .footer {
-            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-            border-top: 1px solid rgba(0, 0, 0, 0.08);
-            padding: 2.25rem 0 1.25rem;
+            background: #f3f4f6;
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+            padding: 3rem 0 1.4rem;
             margin-top: 3rem;
+        }
+
+        .footer .container {
+            max-width: 1400px;
+            padding-left: 2rem;
+            padding-right: 2rem;
         }
 
         .footer-title {
             font-weight: 700;
-            margin-bottom: 0.75rem;
-            color: #1f2937;
+            margin-bottom: 0.85rem;
+            color: #111827;
+            letter-spacing: 0.02em;
         }
 
         .footer-desc,
         .footer-meta {
-            color: #4b5563;
+            color: #1f2937;
             margin-bottom: 0;
+        }
+
+        .footer-desc {
+            line-height: 1.75;
+            max-width: 560px;
         }
 
         .footer-links {
@@ -390,27 +402,40 @@
         }
 
         .footer-links li {
-            margin-bottom: 0.5rem;
-            color: #4b5563;
+            margin-bottom: 0.65rem;
+            color: #111827;
         }
 
         .footer-links a {
-            color: #2563eb;
+            color: #111827;
             text-decoration: none;
+            transition: opacity 0.2s ease;
         }
 
         .footer-links a:hover {
-            color: #1d4ed8;
-            text-decoration: underline;
+            color: #111827;
+            opacity: 0.75;
+            text-decoration: none;
         }
 
         .footer-bottom {
-            border-top: 1px solid rgba(0, 0, 0, 0.08);
-            margin-top: 1.5rem;
-            padding-top: 1rem;
+            border-top: 1px solid rgba(15, 23, 42, 0.12);
+            margin-top: 1.75rem;
+            padding-top: 1.15rem;
             text-align: center;
-            color: #6b7280;
+            color: #111827;
             font-size: 0.95rem;
+        }
+
+        @media (max-width: 768px) {
+            .footer {
+                padding: 2.2rem 0 1.25rem;
+            }
+
+            .footer .container {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
         }
         
         /* AI聊天按钮和容器样式优化 */
