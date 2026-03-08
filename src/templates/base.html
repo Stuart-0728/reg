@@ -365,10 +365,52 @@
         
         /* 页脚样式优化 */
         .footer {
-            background-color: #fff;
-            border-top: 1px solid rgba(0, 0, 0, 0.05);
-            padding: 2rem 0;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+            padding: 2.25rem 0 1.25rem;
             margin-top: 3rem;
+        }
+
+        .footer-title {
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            color: #1f2937;
+        }
+
+        .footer-desc,
+        .footer-meta {
+            color: #4b5563;
+            margin-bottom: 0;
+        }
+
+        .footer-links {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .footer-links li {
+            margin-bottom: 0.5rem;
+            color: #4b5563;
+        }
+
+        .footer-links a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .footer-links a:hover {
+            color: #1d4ed8;
+            text-decoration: underline;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            text-align: center;
+            color: #6b7280;
+            font-size: 0.95rem;
         }
         
         /* AI聊天按钮和容器样式优化 */
@@ -770,14 +812,14 @@
     <div class="container-fluid footer-wrapper p-0" style="margin-top: 50px;">
     <footer class="footer">
         <div class="container">
-            <div class="row">
-                <div class="col-md-6">
-                    <h5>重庆师范大学智能社团+</h5>
-                    <p>致力于提升师范生专业素养和教学能力的学生组织</p>
+            <div class="row g-4">
+                <div class="col-lg-5 col-md-12">
+                    <h5 class="footer-title">重庆师范大学智能社团+</h5>
+                    <p class="footer-desc">致力于提升师范生专业素养与教学能力，打造校园智能化实践与科普交流平台。</p>
                 </div>
-                <div class="col-md-3">
-                    <h5>快速链接</h5>
-                    <ul class="list-unstyled">
+                <div class="col-lg-3 col-md-6">
+                    <h5 class="footer-title">快速链接</h5>
+                    <ul class="footer-links">
                         <li><a href="{{ url_for('main.index') }}">首页</a></li>
                         <li><a href="{{ url_for('education.resources') }}">教育资源</a></li>
                         <li><a href="{{ url_for('main.about') }}">关于我们</a></li>
@@ -787,17 +829,18 @@
                         {% endif %}
                     </ul>
                 </div>
-                <div class="col-md-3">
-                    <h5>联系我们</h5>
-                    <ul class="list-unstyled">
-                        <li><i class="fas fa-map-marker-alt me-2"></i>重庆市沙坪坝区大学城中路37号</li>
-                        <li><i class="fab fa-qq me-2"></i>QQ群：995213034</li>
+                <div class="col-lg-4 col-md-6">
+                    <h5 class="footer-title">友情链接</h5>
+                    <ul class="footer-links">
+                        <li>重庆市沙坪坝区人工智能科普基地：<a href="https://cqaibase.cn" target="_blank" rel="noopener noreferrer">cqaibase.cn</a></li>
+                        <li>重庆师范大学：<a href="https://www.cqnu.edu.cn" target="_blank" rel="noopener noreferrer">www.cqnu.edu.cn</a></li>
                     </ul>
                 </div>
             </div>
-            <hr>
-            <div class="text-center">
-                <p>&copy; {% if now is defined %}{{ now.year }}{% else %}2025{% endif %} 重庆师范大学智能社团+. 保留所有权利.</p>
+
+            <div class="footer-bottom">
+                <p class="mb-1">&copy; {% if now is defined %}{{ now.year }}{% else %}2025{% endif %} 重庆师范大学智能社团+ · 保留所有权利</p>
+                <p class="footer-meta">网站设计/技术支持：罗一鑫｜联系方式：2023051101095@stu.cqnu.edu.cn</p>
             </div>
         </div>
     </footer>
