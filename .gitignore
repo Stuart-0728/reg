@@ -8,6 +8,7 @@ venv/
 # Local secrets
 .env
 *.env
+my_keys.local.md
 
 # Local test/temp artifacts
 test_out.txt

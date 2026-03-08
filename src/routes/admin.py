@@ -316,6 +316,10 @@ def ai_poster_models():
                 'label': '火山方舟 · doubao-seedream-5-0-260128（默认，￥0.22/张）'
             },
             {
+                'value': 'ark:doubao-seedream-3-0-t2i-250415',
+                'label': '火山方舟 · doubao-seedream-3-0-t2i-250415（￥0.26/张）'
+            },
+            {
                 'value': 'ark:doubao-seedream-4-5-251128',
                 'label': '火山方舟 · doubao-seedream-4-5-251128（￥0.25/张）'
             },
