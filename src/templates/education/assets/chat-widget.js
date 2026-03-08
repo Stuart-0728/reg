@@ -63,6 +63,8 @@
     // bold & italic
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
          .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // markdown links
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+|\/[^)]+)\)/g, '<a href="$2" target="_self" style="color:#93c5fd;text-decoration:underline;">$1</a>');
     // lists (naive)
     s = s.replace(/^(?:-|\*) (.*)$/gm, '<li>$1</li>');
     s = s.replace(/(?:<li>.*<\/li>\n?)+/g, m => '<ul>' + m.replace(/\n/g,'') + '</ul>');
@@ -217,7 +219,10 @@
         }
 
         if (opts.authenticated === false) {
-          suggest('AI 功能已禁用：请登录后使用。');
+          suggest('AI 功能需要登录后启用，点击 [登录](/auth/login) 后即可使用。', null, {
+            duration: 9000,
+            showFillButton: false
+          });
           return;
         }
       }
@@ -1357,7 +1362,7 @@
     mounted = true;
   }
 
-  function suggest(text, payload) {
+  function suggest(text, payload, options = {}) {
     try {
       const now = Date.now();
       const COOLDOWN = 3000; // 3s 冷却
@@ -1377,12 +1382,16 @@
       // 无论面板是否打开，toast 永远挂在页面右下角（面板的 z-index 更高，不会被遮挡）
       const container = document.body;
       toast.className = 'cb-toast';
-      toast.innerHTML = renderMarkdown(text) + ' <button class="btn secondary" style="padding:2px 6px;">填入</button> <button class="btn secondary" style="padding:2px 6px;">关闭</button>';
+      const showFillButton = options.showFillButton !== false;
+      const duration = Number.isFinite(options.duration) ? options.duration : 5000;
+      toast.innerHTML = renderMarkdown(text) + (showFillButton
+        ? ' <button class="btn secondary" style="padding:2px 6px;">填入</button> <button class="btn secondary" style="padding:2px 6px;">关闭</button>'
+        : ' <button class="btn secondary" style="padding:2px 6px;">关闭</button>');
       container.appendChild(toast);
       requestAnimationFrame(()=> toast.classList.add('show'));
       const btns = toast.querySelectorAll('button');
-      const btn = btns[0];
-      const closeBtn = btns[1];
+      const btn = showFillButton ? btns[0] : null;
+      const closeBtn = showFillButton ? btns[1] : btns[0];
 
       function dispatchInputEvents(el) {
         try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch(_) {}
@@ -1490,34 +1499,31 @@
         }
       }
 
-      btn.addEventListener('click', ()=> {
-        try {
-          let handled = false;
-          
-          // 首先尝试页面自定义的填入函数
-          if (typeof window.onChatWidgetFill === 'function') {
-            window.onChatWidgetFill(payload || {});
-            handled = true;
-          } 
-          // 然后尝试通用的参数填入
-          else if (payload && typeof payload === 'object') {
-            handled = defaultFill(payload);
+      if (btn) {
+        btn.addEventListener('click', ()=> {
+          try {
+            let handled = false;
+
+            if (typeof window.onChatWidgetFill === 'function') {
+              window.onChatWidgetFill(payload || {});
+              handled = true;
+            } else if (payload && typeof payload === 'object') {
+              handled = defaultFill(payload);
+            } else {
+              handled = handleExperimentSpecificFill(payload);
+            }
+
+            if (!handled) {
+              console.warn('[ChatWidget] 此页面未实现参数填入或未提供可用参数。');
+            }
+          } catch (e) {
+            console.error('参数填入错误:', e);
+            console.warn('[ChatWidget] 参数填入失败，请手动调整。');
           }
-          // 最后尝试实验特定的参数填入
-          else {
-            handled = handleExperimentSpecificFill(payload);
-          }
-          
-          if (!handled) {
-            console.warn('[ChatWidget] 此页面未实现参数填入或未提供可用参数。');
-          }
-        } catch (e) {
-          console.error('参数填入错误:', e);
-          console.warn('[ChatWidget] 参数填入失败，请手动调整。');
-        }
-        toast.classList.remove('show');
-        setTimeout(()=> { if (suggestToast === toast) suggestToast = null; toast.remove(); }, 200);
-      });
+          toast.classList.remove('show');
+          setTimeout(()=> { if (suggestToast === toast) suggestToast = null; toast.remove(); }, 200);
+        });
+      }
 
       closeBtn.addEventListener('click', ()=> {
         toast.classList.remove('show');
@@ -1527,7 +1533,7 @@
       setTimeout(()=> {
         toast.classList.remove('show');
         setTimeout(()=> { if (suggestToast === toast) suggestToast = null; toast.remove(); }, 200);
-      }, 5000);
+      }, duration);
     } catch (_) {}
   }
 

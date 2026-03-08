@@ -111,13 +111,31 @@
         display: block;
     }
 
-    .resource-tip {
-        padding: 10px 14px;
+    .resource-login-toast {
+        position: fixed;
+        right: 20px;
+        bottom: 24px;
+        z-index: 1080;
+        max-width: 360px;
+        background: rgba(15, 23, 42, 0.92);
+        color: #fff;
         border-radius: 12px;
-        border: 1px dashed rgba(79, 70, 229, 0.3);
-        background: #f8faff;
-        color: #4b5563;
-        margin-bottom: 1rem;
+        padding: 12px 14px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+        opacity: 0;
+        transform: translateY(12px);
+        transition: opacity .25s ease, transform .25s ease;
+    }
+
+    .resource-login-toast.show {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .resource-login-toast a {
+        color: #93c5fd;
+        font-weight: 700;
+        text-decoration: underline;
     }
 </style>
 {% endblock %}
@@ -136,13 +154,6 @@
 </div>
 
 <div class="container">
-    <div class="resource-tip">
-        <i class="fas fa-robot me-1"></i>
-        AI 功能未登录不可用，提示后可前往
-        <a href="{{ url_for('auth.login') }}">登录页面</a>
-        继续使用。
-    </div>
-
     <div class="resource-nav">
         <div class="resource-nav-item active" data-target="online-resources">网络教育资源</div>
         <div class="resource-nav-item" data-target="local-resources">本地教学资源</div>
@@ -176,19 +187,19 @@
         <nav class="mt-4" aria-label="网络教育资源分页">
             <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
                 <li class="page-item {% if not online_pagination.has_prev %}disabled{% endif %}">
-                    <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.prev_num if online_pagination.has_prev else online_pagination.page, local_page=local_pagination.page) }}">上一页</a>
+                    <a class="page-link" href="{{ url_for('education.resources', tab='online', online_page=online_pagination.prev_num if online_pagination.has_prev else online_pagination.page, local_page=local_pagination.page) }}">上一页</a>
                 </li>
                 {% for page_num in online_pagination.iter_pages() %}
                     {% if page_num %}
                         <li class="page-item {% if page_num == online_pagination.page %}active{% endif %}">
-                            <a class="page-link" href="{{ url_for('education.resources', online_page=page_num, local_page=local_pagination.page) }}">{{ page_num }}</a>
+                            <a class="page-link" href="{{ url_for('education.resources', tab='online', online_page=page_num, local_page=local_pagination.page) }}">{{ page_num }}</a>
                         </li>
                     {% else %}
                         <li class="page-item disabled"><span class="page-link">...</span></li>
                     {% endif %}
                 {% endfor %}
                 <li class="page-item {% if not online_pagination.has_next %}disabled{% endif %}">
-                    <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.next_num if online_pagination.has_next else online_pagination.page, local_page=local_pagination.page) }}">下一页</a>
+                    <a class="page-link" href="{{ url_for('education.resources', tab='online', online_page=online_pagination.next_num if online_pagination.has_next else online_pagination.page, local_page=local_pagination.page) }}">下一页</a>
                 </li>
             </ul>
         </nav>
@@ -223,19 +234,19 @@
         <nav class="mt-4" aria-label="本地教学资源分页">
             <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
                 <li class="page-item {% if not local_pagination.has_prev %}disabled{% endif %}">
-                    <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=local_pagination.prev_num if local_pagination.has_prev else local_pagination.page) }}">上一页</a>
+                    <a class="page-link" href="{{ url_for('education.resources', tab='local', online_page=online_pagination.page, local_page=local_pagination.prev_num if local_pagination.has_prev else local_pagination.page) }}">上一页</a>
                 </li>
                 {% for page_num in local_pagination.iter_pages() %}
                     {% if page_num %}
                         <li class="page-item {% if page_num == local_pagination.page %}active{% endif %}">
-                            <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=page_num) }}">{{ page_num }}</a>
+                            <a class="page-link" href="{{ url_for('education.resources', tab='local', online_page=online_pagination.page, local_page=page_num) }}">{{ page_num }}</a>
                         </li>
                     {% else %}
                         <li class="page-item disabled"><span class="page-link">...</span></li>
                     {% endif %}
                 {% endfor %}
                 <li class="page-item {% if not local_pagination.has_next %}disabled{% endif %}">
-                    <a class="page-link" href="{{ url_for('education.resources', online_page=online_pagination.page, local_page=local_pagination.next_num if local_pagination.has_next else local_pagination.page) }}">下一页</a>
+                    <a class="page-link" href="{{ url_for('education.resources', tab='local', online_page=online_pagination.page, local_page=local_pagination.next_num if local_pagination.has_next else local_pagination.page) }}">下一页</a>
                 </li>
             </ul>
         </nav>
@@ -243,21 +254,63 @@
     </div>
 </div>
 
+{% if not current_user.is_authenticated %}
+<div id="resourceLoginToast" class="resource-login-toast" role="status" aria-live="polite">
+    AI 功能需要登录后启用，
+    <a href="{{ url_for('auth.login') }}">登录</a>
+    后即可使用。
+</div>
+{% endif %}
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const navItems = document.querySelectorAll('.resource-nav-item');
         const resourceContainers = document.querySelectorAll('.resource-container');
+        const tabMap = {
+            online: 'online-resources',
+            local: 'local-resources'
+        };
+
+        function activateTabByTarget(targetId) {
+            navItems.forEach(nav => nav.classList.remove('active'));
+            resourceContainers.forEach(container => container.classList.remove('active'));
+
+            const activeNav = Array.from(navItems).find(nav => nav.getAttribute('data-target') === targetId);
+            if (activeNav) {
+                activeNav.classList.add('active');
+            }
+
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                targetEl.classList.add('active');
+            }
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const requestedTab = params.get('tab');
+        const initialTarget = tabMap[requestedTab] || 'online-resources';
+        activateTabByTarget(initialTarget);
 
         navItems.forEach(item => {
             item.addEventListener('click', function() {
-                navItems.forEach(nav => nav.classList.remove('active'));
-                resourceContainers.forEach(container => container.classList.remove('active'));
-
-                this.classList.add('active');
                 const targetId = this.getAttribute('data-target');
-                document.getElementById(targetId).classList.add('active');
+                activateTabByTarget(targetId);
+
+                const nextTab = targetId === 'local-resources' ? 'local' : 'online';
+                const nextParams = new URLSearchParams(window.location.search);
+                nextParams.set('tab', nextTab);
+                window.history.replaceState({}, '', `${window.location.pathname}?${nextParams.toString()}`);
             });
         });
+
+        const loginToast = document.getElementById('resourceLoginToast');
+        if (loginToast) {
+            const hideDelay = 9000;
+            loginToast.classList.add('show');
+            setTimeout(() => {
+                loginToast.classList.remove('show');
+            }, hideDelay);
+        }
     });
 </script>
 {% endblock %}
