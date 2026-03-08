@@ -40,6 +40,9 @@ rsync -az --delete \
 echo "[3/8] 安装依赖并创建虚拟环境"
 ssh ${SERVER_USER}@${SERVER_IP} "cd ${APP_DIR} && python3 -m venv venv && source venv/bin/activate && pip install -U pip && pip install -r requirements.txt"
 
+echo "[3.1/8] 安装中文字体（分享海报渲染）"
+ssh ${SERVER_USER}@${SERVER_IP} "sudo apt-get update -y >/dev/null && sudo apt-get install -y fonts-noto-cjk fonts-wqy-zenhei >/dev/null || true"
+
 echo "[4/8] 创建 PostgreSQL 数据库"
 ssh ${SERVER_USER}@${SERVER_IP} "sudo -u postgres psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'\" | grep -q 1 || sudo -u postgres psql -c \"CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';\"; sudo -u postgres psql -tc \"SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'\" | grep -q 1 || sudo -u postgres psql -c \"CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};\"; sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};\""
 

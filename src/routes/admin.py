@@ -192,9 +192,17 @@ def _attach_ai_poster_from_url(activity, image_url):
 def _find_available_font(size):
     font_candidates = [
         '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc',
         '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/truetype/noto/NotoSansSC-Regular.otf',
+        '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
         '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+        '/usr/share/fonts/truetype/arphic/ukai.ttc',
+        '/usr/share/fonts/truetype/arphic/uming.ttc',
+        '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
         '/System/Library/Fonts/PingFang.ttc',
+        '/System/Library/Fonts/Hiragino Sans GB.ttc',
         '/System/Library/Fonts/STHeiti Medium.ttc',
     ]
     for font_path in font_candidates:
@@ -203,6 +211,14 @@ def _find_available_font(size):
         except Exception:
             continue
     return ImageFont.load_default()
+
+def _is_cjk_font(font_obj):
+    try:
+        font_name = str(getattr(font_obj, 'path', '') or getattr(font_obj, 'getname', lambda: ('', ''))()[0]).lower()
+    except Exception:
+        font_name = ''
+    cjk_keys = ('noto', 'wqy', 'ukai', 'uming', 'pingfang', 'heiti', 'hiragino')
+    return any(key in font_name for key in cjk_keys)
 
 def _build_share_poster_image(activity, detail_url):
     target_width = 1080
@@ -249,8 +265,9 @@ def _build_share_poster_image(activity, detail_url):
     draw = ImageDraw.Draw(final_image)
     title_font = _find_available_font(52)
     hint_font = _find_available_font(34)
+    has_cjk = _is_cjk_font(title_font) and _is_cjk_font(hint_font)
 
-    title = (activity.title or '活动报名').strip()
+    title = (activity.title or '活动报名').strip() if has_cjk else (activity.title or f'Activity #{activity.id}').strip()
     max_title_width = 670
     wrapped_lines = []
     current = ''
@@ -275,7 +292,8 @@ def _build_share_poster_image(activity, detail_url):
     for idx, line in enumerate(wrapped_lines[:2]):
         draw.text((text_x, title_y + idx * 68), line, font=title_font, fill='#1f2937')
 
-    draw.text((text_x, top_panel_height + 210), '扫码查看活动详情并报名', font=hint_font, fill='#4b5563')
+    hint_text = '扫码查看活动详情并报名' if has_cjk else 'Scan QR to view activity details'
+    draw.text((text_x, top_panel_height + 210), hint_text, font=hint_font, fill='#4b5563')
 
     qr = qrcode.QRCode(
         version=1,
