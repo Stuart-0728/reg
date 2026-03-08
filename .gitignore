@@ -1,0 +1,15 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+venv/
+
+# Local secrets
+.env
+*.env
+
+# Local test/temp artifacts
+test_out.txt
+result.json
+out.txt

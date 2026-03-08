@@ -227,7 +227,8 @@ def _generate_poster_via_gemini(prompt, model_name):
     if not api_key:
         raise ValueError('未配置GEMINI_API_KEY，无法生成海报')
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    base_url = current_app.config.get('AI_MODEL_API_URL', 'https://generativelanguage.googleapis.com').rstrip('/')
+    url = f"{base_url}/v1beta/models/{model_name}:generateContent?key={api_key}"
     payload = {
         "contents": [
             {
@@ -270,8 +271,10 @@ def _list_gemini_image_models():
     if not api_key:
         return []
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-    response = requests.get(url, timeout=(6, 12))
+    base_url = current_app.config.get('AI_MODEL_API_URL', 'https://generativelanguage.googleapis.com').rstrip('/')
+    url = f"{base_url}/v1beta/models?key={api_key}"
+    # 降低超时时间，如果在国内网络环境无代理则快速失败回退，避免UI阻塞太久
+    response = requests.get(url, timeout=(1.5, 3))
     response.raise_for_status()
     payload = response.json() or {}
 
@@ -310,7 +313,15 @@ def ai_poster_models():
         static_models = [
             {
                 'value': 'ark:doubao-seedream-5-0-260128',
-                'label': '火山方舟 · doubao-seedream-5-0-260128（默认）'
+                'label': '火山方舟 · doubao-seedream-5-0-260128（默认，￥0.22/张）'
+            },
+            {
+                'value': 'ark:doubao-seedream-4-5-251128',
+                'label': '火山方舟 · doubao-seedream-4-5-251128（￥0.25/张）'
+            },
+            {
+                'value': 'ark:doubao-seedream-4-0-250828',
+                'label': '火山方舟 · doubao-seedream-4-0-250828（￥0.20/张）'
             }
         ]
 
