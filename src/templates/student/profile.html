@@ -11,8 +11,8 @@
         </ol>
     </nav>
 
-    <div class="row">
-        <div class="col-md-3">
+    <div class="row g-4">
+        <div class="col-lg-3">
             <div class="list-group mb-4">
                 <a href="{{ url_for('student.dashboard') }}" class="list-group-item list-group-item-action">
                     <i class="fas fa-home me-2"></i> 控制台
@@ -26,11 +26,17 @@
                 <a href="{{ url_for('student.points') }}" class="list-group-item list-group-item-action">
                     <i class="fas fa-star me-2"></i> 我的积分
                 </a>
+                <a href="{{ url_for('student.messages') }}" class="list-group-item list-group-item-action">
+                    <i class="fas fa-envelope me-2"></i> 站内信
+                </a>
+                <a href="{{ url_for('student.notifications') }}" class="list-group-item list-group-item-action">
+                    <i class="fas fa-bell me-2"></i> 通知中心
+                </a>
             </div>
         </div>
 
-        <div class="col-md-9">
-            <div class="card">
+        <div class="col-lg-9">
+            <div class="card shadow-sm border-0 rounded-4">
                 <div class="card-header bg-transparent text-dark d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">个人资料</h5>
                     <a href="{{ url_for('student.edit_profile') }}" class="btn btn-light btn-sm">
@@ -38,49 +44,33 @@
                     </a>
                 </div>
                 <div class="card-body">
-                    <div class="row mb-4">
+                    <div class="row g-4 mb-4 align-items-start">
                         <div class="col-md-4 text-center">
                             <div class="avatar-circle mb-3">
-                                <span class="avatar-text">{{ current_user.username[0]|upper }}</span>
+                                <span class="avatar-text">{{ (student_info.real_name or current_user.username)[0]|upper }}</span>
                             </div>
-                            <h5>{{ current_user.username }}</h5>
+                            <h5 class="mb-1">{{ student_info.real_name or current_user.username }}</h5>
+                            <p class="text-muted mb-1">@{{ current_user.username }}</p>
                             <p class="text-muted">{{ current_user.email }}</p>
+                            <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                <span class="badge bg-light text-dark border rounded-pill">学号 {{ student_info.student_id }}</span>
+                                <span class="badge bg-light text-dark border rounded-pill">积分 {{ student_info.points or 0 }}</span>
+                            </div>
                         </div>
                         <div class="col-md-8">
-                            <table class="table">
-                                <tr>
-                                    <th width="30%">姓名</th>
-                                    <td>{{ student_info.real_name or '未填写' }}</td>
-                                </tr>
-                                <tr>
-                                    <th>学号</th>
-                                    <td>{{ student_info.student_id }}</td>
-                                </tr>
-                                <tr>
-                                    <th>年级</th>
-                                    <td>{{ student_info.grade or '未填写' }}</td>
-                                </tr>
-                                <tr>
-                                    <th>学院</th>
-                                    <td>{{ student_info.college or '未填写' }}</td>
-                                </tr>
-                                <tr>
-                                    <th>专业</th>
-                                    <td>{{ student_info.major or '未填写' }}</td>
-                                </tr>
-                                <tr>
-                                    <th>手机号</th>
-                                    <td>{{ student_info.phone or '未填写' }}</td>
-                                </tr>
-                                <tr>
-                                    <th>QQ</th>
-                                    <td>{{ student_info.qq or '未填写' }}</td>
-                                </tr>
-                                <tr>
-                                    <th>积分</th>
-                                    <td>{{ student_info.points or 0 }} <a href="{{ url_for('student.points') }}" class="ms-2 small text-decoration-none"><i class="fas fa-history"></i> 积分详情</a></td>
-                                </tr>
-                            </table>
+                            <div class="profile-grid">
+                                <div class="profile-item"><span>姓名</span><strong>{{ student_info.real_name or '未填写' }}</strong></div>
+                                <div class="profile-item"><span>学号</span><strong>{{ student_info.student_id }}</strong></div>
+                                <div class="profile-item"><span>年级</span><strong>{{ student_info.grade or '未填写' }}</strong></div>
+                                <div class="profile-item"><span>学院</span><strong>{{ student_info.college or '未填写' }}</strong></div>
+                                <div class="profile-item"><span>专业</span><strong>{{ student_info.major or '未填写' }}</strong></div>
+                                <div class="profile-item"><span>手机号</span><strong>{{ student_info.phone or '未填写' }}</strong></div>
+                                <div class="profile-item"><span>QQ</span><strong>{{ student_info.qq or '未填写' }}</strong></div>
+                                <div class="profile-item">
+                                    <span>积分</span>
+                                    <strong>{{ student_info.points or 0 }} <a href="{{ url_for('student.points') }}" class="ms-2 small text-decoration-none"><i class="fas fa-history"></i> 积分详情</a></strong>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
@@ -116,7 +106,7 @@
     .avatar-circle {
         width: 100px;
         height: 100px;
-        background-color: #007bff;
+        background: linear-gradient(135deg, #2563eb, #4f46e5);
         border-radius: 50%;
         color: #fff;
         display: flex;
@@ -125,6 +115,38 @@
         font-size: 48px;
         font-weight: bold;
         margin: 0 auto;
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.28);
+    }
+
+    .profile-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    .profile-item {
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 0.75rem;
+        padding: 0.7rem 0.8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+
+    .profile-item span {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+
+    .profile-item strong {
+        color: #111827;
+        font-size: 1rem;
+    }
+
+    @media (max-width: 768px) {
+        .profile-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 {% endblock %}

@@ -11,7 +11,7 @@
         </ol>
     </nav>
 
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card border-0 shadow-sm mb-4 notifications-card">
         <div class="card-header bg-white border-0 p-3">
             <div class="d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center">
@@ -26,22 +26,22 @@
             {% if notifications.items %}
                 <div class="notification-list">
                     {% for notification in notifications.items %}
-                        <div class="notification-item border-bottom pb-3 mb-3 {% if notification.id not in read_notification_ids %}unread{% endif %}">
+                        <div class="notification-item {% if notification.id not in read_notification_ids %}unread{% endif %}">
                             <div class="d-flex justify-content-between align-items-start flex-wrap">
                                 <div class="d-flex align-items-center mb-2">
                                     {% if notification.is_important %}
-                                    <div class="bg-danger rounded-circle p-2 me-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                                    <div class="notification-icon important me-2">
                                         <i class="fas fa-exclamation text-white"></i>
                                     </div>
                                     {% else %}
-                                    <div class="bg-light rounded-circle p-2 me-2" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                                    <div class="notification-icon normal me-2">
                                         <i class="fas fa-bell text-primary"></i>
                                     </div>
                                     {% endif %}
                                     <div>
                                         <h5 class="mb-1 fw-bold fs-6">
                                             {% if notification.id not in read_notification_ids %}
-                                                <span class="badge bg-transparent rounded-pill me-1">新</span>
+                                                <span class="badge bg-primary rounded-pill me-1">新</span>
                                             {% endif %}
                                             {% if notification.is_important %}
                                                 <span class="badge bg-danger me-1">重要</span>
@@ -62,48 +62,44 @@
                     {% endfor %}
                 </div>
                 
-                <!-- 分页 -->
-                <nav aria-label="通知分页" class="mt-4">
-                    <ul class="pagination pagination-sm justify-content-center flex-wrap">
-                        {% if notifications.has_prev %}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('student.notifications', page=notifications.prev_num) }}">上一页</a>
-                        </li>
-                        {% else %}
-                        <li class="page-item disabled">
-                            <span class="page-link">上一页</span>
-                        </li>
-                        {% endif %}
-                        
-                        {% for page_num in notifications.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=1) %}
-                            {% if page_num %}
-                                {% if page_num == notifications.page %}
-                                <li class="page-item active">
-                                    <span class="page-link">{{ page_num }}</span>
-                                </li>
-                                {% else %}
-                                <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('student.notifications', page=page_num) }}">{{ page_num }}</a>
-                                </li>
-                                {% endif %}
-                            {% else %}
-                                <li class="page-item disabled">
-                                    <span class="page-link">...</span>
-                                </li>
+                {% if notifications.pages > 1 %}
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
+                    <small class="text-muted">共 {{ notifications.total }} 条通知，每页 10 条，当前第 {{ notifications.page }}/{{ notifications.pages }} 页</small>
+                    <nav aria-label="通知分页">
+                        <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
+                            {% if notifications.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('student.notifications', page=notifications.prev_num) }}">上一页</a>
+                            </li>
                             {% endif %}
-                        {% endfor %}
-                        
-                        {% if notifications.has_next %}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('student.notifications', page=notifications.next_num) }}">下一页</a>
-                        </li>
-                        {% else %}
-                        <li class="page-item disabled">
-                            <span class="page-link">下一页</span>
-                        </li>
-                        {% endif %}
-                    </ul>
-                </nav>
+                            
+                            {% for page_num in notifications.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=1) %}
+                                {% if page_num %}
+                                    {% if page_num == notifications.page %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page_num }}</span>
+                                    </li>
+                                    {% else %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('student.notifications', page=page_num) }}">{{ page_num }}</a>
+                                    </li>
+                                    {% endif %}
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if notifications.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('student.notifications', page=notifications.next_num) }}">下一页</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
             {% else %}
                 <div class="text-center py-4">
                     <div class="bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
@@ -118,29 +114,83 @@
 </div>
 
 <style>
-    .notification-item.unread {
-        position: relative;
+    .notifications-card .card-body {
+        padding: 1rem;
     }
+
+    .notification-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .notification-item {
+        position: relative;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 14px;
+        background: #fff;
+        padding: 14px;
+        margin: 0;
+        transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+
+    .notification-item:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+        border-color: rgba(79, 70, 229, 0.22);
+    }
+
+    .notification-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .notification-icon.normal {
+        background: rgba(13, 110, 253, 0.08);
+    }
+
+    .notification-icon.important {
+        background: #dc3545;
+    }
+
+    .notification-item.unread {
+        border-color: rgba(13, 110, 253, 0.3);
+        background: linear-gradient(90deg, rgba(13, 110, 253, 0.04), rgba(255, 255, 255, 1));
+    }
+
     .notification-item.unread::before {
         content: '';
         position: absolute;
-        left: -5px;
-        top: 10px;
-        width: 6px;
-        height: 6px;
+        left: 0;
+        top: 0;
+        width: 4px;
+        height: 100%;
         background-color: #0d6efd;
-        border-radius: 50%;
+        border-radius: 14px 0 0 14px;
     }
     
     @media (max-width: 576px) {
+        .notifications-card .card-body {
+            padding: 0.75rem;
+        }
+
+        .notification-item {
+            padding: 12px;
+        }
+
         .notification-item .btn {
             width: 100%;
             margin-top: 0.5rem;
         }
-        
-        .notification-item.unread::before {
-            left: 0;
-            top: 0;
+
+        .notification-preview {
+            margin-left: 0 !important;
+            padding-left: 0 !important;
         }
     }
 </style>

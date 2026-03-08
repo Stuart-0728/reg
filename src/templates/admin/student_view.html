@@ -12,68 +12,119 @@
         </ol>
     </nav>
 
-    <div class="row">
-        <!-- 学生基本信息 -->
-        <div class="col-lg-4">
-            <div class="card shadow-sm mb-4">
+    <div class="row g-4 mb-4">
+        <div class="col-xl-4 col-lg-6">
+            <div class="card shadow-sm h-100 mb-0">
                 <div class="card-header bg-transparent text-dark">
                     <h5 class="mb-0">学生信息</h5>
                 </div>
                 <div class="card-body">
                     <div class="text-center mb-3">
-                        <i class="fas fa-user-circle fa-5x text-primary"></i>
-                        <h4 class="mt-2">{{ student.real_name }}</h4>
-                        <p class="text-muted">{{ student.student_id }}</p>
+                        <div class="student-avatar mx-auto mb-2">{{ (student.real_name or user.username)[0]|upper }}</div>
+                        <h4 class="mt-2 mb-1">{{ student.real_name }}</h4>
+                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+                            <span class="badge bg-light text-dark border rounded-pill px-3">学号 {{ student.student_id }}</span>
+                            <span class="badge bg-light text-primary border rounded-pill px-3">@{{ user.username }}</span>
+                        </div>
                     </div>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>用户名</span>
-                            <span class="text-primary">{{ user.username }}</span>
+                    <ul class="list-group list-group-flush student-meta-list">
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="fas fa-user"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">用户名</div>
+                                <div class="meta-value text-primary">{{ user.username }}</div>
+                            </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>年级</span>
-                            <span>{{ student.grade }}</span>
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="fas fa-layer-group"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">年级</div>
+                                <div class="meta-value">{{ student.grade }}</div>
+                            </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>学院</span>
-                            <span>{{ student.college }}</span>
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="fas fa-university"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">学院</div>
+                                <div class="meta-value">{{ student.college }}</div>
+                            </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>专业</span>
-                            <span>{{ student.major }}</span>
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="fas fa-book"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">专业</div>
+                                <div class="meta-value">{{ student.major }}</div>
+                            </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>手机号</span>
-                            <span>{{ student.phone }}</span>
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="fas fa-phone"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">手机号</div>
+                                <div class="meta-value">{{ student.phone }}</div>
+                            </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>QQ</span>
-                            <span>{{ student.qq or '未设置' }}</span>
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="fab fa-qq"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">QQ</div>
+                                <div class="meta-value">{{ student.qq or '未设置' }}</div>
+                            </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>标签选择状态</span>
-                            <span>
-                                {% if student.has_selected_tags %}
-                                <span class="badge bg-success">已选择</span>
-                                {% else %}
-                                <span class="badge bg-warning">未选择</span>
-                                {% endif %}
-                            </span>
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="fas fa-tags"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">标签状态</div>
+                                <div class="meta-value">
+                                    {% if student.has_selected_tags %}
+                                    <span class="badge bg-success rounded-pill px-3">已选择</span>
+                                    {% else %}
+                                    <span class="badge bg-warning rounded-pill px-3">未选择</span>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>注册时间</span>
-                            <span>{{ display_datetime(user.created_at, None, '%Y-%m-%d') }}</span>
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="far fa-calendar-alt"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">注册时间</div>
+                                <div class="meta-value">{{ display_datetime(user.created_at, None, '%Y-%m-%d %H:%M') }}</div>
+                            </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <span>当前积分</span>
-                            <span class="badge bg-transparent rounded-pill">{{ student.points or 0 }}</span>
+                        <li class="list-group-item student-meta-item">
+                            <div class="meta-icon"><i class="fas fa-coins"></i></div>
+                            <div class="meta-content">
+                                <div class="meta-label">当前积分</div>
+                                <div class="meta-value"><span class="badge bg-primary rounded-pill px-3">{{ student.points or 0 }}</span></div>
+                            </div>
                         </li>
                     </ul>
+                    <div class="d-grid mt-3">
+                        {% if user.role and user.role.name and user.role.name|lower == 'student' %}
+                        <form method="post" action="{{ url_for('admin.promote_student_to_admin', user_id=user.id) }}" onsubmit="return confirm('确认将该学生设置为管理员？');" data-no-loading="true">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-warning w-100">
+                                <i class="fas fa-user-shield me-1"></i>设为管理员
+                            </button>
+                        </form>
+                        {% elif user.role and user.role.name and user.role.name|lower == 'admin' and user.id != current_user.id %}
+                        <form method="post" action="{{ url_for('admin.demote_admin_to_student', user_id=user.id) }}" onsubmit="return confirm('确认取消该用户管理员身份？');" data-no-loading="true">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-secondary w-100">
+                                <i class="fas fa-user-minus me-1"></i>取消管理员
+                            </button>
+                        </form>
+                        {% else %}
+                        <button type="button" class="btn btn-outline-secondary w-100" disabled>
+                            <i class="fas fa-user-shield me-1"></i>当前已是管理员
+                        </button>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <!-- 标签管理 -->
-            <div class="card shadow-sm mb-4">
+        <div class="col-xl-4 col-lg-6">
+            <div class="card shadow-sm h-100 mb-0">
                 <div class="card-header bg-transparent text-dark">
                     <h5 class="mb-0">学生兴趣标签</h5>
                 </div>
@@ -86,7 +137,10 @@
                                 {% for tag in all_tags %}
                                 <input type="checkbox" class="btn-check" name="tags" id="tag{{ tag.id }}" value="{{ tag.id }}" autocomplete="off"
                                     {% if tag.id in selected_tag_ids %}checked{% endif %}>
-                                <label class="btn btn-outline-primary tag-btn" for="tag{{ tag.id }}">{{ tag.name }}</label>
+                                <label class="btn btn-outline-primary tag-btn {% if tag.id in selected_tag_ids %}tag-selected{% endif %}" for="tag{{ tag.id }}">
+                                    <i class="fas fa-check tag-check-icon"></i>
+                                    {{ tag.name }}
+                                </label>
                                 {% endfor %}
                             </div>
                         </div>
@@ -94,9 +148,10 @@
                     </form>
                 </div>
             </div>
+        </div>
 
-            <!-- 积分调整 -->
-            <div class="card shadow-sm mb-4">
+        <div class="col-xl-4 col-lg-12">
+            <div class="card shadow-sm h-100 mb-0">
                 <div class="card-header bg-transparent text-dark">
                     <h5 class="mb-0">积分调整</h5>
                 </div>
@@ -117,17 +172,18 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="col-lg-8">
-            <!-- 积分历史 -->
-            <div class="card shadow-sm mb-4">
+    <div class="row g-4">
+        <div class="col-xl-6">
+            <div class="card shadow-sm h-100 mb-0">
                 <div class="card-header bg-transparent text-dark">
                     <h5 class="mb-0">积分历史</h5>
                 </div>
                 <div class="card-body">
                     {% if points_history %}
                         <div class="table-responsive">
-                            <table class="table table-hover">
+                            <table class="table table-hover table-sm align-middle table-cell-scroll">
                                 <thead>
                                     <tr>
                                         <th>时间</th>
@@ -165,16 +221,17 @@
                     {% endif %}
                 </div>
             </div>
+        </div>
 
-            <!-- 参加的活动 -->
-            <div class="card shadow-sm">
+        <div class="col-xl-6">
+            <div class="card shadow-sm h-100 mb-0">
                 <div class="card-header bg-transparent text-dark">
                     <h5 class="mb-0">参加的活动</h5>
                 </div>
                 <div class="card-body">
                     {% if registrations %}
                         <div class="table-responsive">
-                            <table class="table table-hover">
+                            <table class="table table-hover table-sm align-middle table-cell-scroll">
                                 <thead>
                                     <tr>
                                         <th>活动名称</th>
@@ -204,13 +261,13 @@
                                         </td>
                                         <td>
                                             {% if reg.status == 'registered' %}
-                                                <span class="badge bg-transparent">已报名</span>
+                                                <span class="badge bg-info rounded-pill px-3">已报名</span>
                                             {% elif reg.status == 'attended' %}
-                                                <span class="badge bg-success">已参加</span>
+                                                <span class="badge bg-success rounded-pill px-3">已参加</span>
                                             {% elif reg.status == 'cancelled' %}
-                                                <span class="badge bg-secondary">已取消</span>
+                                                <span class="badge bg-secondary rounded-pill px-3">已取消</span>
                                             {% else %}
-                                                <span class="badge bg-info">{{ reg.status }}</span>
+                                                <span class="badge bg-info rounded-pill px-3">{{ reg.status }}</span>
                                             {% endif %}
                                         </td>
                                         <td>
@@ -231,16 +288,111 @@
 </div>
 
 <style>
+.student-avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--bs-primary);
+    background: rgba(13, 110, 253, 0.12);
+    border: 1px solid rgba(13, 110, 253, 0.25);
+}
+
 .tag-btn {
     border-radius: 20px;
     padding: 0.5rem 1.2rem;
     font-size: 1rem;
-    transition: background 0.2s, color 0.2s;
+    transition: all 0.2s ease;
+    border-width: 2px !important;
+}
+.tag-check-icon {
+    display: none;
+    margin-right: 0.35rem;
 }
 .btn-check:checked + .tag-btn {
-    background: var(--gradient-primary);
-    color: #fff;
-    border-color: transparent;
+    background: #3b5bdb !important;
+    color: #fff !important;
+    border-color: #3b5bdb !important;
+    font-weight: 700;
+    box-shadow: 0 6px 14px rgba(13, 110, 253, 0.25);
+    transform: translateY(-1px);
+}
+.btn-check:checked + .tag-btn .tag-check-icon {
+    display: inline-block;
+}
+
+.student-meta-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.65rem;
+}
+
+.student-meta-list .list-group-item {
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 0.5rem;
+    margin-bottom: 0;
+    padding: 0.6rem 0.75rem;
+}
+
+.student-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.meta-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(13, 110, 253, 0.1);
+    color: var(--bs-primary);
+    flex: 0 0 auto;
+}
+
+.meta-content {
+    min-width: 0;
+}
+
+.meta-label {
+    color: #6c757d;
+    font-size: 0.78rem;
+    line-height: 1.1;
+}
+
+.meta-value {
+    font-weight: 700;
+    font-size: 1.06rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 768px) {
+    .student-meta-list {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('input[name="tags"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const label = document.querySelector(`label[for="${checkbox.id}"]`);
+            if (label) {
+                label.classList.toggle('tag-selected', checkbox.checked);
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

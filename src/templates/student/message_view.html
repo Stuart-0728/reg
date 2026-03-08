@@ -1,14 +1,14 @@
 {% extends 'base.html' %}
 
-{% block title %}查看消息 - 重庆师范大学智能社团+{% endblock %}
+{% block title %}查看反馈 - 重庆师范大学智能社团+{% endblock %}
 
 {% block content %}
 <div class="container py-4">
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('student.dashboard') }}" class="text-decoration-none">个人中心</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('student.messages') }}" class="text-decoration-none">站内信</a></li>
-            <li class="breadcrumb-item active fw-medium" aria-current="page">查看消息</li>
+            <li class="breadcrumb-item"><a href="{{ url_for('student.messages') }}" class="text-decoration-none">问题反馈</a></li>
+            <li class="breadcrumb-item active fw-medium" aria-current="page">查看反馈</li>
         </ol>
     </nav>
 
@@ -19,7 +19,7 @@
                     <div class="bg-transparent bg-opacity-10 rounded-circle p-3 me-3">
                         <i class="fas fa-envelope text-primary"></i>
                     </div>
-                    <h3 class="mb-0 fw-bold">查看消息</h3>
+                    <h3 class="mb-0 fw-bold">反馈详情</h3>
                 </div>
                 <a href="{{ url_for('student.messages') }}" class="btn btn-light">
                     <i class="fas fa-arrow-left me-1"></i>返回列表

@@ -397,13 +397,15 @@ def activity_detail(activity_id):
         
         # 判断是否可以报名 - 使用安全比较函数
         # 确保所有时间都有时区信息
+        start_registration_aware = ensure_timezone_aware(getattr(activity, 'registration_start_time', None))
         deadline_aware = ensure_timezone_aware(activity.registration_deadline)
         start_time_aware = ensure_timezone_aware(activity.start_time)
         
         can_register = (
             not is_registered and 
             activity.status == 'active' and
-            safe_greater_than(deadline_aware, now) and
+            (start_registration_aware is None or safe_less_than(start_registration_aware, now) or safe_compare(start_registration_aware, now)) and
+            (deadline_aware is None or safe_greater_than(deadline_aware, now) or safe_compare(deadline_aware, now)) and
             (activity.max_participants == 0 or registration_count < activity.max_participants)
         )
         
@@ -542,6 +544,36 @@ def clear_ai_chat_history():
         logger.error(f"清除聊天记录时出错: {e}")
         db.session.rollback()
         return jsonify({'success': False, 'message': f'服务器错误: {str(e)}'}), 500
+
+@main_bp.route('/api/public-notifications')
+def public_notifications_api():
+    """公开通知接口：供所有访客读取首页头部通知条。"""
+    try:
+        now = get_localized_now()
+        notifications = Notification.query.filter(
+            Notification.is_public == True,
+            or_(
+                Notification.expiry_date == None,
+                Notification.expiry_date > now
+            )
+        ).order_by(Notification.is_important.desc(), Notification.created_at.desc()).limit(10).all()
+
+        return jsonify({
+            'success': True,
+            'notifications': [
+                {
+                    'id': n.id,
+                    'title': n.title,
+                    'content': n.content,
+                    'is_important': bool(n.is_important),
+                    'created_at': display_datetime(n.created_at, None, '%Y-%m-%d %H:%M') if n.created_at else ''
+                }
+                for n in notifications
+            ]
+        })
+    except Exception as e:
+        logger.error(f"获取公开通知失败: {e}")
+        return jsonify({'success': False, 'notifications': [], 'error': str(e)}), 500
 
 @main_bp.route('/poster/<int:activity_id>')
 def poster_image(activity_id):

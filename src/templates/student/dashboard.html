@@ -2,6 +2,38 @@
 
 {% block title %}个人面板 - 重庆师范大学智能社团+{% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+.student-dashboard-table-wrap {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+}
+
+.student-dashboard-table {
+    width: max-content;
+    min-width: 720px;
+}
+
+.student-dashboard-table th,
+.student-dashboard-table td {
+    white-space: nowrap;
+}
+
+.student-dashboard-table.table-hover tbody tr:hover {
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+@media (max-width: 991.98px) {
+    .student-dashboard-table {
+        min-width: 660px;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
     <div class="row g-4 mb-4">
@@ -29,6 +61,21 @@
                             <h5 class="fw-bold mb-1">{{ registered_activities|length if registered_activities else 0 }}</h5>
                             <small class="text-muted">活动</small>
                         </div>
+                    </div>
+
+                    <div class="mb-3 text-start">
+                        <div class="small text-muted mb-2">我的标签</div>
+                        {% if student.tags %}
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for tag in student.tags %}
+                                    <span class="badge bg-light text-dark border rounded-pill">{{ tag.name }}</span>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <a href="{{ url_for('student.edit_profile') }}" class="btn btn-sm btn-outline-primary">
+                                去完善兴趣标签
+                            </a>
+                        {% endif %}
                     </div>
                     
                     <div class="mb-3">
@@ -118,8 +165,8 @@
             </div>
             <div class="card-body p-0">
                 {% if registered_activities %}
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
+                    <div class="table-responsive student-dashboard-table-wrap">
+                        <table class="table table-hover align-middle mb-0 student-dashboard-table">
                             <thead class="table-light">
                                 <tr>
                                     <th class="ps-4">活动名称</th>

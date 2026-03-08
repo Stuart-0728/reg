@@ -3,7 +3,7 @@
 {% block title %}活动评价 - {{ activity.title }} - 重庆师范大学智能社团+{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container py-4 review-page">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('student.dashboard') }}">个人面板</a></li>
@@ -12,20 +12,20 @@
         </ol>
     </nav>
 
-    <div class="card shadow-sm">
+    <div class="card shadow-sm review-card">
         <div class="card-header bg-transparent text-dark">
             <h5 class="mb-0">为 "{{ activity.title }}" 评分</h5>
         </div>
         <div class="card-body">
             <form method="post" action="{{ url_for('student.submit_review', activity_id=activity.id) }}" id="reviewForm" data-no-loading>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="mb-4">
+                <div class="mb-4 review-score-block">
                     <label class="form-label">活动体验评分</label>
                     <div class="star-rating">
                         <div class="rating-group">
                             {% for i in range(1, 6) %}
                             <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="radio" name="rating" id="rating{{ i }}" value="{{ i }}" required>
+                                <input class="form-check-input" type="radio" name="rating" id="rating{{ i }}" value="{{ i }}" {% if existing_review and existing_review.rating == i %}checked{% endif %} required>
                                 <label class="form-check-label" for="rating{{ i }}">
                                     <i class="far fa-star"></i>
                                 </label>
@@ -35,25 +35,58 @@
                     </div>
                 </div>
 
-                <div class="mb-4">
+                <div class="mb-4 review-dimensions-block">
                     <label class="form-label">评价维度</label>
-                    <div class="row">
+                    <div class="row g-3">
                         <div class="col-md-4">
-                            <div class="form-group">
-                                <label>内容质量</label>
-                                <input type="range" class="form-range" name="content_quality" min="1" max="5" value="5">
+                            <div class="form-group dimension-item">
+                                <label class="fw-semibold d-block mb-2">内容质量</label>
+                                <div class="star-rating dimension-rating" data-name="content_quality">
+                                    <div class="rating-group">
+                                        {% for i in range(1, 6) %}
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="content_quality" id="contentQuality{{ i }}" value="{{ i }}" {% if (existing_review and existing_review.content_quality == i) or (not existing_review and i == 5) %}checked{% endif %} required>
+                                            <label class="form-check-label" for="contentQuality{{ i }}">
+                                                <i class="far fa-star"></i>
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-group">
-                                <label>组织安排</label>
-                                <input type="range" class="form-range" name="organization" min="1" max="5" value="5">
+                            <div class="form-group dimension-item">
+                                <label class="fw-semibold d-block mb-2">组织安排</label>
+                                <div class="star-rating dimension-rating" data-name="organization">
+                                    <div class="rating-group">
+                                        {% for i in range(1, 6) %}
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="organization" id="organization{{ i }}" value="{{ i }}" {% if (existing_review and existing_review.organization == i) or (not existing_review and i == 5) %}checked{% endif %} required>
+                                            <label class="form-check-label" for="organization{{ i }}">
+                                                <i class="far fa-star"></i>
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="form-group">
-                                <label>场地设施</label>
-                                <input type="range" class="form-range" name="facility" min="1" max="5" value="5">
+                            <div class="form-group dimension-item">
+                                <label class="fw-semibold d-block mb-2">场地设施</label>
+                                <div class="star-rating dimension-rating" data-name="facility">
+                                    <div class="rating-group">
+                                        {% for i in range(1, 6) %}
+                                        <div class="form-check form-check-inline">
+                                            <input class="form-check-input" type="radio" name="facility" id="facility{{ i }}" value="{{ i }}" {% if (existing_review and existing_review.facility == i) or (not existing_review and i == 5) %}checked{% endif %} required>
+                                            <label class="form-check-label" for="facility{{ i }}">
+                                                <i class="far fa-star"></i>
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -61,21 +94,21 @@
 
                 <div class="mb-4">
                     <label for="review" class="form-label">详细评价</label>
-                    <textarea class="form-control" id="review" name="review" rows="4" placeholder="请分享你对本次活动的感受和建议..." required></textarea>
+                    <textarea class="form-control" id="review" name="review" rows="4" placeholder="请分享你对本次活动的感受和建议..." required>{{ existing_review.review if existing_review else '' }}</textarea>
                 </div>
 
                 <div class="mb-4">
                     <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="anonymous" name="anonymous">
+                        <input class="form-check-input" type="checkbox" id="anonymous" name="anonymous" {% if existing_review and existing_review.is_anonymous %}checked{% endif %}>
                         <label class="form-check-label" for="anonymous">
                             匿名评价
                         </label>
                     </div>
                 </div>
 
-                <div class="text-end">
+                <div class="text-end review-actions">
                     <button type="button" class="btn btn-outline-secondary" onclick="history.back()">返回</button>
-                    <button type="submit" class="btn btn-primary">提交评价</button>
+                    <button type="submit" class="btn btn-primary">{{ '更新评价' if existing_review else '提交评价' }}</button>
                 </div>
             </form>
         </div>
@@ -85,14 +118,31 @@
 
 {% block styles %}
 <style>
+.review-page {
+    max-width: 920px;
+}
+
+.review-card .card-header {
+    padding: 1rem 1.25rem;
+}
+
+.review-card .card-body {
+    padding: 1.1rem 1.25rem;
+}
+
 .star-rating .rating-group {
     display: flex;
     justify-content: flex-start;
-    gap: 1rem;
+    gap: 0.45rem;
+    flex-wrap: nowrap;
 }
 
 .star-rating .form-check-input {
     display: none;
+}
+
+.star-rating .form-check {
+    margin-right: 0;
 }
 
 .star-rating .form-check-label {
@@ -105,8 +155,59 @@
     font-weight: 900;
 }
 
-.form-range {
-    width: 100%;
+@media (max-width: 768px) {
+    .review-page {
+        padding-top: 0.75rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    .review-card {
+        border-radius: 16px;
+    }
+
+    .review-card .card-header {
+        padding: 0.95rem 1rem;
+    }
+
+    .review-card .card-body {
+        padding: 0.95rem 1rem;
+    }
+
+    .star-rating .rating-group {
+        gap: 0.15rem;
+        justify-content: flex-start;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        white-space: nowrap;
+        padding-bottom: 2px;
+    }
+
+    .star-rating .rating-group::-webkit-scrollbar {
+        display: none;
+    }
+
+    .star-rating .form-check-label {
+        font-size: 1.45rem;
+    }
+
+    #review {
+        min-height: 150px;
+        font-size: 1rem;
+    }
+
+    .review-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
+    }
+
+    .review-actions .btn {
+        width: 100%;
+        margin-right: 0 !important;
+        margin-bottom: 0 !important;
+    }
 }
 </style>
 {% endblock %}
@@ -114,15 +215,24 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 星级评分交互
-    const ratingInputs = document.querySelectorAll('input[name="rating"]');
-    const ratingLabels = document.querySelectorAll('.star-rating .form-check-label');
+    // 星级评分交互（总分 + 各分项）
+    function initStarGroup(name) {
+        const inputs = document.querySelectorAll(`input[name="${name}"]`);
+        if (!inputs.length) return;
 
-    ratingInputs.forEach((input, index) => {
-        input.addEventListener('change', function() {
-            ratingLabels.forEach((label, i) => {
+        const labels = Array.from(inputs).map(input => {
+            const id = input.getAttribute('id');
+            return document.querySelector(`label[for="${id}"]`);
+        });
+
+        function render() {
+            const checkedIndex = Array.from(inputs).findIndex(input => input.checked);
+            labels.forEach((label, i) => {
+                if (!label) return;
                 const star = label.querySelector('i');
-                if (i <= index) {
+                if (!star) return;
+
+                if (i <= checkedIndex) {
                     star.classList.remove('far');
                     star.classList.add('fas');
                 } else {
@@ -130,8 +240,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     star.classList.add('far');
                 }
             });
+        }
+
+        inputs.forEach(input => {
+            input.addEventListener('change', render);
         });
-    });
+
+        render();
+    }
+
+    initStarGroup('rating');
+    initStarGroup('content_quality');
+    initStarGroup('organization');
+    initStarGroup('facility');
 
     // 表单验证
     document.getElementById('reviewForm').addEventListener('submit', function(e) {

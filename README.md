@@ -69,6 +69,10 @@ export DB_PASSWORD="数据库密码"
 export DB_HOST="数据库主机"
 export DB_PORT="数据库端口"
 export DB_NAME="cqnu_association"
+export ARK_API_KEY="你的火山方舟API Key"
+export GEMINI_API_KEY="你的Gemini API Key"
+# 可选：如果你习惯使用Google官方命名，也可仅设置
+# export GOOGLE_API_KEY="你的Gemini API Key"
 ```
 
 4. 初始化数据库：

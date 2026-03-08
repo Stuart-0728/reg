@@ -29,6 +29,21 @@
             <h5 class="mb-0 fw-bold">{{ activity.title }}</h5>
         </div>
         <div class="card-body">
+            {% set ns = namespace(content_total=0, org_total=0, fac_total=0, dim_count=0) %}
+            {% for review in reviews %}
+                {% if review.content_quality %}
+                    {% set ns.content_total = ns.content_total + review.content_quality %}
+                {% endif %}
+                {% if review.organization %}
+                    {% set ns.org_total = ns.org_total + review.organization %}
+                {% endif %}
+                {% if review.facility %}
+                    {% set ns.fac_total = ns.fac_total + review.facility %}
+                {% endif %}
+                {% set ns.dim_count = ns.dim_count + 1 %}
+            {% endfor %}
+            {% set dim_divisor = ns.dim_count if ns.dim_count > 0 else 1 %}
+
             <div class="row">
                 <div class="col-md-6">
                     <p class="mb-2">
@@ -62,21 +77,69 @@
                     </div>
                 </div>
             </div>
+
+            <div class="row g-3 mt-1 mb-2">
+                <div class="col-md-4">
+                    <div class="review-metric-card">
+                        <small class="text-muted d-block">内容质量均分</small>
+                        <strong>{{ '%.1f'|format(ns.content_total / dim_divisor) }}</strong>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="review-metric-card">
+                        <small class="text-muted d-block">组织安排均分</small>
+                        <strong>{{ '%.1f'|format(ns.org_total / dim_divisor) }}</strong>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="review-metric-card">
+                        <small class="text-muted d-block">场地设施均分</small>
+                        <strong>{{ '%.1f'|format(ns.fac_total / dim_divisor) }}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="aiClusterSummaryBtn">
+                    <i class="fas fa-layer-group me-1"></i>AI聚类总结
+                </button>
+                <button type="button" class="btn btn-outline-success btn-sm" id="aiRetroReportBtn">
+                    <i class="fas fa-file-lines me-1"></i>AI复盘报告
+                </button>
+            </div>
+
+            <div class="row g-3 mt-2" id="aiInsightsWrap">
+                <div class="col-12" id="aiClusterResultWrap" style="display:none;">
+                    <div class="card border-0 bg-light">
+                        <div class="card-header bg-transparent fw-semibold">AI聚类总结</div>
+                        <div class="card-body">
+                            <pre id="aiClusterResult" class="mb-0" style="white-space: pre-wrap; font-family: inherit;"></pre>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12" id="aiRetroResultWrap" style="display:none;">
+                    <div class="card border-0 bg-light">
+                        <div class="card-header bg-transparent fw-semibold">AI复盘报告</div>
+                        <div class="card-body">
+                            <pre id="aiRetroResult" class="mb-0" style="white-space: pre-wrap; font-family: inherit;"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
             
             <hr class="my-4">
             
             {% if reviews %}
-                <div class="table-responsive">
-                    <table class="table table-hover">
+                <div class="table-responsive review-table-wrap">
+                    <table class="table table-hover review-management-table align-middle mb-0">
                         <thead>
                             <tr>
                                 <th>评价者</th>
                                 <th>评分</th>
-                                <th>内容质量</th>
-                                <th>组织安排</th>
-                                <th>场地设施</th>
+                                <th>分项评分</th>
                                 <th>评价时间</th>
                                 <th>评价内容</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -84,7 +147,7 @@
                                 <tr>
                                     <td>{{ review.reviewer_name }}</td>
                                     <td>
-                                        <div class="text-warning">
+                                        <div class="text-warning text-nowrap">
                                             {% for i in range(review.rating) %}
                                                 <i class="fas fa-star"></i>
                                             {% endfor %}
@@ -93,44 +156,37 @@
                                             {% endfor %}
                                         </div>
                                     </td>
-                                    <td>{{ review.content_quality or '-' }}</td>
-                                    <td>{{ review.organization or '-' }}</td>
-                                    <td>{{ review.facility or '-' }}</td>
-                                    <td>{{ display_datetime(review.created_at) }}</td>
                                     <td>
-                                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#reviewModal{{ review.id }}">
-                                            查看详情
-                                        </button>
-                                        
-                                        <!-- 评价详情模态框 -->
-                                        <div class="modal fade" id="reviewModal{{ review.id }}" tabindex="-1" aria-hidden="true">
-                                            <div class="modal-dialog">
-                                                <div class="modal-content">
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title">评价详情</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <p><strong>评价者：</strong>{{ review.reviewer_name }}</p>
-                                                        <p><strong>评价时间：</strong>{{ display_datetime(review.created_at) }}</p>
-                                                        <p><strong>评分：</strong>
-                                                            <span class="text-warning">
-                                                                {% for i in range(review.rating) %}
-                                                                    <i class="fas fa-star"></i>
-                                                                {% endfor %}
-                                                                {% for i in range(5 - review.rating) %}
-                                                                    <i class="far fa-star"></i>
-                                                                {% endfor %}
-                                                            </span>
-                                                        </p>
-                                                        <div class="card bg-light">
-                                                            <div class="card-body">
-                                                                {{ review.review }}
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                        <div class="small text-nowrap">内容 {{ review.content_quality or '-' }}/5</div>
+                                        <div class="small text-nowrap">组织 {{ review.organization or '-' }}/5</div>
+                                        <div class="small text-nowrap">设施 {{ review.facility or '-' }}/5</div>
+                                    </td>
+                                    <td>{{ review.display_created_at }}</td>
+                                    <td>
+                                        <div class="review-content-preview text-muted small">{{ review.review }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex flex-column gap-2">
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-outline-primary review-detail-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#reviewDetailModal"
+                                                data-reviewer="{{ review.reviewer_name|e }}"
+                                                data-time="{{ review.display_created_at|e }}"
+                                                data-rating="{{ review.rating }}"
+                                                data-review="{{ review.review|e }}"
+                                            >
+                                                查看详情
+                                            </button>
+                                            <form method="post" action="{{ url_for('admin.delete_activity_review', review_id=review.id) }}" onsubmit="return confirm('确定删除这条活动评价吗？');" class="d-inline" data-no-loading="true">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <div class="form-check mb-1">
+                                                    <input class="form-check-input" type="checkbox" name="reclaim_points" value="1" id="reclaimPoints{{ review.id }}" checked>
+                                                    <label class="form-check-label small" for="reclaimPoints{{ review.id }}">回收5分</label>
                                                 </div>
-                                            </div>
+                                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">删除评价</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
@@ -150,4 +206,157 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="reviewDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">评价详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>评价者：</strong><span id="detailReviewer"></span></p>
+                <p><strong>评价时间：</strong><span id="detailTime"></span></p>
+                <p>
+                    <strong>评分：</strong>
+                    <span class="text-warning" id="detailRating"></span>
+                </p>
+                <div class="card bg-light">
+                    <div class="card-body" id="detailReviewText"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.review-metric-card {
+    border: 1px solid #e9edf3;
+    border-radius: 12px;
+    background: #fff;
+    padding: 0.75rem 0.9rem;
+}
+
+.review-metric-card strong {
+    font-size: 1.2rem;
+    color: #334155;
+}
+
+.review-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.review-management-table {
+    min-width: 980px;
+}
+
+.review-management-table th,
+.review-management-table td {
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.review-content-preview {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 991.98px) {
+    .review-management-table {
+        min-width: 860px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = '{{ csrf_token() }}';
+
+    async function postJson(url) {
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+            throw new Error(data.message || '请求失败');
+        }
+        return data;
+    }
+
+    document.querySelectorAll('.review-detail-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const reviewer = this.getAttribute('data-reviewer') || '未知';
+            const time = this.getAttribute('data-time') || '-';
+            const rating = parseInt(this.getAttribute('data-rating') || '0', 10);
+            const review = this.getAttribute('data-review') || '';
+
+            document.getElementById('detailReviewer').textContent = reviewer;
+            document.getElementById('detailTime').textContent = time;
+            document.getElementById('detailReviewText').textContent = review;
+
+            let stars = '';
+            for (let i = 0; i < rating; i++) stars += '<i class="fas fa-star"></i>';
+            for (let i = 0; i < 5 - rating; i++) stars += '<i class="far fa-star"></i>';
+            document.getElementById('detailRating').innerHTML = stars;
+        });
+    });
+
+    const aiClusterSummaryBtn = document.getElementById('aiClusterSummaryBtn');
+    const aiRetroReportBtn = document.getElementById('aiRetroReportBtn');
+    const aiClusterResult = document.getElementById('aiClusterResult');
+    const aiRetroResult = document.getElementById('aiRetroResult');
+    const aiClusterResultWrap = document.getElementById('aiClusterResultWrap');
+    const aiRetroResultWrap = document.getElementById('aiRetroResultWrap');
+
+    if (aiClusterSummaryBtn) {
+        aiClusterSummaryBtn.addEventListener('click', async function() {
+            const original = aiClusterSummaryBtn.innerHTML;
+            aiClusterSummaryBtn.disabled = true;
+            aiClusterSummaryBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+            try {
+                const data = await postJson('{{ url_for("admin.ai_review_cluster_summary", id=activity.id) }}');
+                aiClusterResult.textContent = data.summary || '暂无结果';
+                aiClusterResultWrap.style.display = '';
+            } catch (e) {
+                alert(e.message || '生成失败');
+            } finally {
+                aiClusterSummaryBtn.disabled = false;
+                aiClusterSummaryBtn.innerHTML = original;
+            }
+        });
+    }
+
+    if (aiRetroReportBtn) {
+        aiRetroReportBtn.addEventListener('click', async function() {
+            const original = aiRetroReportBtn.innerHTML;
+            aiRetroReportBtn.disabled = true;
+            aiRetroReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+            try {
+                const data = await postJson('{{ url_for("admin.ai_activity_retrospective_report", id=activity.id) }}');
+                aiRetroResult.textContent = data.report || '暂无结果';
+                aiRetroResultWrap.style.display = '';
+            } catch (e) {
+                alert(e.message || '生成失败');
+            } finally {
+                aiRetroReportBtn.disabled = false;
+                aiRetroReportBtn.innerHTML = original;
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

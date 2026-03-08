@@ -7,6 +7,7 @@ import json
 from functools import wraps
 from src.routes.utils import log_action, random_string
 from sqlalchemy import func, desc, or_, and_, not_
+from sqlalchemy.exc import IntegrityError
 from wtforms import StringField, TextAreaField, IntegerField, SelectField, SubmitField, RadioField, BooleanField, HiddenField
 from wtforms.validators import DataRequired, Length, Optional, NumberRange, Email, Regexp
 from flask_wtf import FlaskForm
@@ -23,6 +24,67 @@ student_bp = Blueprint('student', __name__, url_prefix='/student')
 
 # 创建CSRF保护实例
 csrf = CSRFProtect()
+
+def _ensure_activity_start_reminders(user_id):
+    """为学生生成活动开始前提醒：提前1天、3小时、1小时。"""
+    try:
+        now = get_localized_now()
+        reminders = [
+            ('1天', timedelta(days=1)),
+            ('3小时', timedelta(hours=3)),
+            ('1小时', timedelta(hours=1))
+        ]
+
+        registrations = db.session.execute(
+            db.select(Registration).filter(
+                Registration.user_id == user_id,
+                Registration.status.in_(['registered', 'attended'])
+            ).options(joinedload(Registration.activity))
+        ).scalars().all()
+
+        created = 0
+        for reg in registrations:
+            activity = reg.activity
+            if not activity or activity.status != 'active' or not activity.start_time:
+                continue
+
+            for label, delta in reminders:
+                reminder_time = activity.start_time - delta
+                if now < reminder_time:
+                    continue
+
+                title = f"活动即将开始提醒：{activity.title}"
+                content = f"你报名的活动《{activity.title}》将在{label}后开始，请提前安排时间。"
+
+                exists = db.session.execute(
+                    db.select(Notification).filter(
+                        Notification.title == title,
+                        Notification.content == content,
+                        Notification.created_by == user_id,
+                        Notification.is_public == False
+                    )
+                ).scalar_one_or_none()
+
+                if exists:
+                    continue
+
+                notice = Notification(
+                    title=title,
+                    content=content,
+                    is_important=True,
+                    created_at=now,
+                    created_by=user_id,
+                    expiry_date=activity.start_time + timedelta(days=1),
+                    is_public=False
+                )
+                db.session.add(notice)
+                created += 1
+
+        if created > 0:
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"生成活动开始提醒失败: {e}")
 
 # 检查是否为学生的装饰器
 def student_required(func):
@@ -195,7 +257,7 @@ def activities():
         registered_activity_ids = [r[0] for r in registered]
         
         # 从time_helpers导入时间比较函数
-        from src.utils.time_helpers import safe_less_than, safe_greater_than, safe_compare, display_datetime
+        from src.utils.time_helpers import safe_less_than, safe_greater_than, safe_compare, safe_less_than_equal, display_datetime
         
         return render_template(
             'student/activities.html',
@@ -206,6 +268,7 @@ def activities():
             safe_less_than=safe_less_than,
             safe_greater_than=safe_greater_than,
             safe_compare=safe_compare,
+            safe_less_than_equal=safe_less_than_equal,
             display_datetime=display_datetime
         )
     except Exception as e:
@@ -231,6 +294,7 @@ def activity_detail(id):
         can_register = (
             not has_registered and
             activity.status == 'active' and
+            (activity.registration_start_time is None or safe_less_than_equal(activity.registration_start_time, now)) and
             (activity.registration_deadline is None or safe_greater_than(activity.registration_deadline, now)) and
             (activity.max_participants == 0 or total_registered < activity.max_participants)
         )
@@ -248,6 +312,15 @@ def activity_detail(id):
 
         current_user_review = db.session.execute(db.select(ActivityReview).filter_by(activity_id=id, user_id=current_user.id)).scalar_one_or_none()
         reviews = db.session.execute(db.select(ActivityReview).filter_by(activity_id=id)).scalars().all()
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        for review in reviews:
+            if review.created_at:
+                if review.created_at.tzinfo is None:
+                    review.display_created_at = beijing_tz.localize(review.created_at).strftime('%Y-%m-%d %H:%M')
+                else:
+                    review.display_created_at = review.created_at.astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M')
+            else:
+                review.display_created_at = '未设置'
         review_count = len(reviews)
 
         average_rating = sum(r.rating for r in reviews) / review_count if review_count > 0 else 0
@@ -313,17 +386,29 @@ def activity_detail(id):
 def register_activity(id):
     """报名活动"""
     try:
-        activity = db.get_or_404(Activity, id)
+        activity = db.session.execute(
+            db.select(Activity).where(Activity.id == id).with_for_update()
+        ).scalar_one_or_none()
+        if not activity:
+            return jsonify({'success': False, 'message': '活动不存在'})
 
         if activity.status != 'active':
             return jsonify({'success': False, 'message': '该活动不在进行中，无法报名'})
 
         now = get_localized_now()
+        if activity.registration_start_time and safe_greater_than(activity.registration_start_time, now):
+            return jsonify({'success': False, 'message': '报名尚未开始'})
+
         if activity.registration_deadline and safe_less_than(activity.registration_deadline, now):
             return jsonify({'success': False, 'message': '该活动已过报名截止时间'})
 
         if activity.max_participants > 0:
-            reg_count = db.session.execute(db.select(func.count()).select_from(Registration).filter_by(activity_id=id, status='registered')).scalar() or 0
+            reg_count = db.session.execute(
+                db.select(func.count()).select_from(Registration).filter(
+                    Registration.activity_id == id,
+                    Registration.status.in_(['registered', 'attended'])
+                )
+            ).scalar() or 0
             if reg_count >= activity.max_participants:
                 return jsonify({'success': False, 'message': '该活动报名人数已满'})
 
@@ -347,6 +432,10 @@ def register_activity(id):
         db.session.commit()
 
         return jsonify({'success': True, 'message': '报名成功！'})
+    except IntegrityError:
+        db.session.rollback()
+        logger.warning(f"并发报名触发唯一约束: user_id={current_user.id}, activity_id={id}")
+        return jsonify({'success': False, 'message': '您已报名此活动'})
     except Exception as e:
         logger.error(f"Error in register activity: {e}")
         db.session.rollback()
@@ -461,14 +550,20 @@ def my_activities():
                 logger.info(f"my_activities - 活动信息: 标题={activity.title}, 状态={activity.status}, 开始时间={activity.start_time}")
 
         # 获取待评价的活动
-        reviewed_activity_ids = db.session.execute(db.select(ActivityReview.activity_id).filter_by(user_id=current_user.id)).scalars().all()
-        pending_reviews = [reg.activity_id for reg in registrations.items if reg.activity and reg.activity.status == 'completed' and reg.activity_id not in reviewed_activity_ids]
+        reviewed_activity_ids = set(
+            db.session.execute(db.select(ActivityReview.activity_id).filter_by(user_id=current_user.id)).scalars().all()
+        )
+        pending_reviews = [
+            reg.activity_id for reg in registrations.items
+            if reg.activity and reg.activity.status == 'completed' and reg.activity_id not in reviewed_activity_ids
+        ]
         
         # 确保模板中能正确处理数据
         return render_template('student/my_activities.html', 
                               registrations=registrations,
                               current_status=status,
                               pending_reviews=pending_reviews,
+                              reviewed_activity_ids=reviewed_activity_ids,
                               now=now,
                               display_datetime=display_datetime,
                               safe_less_than=safe_less_than,
@@ -660,26 +755,28 @@ def review_activity(activity_id):
             return redirect(url_for('student.activity_detail', id=activity_id))
         
         # 检查是否已参加活动
-        registration = Registration.query.filter_by(
-            activity_id=activity_id,
-            user_id=current_user.id
-        ).filter(Registration.status.in_(['checked_in', 'attended'])).first()
+        registration = db.session.execute(
+            db.select(Registration).filter(
+                Registration.activity_id == activity_id,
+                Registration.user_id == current_user.id,
+                or_(
+                    Registration.status == 'attended',
+                    Registration.check_in_time.isnot(None)
+                )
+            )
+        ).scalar_one_or_none()
         
         if not registration:
             flash('只有参加过活动的学生才能评价', 'warning')
             return redirect(url_for('student.activity_detail', id=activity_id))
         
-        # 检查是否已评价过
+        # 检查是否已评价过（已评价则进入编辑）
         existing_review = db.session.execute(db.select(ActivityReview).filter_by(
             activity_id=activity_id,
             user_id=current_user.id
         )).scalar_one_or_none()
-        
-        if existing_review:
-            flash('你已经评价过这个活动了', 'info')
-            return redirect(url_for('student.activity_detail', id=activity_id))
-        
-        return render_template('student/review.html', activity=activity)
+
+        return render_template('student/review.html', activity=activity, existing_review=existing_review)
     except Exception as e:
         logger.error(f"Error in review activity page: {e}")
         flash('加载评价页面时出错', 'danger')
@@ -689,6 +786,26 @@ def review_activity(activity_id):
 @login_required
 def submit_review(activity_id):
     try:
+        activity = db.get_or_404(Activity, activity_id)
+        if activity.status != 'completed':
+            flash('只能评价已结束的活动', 'warning')
+            return redirect(url_for('student.activity_detail', id=activity_id))
+
+        registration = db.session.execute(
+            db.select(Registration).filter(
+                Registration.activity_id == activity_id,
+                Registration.user_id == current_user.id,
+                or_(
+                    Registration.status == 'attended',
+                    Registration.check_in_time.isnot(None)
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not registration:
+            flash('只有参加过活动的学生才能评价', 'warning')
+            return redirect(url_for('student.activity_detail', id=activity_id))
+
         # 验证表单数据
         rating = request.form.get('rating', type=int)
         content_quality = request.form.get('content_quality', type=int)
@@ -700,28 +817,59 @@ def submit_review(activity_id):
         if not all([rating, review_text]) or not (1 <= rating <= 5):
             flash('请填写完整的评价信息', 'warning')
             return redirect(url_for('student.review_activity', activity_id=activity_id))
+
+        for score in [content_quality, organization, facility]:
+            if score is not None and not (1 <= score <= 5):
+                flash('评价维度分值必须在1-5之间', 'warning')
+                return redirect(url_for('student.review_activity', activity_id=activity_id))
+
+        if len(review_text) < 10:
+            flash('请至少输入10个字的评价内容', 'warning')
+            return redirect(url_for('student.review_activity', activity_id=activity_id))
+
+        existing_review = db.session.execute(
+            db.select(ActivityReview).filter_by(activity_id=activity_id, user_id=current_user.id)
+        ).scalar_one_or_none()
+
+        is_new_review = existing_review is None
         
-        # 创建评价记录
-        review = ActivityReview(
-            activity_id=activity_id,
-            user_id=current_user.id,
-            rating=rating,
-            content_quality=content_quality,
-            organization=organization,
-            facility=facility,
-            review=review_text,
-            is_anonymous=is_anonymous
-        )
-        
-        db.session.add(review)
-        # 添加积分奖励
-        student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
-        if student_info:
-            add_points(student_info.id, 5, "提交活动评价")
-        
-        db.session.commit()
-        flash('评价提交成功！获得5积分奖励', 'success')
-        log_action('submit_review', f'提交活动评价: {activity_id}')
+        if is_new_review:
+            review = ActivityReview(
+                activity_id=activity_id,
+                user_id=current_user.id,
+                rating=rating,
+                content_quality=content_quality,
+                organization=organization,
+                facility=facility,
+                review=review_text,
+                is_anonymous=is_anonymous
+            )
+            db.session.add(review)
+
+            student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
+            if student_info:
+                student_info.points += 5
+                db.session.add(PointsHistory(
+                    student_id=student_info.id,
+                    points=5,
+                    reason='提交活动评价',
+                    activity_id=activity_id
+                ))
+
+            db.session.commit()
+            flash('评价提交成功！获得5积分奖励', 'success')
+            log_action('submit_review', f'提交活动评价: {activity_id}')
+        else:
+            existing_review.rating = rating
+            existing_review.content_quality = content_quality
+            existing_review.organization = organization
+            existing_review.facility = facility
+            existing_review.review = review_text
+            existing_review.is_anonymous = is_anonymous
+
+            db.session.commit()
+            flash('评价更新成功', 'success')
+            log_action('update_review', f'更新活动评价: {activity_id}')
         
         return redirect(url_for('student.activity_detail', id=activity_id))
     except Exception as e:
@@ -827,12 +975,13 @@ def recommend():
 
 @student_bp.route('/api/attendance/checkin', methods=['POST'])
 @student_required
-@csrf.exempt  # 豁免CSRF保护
 def checkin():
     try:
-        # 从请求数据中获取 key 和 activity_id
-        data = request.get_json()
+        # 从请求数据中获取 key 和 activity_id（兼容 JSON 与表单）
+        data = request.get_json(silent=True) or request.form or {}
         key = data.get('key') or data.get('checkin_key')
+        if isinstance(key, str):
+            key = key.strip()
         activity_id = data.get('activity_id')
 
         logger.info(f"收到签到请求: 原始key={key}, 原始activity_id={activity_id}, 请求数据={data}")
@@ -866,6 +1015,15 @@ def checkin():
             return jsonify({
                 'success': False,
                 'message': '签到参数不完整'
+            })
+
+        try:
+            activity_id = int(activity_id)
+        except (TypeError, ValueError):
+            logger.warning(f"签到活动ID格式错误: activity_id={activity_id}")
+            return jsonify({
+                'success': False,
+                'message': '活动ID格式错误'
             })
 
         activity = db.session.get(Activity, activity_id)
@@ -983,6 +1141,25 @@ def messages():
                 Message.receiver_id == current_user.id
             ))
         
+        # 修复历史数据中 created_at 为空导致“时间未知”
+        missing_time_count = Message.query.filter(
+            or_(
+                Message.sender_id == current_user.id,
+                Message.receiver_id == current_user.id
+            ),
+            Message.created_at.is_(None)
+        ).count()
+        if missing_time_count:
+            now = get_localized_now()
+            Message.query.filter(
+                or_(
+                    Message.sender_id == current_user.id,
+                    Message.receiver_id == current_user.id
+                ),
+                Message.created_at.is_(None)
+            ).update({Message.created_at: now}, synchronize_session=False)
+            db.session.commit()
+
         # 不使用复杂的连接，保持简单查询
         messages = query.order_by(Message.created_at.desc()).paginate(page=page, per_page=10)
         
@@ -992,7 +1169,7 @@ def messages():
                               display_datetime=display_datetime)
     except Exception as e:
         logger.error(f"Error in messages page: {e}")
-        flash('加载消息列表时出错', 'danger')
+        flash('加载反馈列表时出错', 'danger')
         return redirect(url_for('student.dashboard'))
 
 @student_bp.route('/message/<int:id>')
@@ -1050,7 +1227,7 @@ def create_message():
         class MessageForm(FlaskForm):
             subject = StringField('主题', validators=[DataRequired(message='主题不能为空')])
             content = TextAreaField('内容', validators=[DataRequired(message='内容不能为空')])
-            submit = SubmitField('发送消息')
+            submit = SubmitField('提交反馈')
         
         form = MessageForm()
         
@@ -1082,19 +1259,50 @@ def create_message():
             db.session.add(message)
             db.session.commit()
             
-            log_action('send_message', f'发送消息给管理员: {subject}')
-            flash('消息发送成功', 'success')
+            log_action('send_message', f'提交问题反馈给管理员: {subject}')
+            flash('反馈提交成功', 'success')
             return redirect(url_for('student.messages'))
         
-        return render_template('student/message_form.html', title='发送消息', form=form)
+        return render_template('student/message_form.html', title='提交问题反馈', form=form)
     except Exception as e:
         logger.error(f"Error in create_message: {e}")
-        flash('发送消息时出错', 'danger')
+        flash('提交反馈时出错', 'danger')
         return redirect(url_for('student.messages'))
+
+@student_bp.route('/messages/mark_all_read', methods=['POST'])
+@student_required
+def mark_all_messages_read():
+    try:
+        updated = Message.query.filter(
+            Message.receiver_id == current_user.id,
+            Message.is_read == False
+        ).update({Message.is_read: True}, synchronize_session=False)
+        db.session.commit()
+        flash(f'已标记 {updated} 条未读消息', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in mark_all_messages_read: {e}")
+        flash('一键已读失败，请稍后重试', 'danger')
+    return redirect(url_for('student.messages', filter=request.args.get('filter', 'all')))
+
+@student_bp.route('/messages/delete_read', methods=['POST'])
+@student_required
+def delete_read_messages():
+    try:
+        deleted = Message.query.filter(
+            Message.receiver_id == current_user.id,
+            Message.is_read == True
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        flash(f'已删除 {deleted} 条已读消息', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in delete_read_messages: {e}")
+        flash('删除已读消息失败，请稍后重试', 'danger')
+    return redirect(url_for('student.messages', filter=request.args.get('filter', 'all')))
 
 @student_bp.route('/message/<int:id>/delete', methods=['POST'])
 @student_required
-@csrf.exempt  # 豁免CSRF保护
 def delete_message(id):
     try:
         message = db.get_or_404(Message, id)
@@ -1121,6 +1329,7 @@ def delete_message(id):
 @student_required
 def notifications():
     try:
+        _ensure_activity_start_reminders(current_user.id)
         page = request.args.get('page', 1, type=int)
         
         # 获取当前时间，确保带有时区信息
@@ -1129,9 +1338,15 @@ def notifications():
         # 获取有效的通知（未过期或无过期日期）
         notifications = Notification.query.filter(
             or_(
+                Notification.is_public == True,
+                and_(Notification.is_public == False, Notification.created_by == current_user.id)
+            ),
+            or_(
                 Notification.expiry_date == None,
                 Notification.expiry_date >= now
-            )
+            ),
+            Notification.title.isnot(None),
+            Notification.content.isnot(None)
         ).order_by(Notification.is_important.desc(), Notification.created_at.desc()).paginate(page=page, per_page=10)
         
         # 获取当前用户已读通知的ID列表
@@ -1153,7 +1368,18 @@ def notifications():
 @student_required
 def view_notification(id):
     try:
-        notification = db.get_or_404(Notification, id)
+        now = ensure_timezone_aware(datetime.now())
+        notification = Notification.query.filter(
+            Notification.id == id,
+            or_(
+                Notification.is_public == True,
+                and_(Notification.is_public == False, Notification.created_by == current_user.id)
+            ),
+            or_(
+                Notification.expiry_date == None,
+                Notification.expiry_date >= now
+            )
+        ).first_or_404()
         
         # 标记为已读
         read_record = db.session.execute(db.select(NotificationRead).filter_by(
@@ -1181,7 +1407,18 @@ def view_notification(id):
 @student_required
 def mark_notification_read(id):
     try:
-        notification = db.get_or_404(Notification, id)
+        now = ensure_timezone_aware(datetime.now())
+        notification = Notification.query.filter(
+            Notification.id == id,
+            or_(
+                Notification.is_public == True,
+                and_(Notification.is_public == False, Notification.created_by == current_user.id)
+            ),
+            or_(
+                Notification.expiry_date == None,
+                Notification.expiry_date >= now
+            )
+        ).first_or_404()
         
         # 检查是否已经标记为已读
         read_record = db.session.execute(db.select(NotificationRead).filter_by(
@@ -1206,31 +1443,38 @@ def mark_notification_read(id):
 @student_required
 def get_unread_notifications():
     try:
+        _ensure_activity_start_reminders(current_user.id)
         # 获取当前时间，确保带有时区信息
         now = ensure_timezone_aware(datetime.now())
         
-        # 获取未读的重要通知
-        important_notifications = Notification.query.filter(
-            Notification.is_important == True,
+        # 获取未读通知（公开通知，包含重要与普通）
+        unread_notifications = Notification.query.filter(
+            or_(
+                Notification.is_public == True,
+                and_(Notification.is_public == False, Notification.created_by == current_user.id)
+            ),
             or_(
                 Notification.expiry_date == None,
                 Notification.expiry_date >= now
             ),
+            Notification.title.isnot(None),
+            Notification.content.isnot(None),
             ~Notification.id.in_(
                 db.session.query(NotificationRead.notification_id).filter(
                     NotificationRead.user_id == current_user.id
                 )
             )
-        ).order_by(Notification.created_at.desc()).all()
+        ).order_by(Notification.is_important.desc(), Notification.created_at.desc()).limit(20).all()
         
         # 格式化通知数据
         notifications_data = []
-        for notification in important_notifications:
+        for notification in unread_notifications:
             notifications_data.append({
                 'id': notification.id,
                 'title': notification.title,
                 'content': notification.content,
-                'created_at': notification.created_at.strftime('%Y-%m-%d %H:%M')
+                'is_important': bool(notification.is_important),
+                'created_at': display_datetime(notification.created_at, None, '%Y-%m-%d %H:%M') if notification.created_at else ''
             })
         
         return jsonify({

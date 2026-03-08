@@ -24,7 +24,7 @@
                     <select class="form-select" id="receiver_id" name="receiver_id" required>
                         <option value="">-- 选择收件人 --</option>
                         {% for student in students %}
-                        <option value="{{ student.id }}">
+                        <option value="{{ student.id }}" {% if prefill_receiver_id and prefill_receiver_id == student.id %}selected{% endif %}>
                             {{ student.username }} 
                             {% if student.student_info %}
                                 - {{ student.student_info.real_name }} ({{ student.student_info.student_id }})
@@ -36,12 +36,12 @@
                 
                 <div class="mb-3">
                     <label for="subject" class="form-label">主题 <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="subject" name="subject" required>
+                    <input type="text" class="form-control" id="subject" name="subject" value="{{ prefill_subject or '' }}" required>
                 </div>
                 
                 <div class="mb-3">
                     <label for="content" class="form-label">内容 <span class="text-danger">*</span></label>
-                    <textarea class="form-control" id="content" name="content" rows="5" required></textarea>
+                    <textarea class="form-control" id="content" name="content" rows="5" required>{{ prefill_content or '' }}</textarea>
                 </div>
                 
                 <div class="d-flex justify-content-between">

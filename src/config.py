@@ -109,7 +109,7 @@ class Config:
     # 上传文件配置
     UPLOAD_FOLDER = UPLOAD_FOLDER
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'docx', 'xlsx', 'pptx', 'txt', 'zip'}
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
+    MAX_CONTENT_LENGTH = 32 * 1024 * 1024  # 32MB
     
     # 数据库配置
     INSTANCE_PATH = INSTANCE_PATH
@@ -210,7 +210,7 @@ class Config:
     # AI模型API URL（以/结尾）
     AI_MODEL_API_URL = os.environ.get('AI_MODEL_API_URL') or 'https://generativelanguage.googleapis.com/'
     # Google Gemini API 密钥
-    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY') or ''
     
     @classmethod
     def init_app(cls, app):
@@ -238,10 +238,24 @@ class ProductionConfig(Config):
     """生产环境配置"""
     DEBUG = False
     TESTING = False
+    SESSION_COOKIE_SECURE = True
     
     @classmethod
     def init_app(cls, app):
         Config.init_app(app)
+
+        required_env_keys = ['SECRET_KEY', 'SECURITY_PASSWORD_SALT']
+        missing_keys = [key for key in required_env_keys if not os.environ.get(key)]
+        if missing_keys:
+            raise RuntimeError(f"生产环境缺少必要环境变量: {', '.join(missing_keys)}")
+
+        insecure_defaults = {
+            'SECRET_KEY': 'dev-secret-key-cqnu-association',
+            'SECURITY_PASSWORD_SALT': 'cqnu-association-salt'
+        }
+        for key, insecure_value in insecure_defaults.items():
+            if app.config.get(key) == insecure_value:
+                raise RuntimeError(f"生产环境禁止使用默认{key}，请在环境变量中配置安全值")
         
         # 生产环境下的额外配置
         import logging

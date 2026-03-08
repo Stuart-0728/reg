@@ -72,6 +72,9 @@
                 
                 <div>
                     {% if message.receiver_id == current_user.id %}
+                    <button type="button" class="btn btn-outline-primary me-2" id="aiReplyBtn">
+                        <i class="fas fa-wand-magic-sparkles me-1"></i>一键生成回复
+                    </button>
                     <a href="{{ url_for('admin.create_message') }}" class="btn btn-primary">
                         <i class="fas fa-reply me-1"></i>回复
                     </a>
@@ -89,3 +92,46 @@
     </div>
 </div>
 {% endblock %} 
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const aiReplyBtn = document.getElementById('aiReplyBtn');
+    if (!aiReplyBtn) return;
+
+    const csrfToken = '{{ csrf_token() }}';
+    aiReplyBtn.addEventListener('click', async function() {
+        const original = aiReplyBtn.innerHTML;
+        aiReplyBtn.disabled = true;
+        aiReplyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+
+        try {
+            const resp = await fetch('{{ url_for("admin.ai_generate_message_reply_draft", id=message.id) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({})
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data.success) {
+                throw new Error(data.message || '生成失败');
+            }
+
+            const receiverId = encodeURIComponent(data.receiver_id || '');
+            const subject = encodeURIComponent(data.reply_subject || '回复：你的反馈');
+            const content = encodeURIComponent(data.reply_content || '');
+            const targetUrl = `{{ url_for('admin.create_message') }}?receiver_id=${receiverId}&subject=${subject}&content=${content}`;
+            window.location.href = targetUrl;
+        } catch (error) {
+            alert(error.message || '生成失败');
+        } finally {
+            aiReplyBtn.disabled = false;
+            aiReplyBtn.innerHTML = original;
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -14,7 +14,7 @@
                     </div>
                     <div>
                         <h2 class="fw-bold mb-1 text-dark">欢迎回来，{{ current_user.username }}</h2>
-                        <p class="text-muted mb-0">系统管理中心为您提供全方位的数据管控与业务支撑。</p>
+                        <p class="text-muted mb-0">系统管理中心</p>
                     </div>
                 </div>
             </div>
@@ -78,7 +78,7 @@
                         <h2 class="display-5 fw-bolder mb-0 text-dark">{{ total_registrations }}</h2>
                     </div>
                     <div class="mt-4">
-                        <a href="#" class="text-decoration-none text-muted small fw-medium hover-success transition-all">
+                        <a href="{{ url_for('admin.activities') }}" class="text-decoration-none text-muted small fw-medium hover-success transition-all">
                             <i class="fas fa-arrow-right me-1"></i>查看详情
                         </a>
                     </div>
@@ -151,13 +151,13 @@
                     </a>
                 </div>
                 <div class="col-md-3 col-sm-6">
-                    <a href="{{ url_for('admin.announcements') }}" class="text-decoration-none">
+                    <a href="{{ url_for('admin.messages') }}" class="text-decoration-none">
                         <div class="card border-0 shadow-sm rounded-4 hover-rise text-center w-100 py-4 h-100 transition-all">
                             <div class="mx-auto bg-warning bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center mb-3 shadow-sm" style="width: 60px; height: 60px;">
-                                <i class="fas fa-bullhorn text-warning fs-4"></i>
+                                <i class="fas fa-comment-dots text-warning fs-4"></i>
                             </div>
-                            <h6 class="fw-bold text-dark mb-1">通知中心</h6>
-                            <span class="text-muted small">发布系统通知</span>
+                            <h6 class="fw-bold text-dark mb-1">问题反馈</h6>
+                            <span class="text-muted small">查看与发送站内信</span>
                         </div>
                     </a>
                 </div>
@@ -176,7 +176,7 @@
                 </div>
                 <div class="card-body px-4 pt-2">
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle">
+                        <table class="table table-hover align-middle table-cell-scroll">
                             <thead class="text-muted small">
                                 <tr>
                                     <th class="ps-0 border-0">活动标题</th>
@@ -240,7 +240,9 @@
                         {% for student in recent_students %}
                         <div class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between bg-transparent">
                             <div class="d-flex align-items-center">
-                                <img src="{{ student.avatar_url or url_for('static', filename='img/default_avatar.png') }}" class="rounded-circle me-3 border shadow-sm" width="45" height="45" alt="Avatar">
+                                <div class="recent-student-avatar rounded-circle me-3 border shadow-sm d-flex align-items-center justify-content-center">
+                                    {{ (student.student_info.real_name if student.student_info and student.student_info.real_name else student.username)[0]|upper }}
+                                </div>
                                 <div>
                                     <h6 class="mb-0 fw-bold text-dark">{{ student.username }}</h6>
                                     <small class="text-muted"><i class="fas fa-id-card me-1"></i>{{ student.student_info.student_id if student.student_info else '未绑定' }}</small>
@@ -272,6 +274,14 @@
 .hover-rise:hover {
     transform: translateY(-8px);
     box-shadow: 0 15px 35px rgba(0,0,0,0.1) !important;
+}
+
+.recent-student-avatar {
+    width: 45px;
+    height: 45px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: #fff;
+    font-weight: 700;
 }
 </style>
 {% endblock %}

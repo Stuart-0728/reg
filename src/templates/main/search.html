@@ -38,8 +38,8 @@
                                 <div class="card-body">
                                     <p class="card-text text-truncate">{{ activity.description|striptags }}</p>
                                     <p class="mb-1"><i class="bi bi-geo-alt-fill text-primary"></i> {{ activity.location }}</p>
-                                    <p class="mb-1"><i class="bi bi-calendar-event-fill text-primary"></i> {{ activity.start_time.strftime('%Y-%m-%d %H:%M') }}</p>
-                                    <p class="mb-1"><i class="bi bi-clock-fill text-primary"></i> 报名截止: {{ activity.registration_deadline.strftime('%Y-%m-%d %H:%M') }}</p>
+                                    <p class="mb-1"><i class="bi bi-calendar-event-fill text-primary"></i> {{ display_datetime(activity.start_time, None, '%Y-%m-%d %H:%M') }}</p>
+                                    <p class="mb-1"><i class="bi bi-clock-fill text-primary"></i> 报名截止: {{ display_datetime(activity.registration_deadline, None, '%Y-%m-%d %H:%M') }}</p>
                                 </div>
                                 <div class="card-footer bg-transparent">
                                     {% if current_user.is_authenticated %}

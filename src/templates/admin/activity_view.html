@@ -12,7 +12,7 @@
                         <h3 class="card-title mb-0">
                             {{ activity.title }}
                             {% if activity.is_featured %}
-                            <span class="badge bg-warning ms-2" title="重点活动"><i class="fas fa-star"></i> 重点活动</span>
+                            <span class="badge featured-badge ms-2" title="重点活动"><i class="fas fa-star"></i> 重点活动</span>
                             {% endif %}
                         </h3>
                         <div>
@@ -36,7 +36,7 @@
                     <div class="mb-4">
                         <h5 class="mb-3 text-dark fw-bold"><i class="fas fa-info-circle me-2 text-primary"></i>活动详情</h5>
                         <div class="p-3 bg-light rounded">
-                            <p class="mb-0">{{ activity.description|safe }}</p>
+                            <p class="mb-0">{{ activity.description|default('', true)|striptags|replace('\n', '<br>')|safe }}</p>
                         </div>
                     </div>
 
@@ -81,45 +81,62 @@
                     <div class="mb-4">
                         <h5 class="mb-3 text-dark fw-bold"><i class="fas fa-user-graduate me-2 text-primary"></i>报名学生</h5>
                         {% if registrations %}
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>学号</th>
-                                        <th>姓名</th>
-                                        <th>学院</th>
-                                        <th>专业</th>
-                                        <th>报名时间</th>
-                                        <th>签到状态</th>
-                                        <th>操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for reg in registrations %}
-                                    <tr>
-                                        <td>{{ reg.student_id }}</td>
-                                        <td>{{ reg.student_name }}</td>
-                                        <td>{{ reg.college }}</td>
-                                        <td>{{ reg.major }}</td>
-                                        <td>{{ display_datetime(reg.registration_time, 'Asia/Shanghai') }}</td>
-                                        <td>
-                                            {% if reg.check_in_time %}
-                                            <span class="badge bg-success">已签到 ({{ display_datetime(reg.check_in_time, 'Asia/Shanghai') }})</span>
-                                            {% else %}
-                                            <span class="badge bg-secondary">未签到</span>
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            {% if reg.check_in_time %}
-                                            <button class="btn btn-sm btn-outline-danger checkin-btn" onclick="cancelCheckin({{ reg.id }})" data-no-global-loading="true">取消签到</button>
-                                            {% else %}
-                                            <button class="btn btn-sm btn-outline-success checkin-btn" onclick="manualCheckin({{ reg.id }})" data-no-global-loading="true">签到</button>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                        <div class="activity-signup-split-table">
+                            <div class="table-responsive activity-signup-info-wrap">
+                                <table class="table table-hover align-middle mb-0 activity-signup-info-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>学号</th>
+                                            <th>姓名</th>
+                                            <th>学院</th>
+                                            <th>专业</th>
+                                            <th>报名时间</th>
+                                            <th>签到状态</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for reg in registrations %}
+                                        <tr data-row-index="{{ loop.index0 }}">
+                                            <td>{{ reg.student_id }}</td>
+                                            <td>{{ reg.student_name }}</td>
+                                            <td>{{ reg.college }}</td>
+                                            <td>{{ reg.major }}</td>
+                                            <td>{{ display_datetime(reg.registration_time, 'Asia/Shanghai') }}</td>
+                                            <td>
+                                                {% if reg.check_in_time %}
+                                                <span class="badge bg-success">已签到 ({{ display_datetime(reg.check_in_time, 'Asia/Shanghai') }})</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary">未签到</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="activity-signup-action-wrap">
+                                <table class="table align-middle mb-0 activity-signup-action-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for reg in registrations %}
+                                        <tr data-row-index="{{ loop.index0 }}">
+                                            <td>
+                                                {% if reg.check_in_time %}
+                                                <button class="btn btn-sm btn-outline-danger checkin-btn" onclick="cancelCheckin({{ reg.id }})" data-no-global-loading="true">取消签到</button>
+                                                {% else %}
+                                                <button class="btn btn-sm btn-outline-success checkin-btn" onclick="manualCheckin({{ reg.id }})" data-no-global-loading="true">签到</button>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         {% else %}
                         <div class="alert alert-info">
@@ -148,7 +165,7 @@
                     <h5 class="card-title mb-4"><i class="fas fa-info-circle me-2 text-primary"></i>基本信息</h5>
                     
                     <div class="d-flex align-items-center mb-3 p-3 rounded bg-light">
-                        <div class="me-3 bg-transparent rounded-circle p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <div class="me-3 rounded-circle p-2 d-flex align-items-center justify-content-center text-primary bg-white border" style="width: 40px; height: 40px;">
                             <i class="fas fa-map-marker-alt"></i>
                         </div>
                         <div>
@@ -158,7 +175,7 @@
                     </div>
                     
                     <div class="d-flex align-items-center mb-3 p-3 rounded bg-light">
-                        <div class="me-3 bg-success rounded-circle p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <div class="me-3 rounded-circle p-2 d-flex align-items-center justify-content-center text-success bg-white border" style="width: 40px; height: 40px;">
                             <i class="fas fa-calendar-alt"></i>
                         </div>
                         <div>
@@ -168,7 +185,7 @@
                     </div>
                     
                     <div class="d-flex align-items-center mb-3 p-3 rounded bg-light">
-                        <div class="me-3 bg-danger rounded-circle p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <div class="me-3 rounded-circle p-2 d-flex align-items-center justify-content-center text-danger bg-white border" style="width: 40px; height: 40px;">
                             <i class="fas fa-calendar-times"></i>
                         </div>
                         <div>
@@ -178,7 +195,7 @@
                     </div>
                     
                     <div class="d-flex align-items-center mb-3 p-3 rounded bg-light">
-                        <div class="me-3 bg-warning rounded-circle p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <div class="me-3 rounded-circle p-2 d-flex align-items-center justify-content-center text-warning bg-white border" style="width: 40px; height: 40px;">
                             <i class="fas fa-hourglass-end"></i>
                         </div>
                         <div>
@@ -188,7 +205,7 @@
                     </div>
                     
                     <div class="d-flex align-items-center mb-3 p-3 rounded bg-light">
-                        <div class="me-3 bg-info rounded-circle p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <div class="me-3 rounded-circle p-2 d-flex align-items-center justify-content-center text-info bg-white border" style="width: 40px; height: 40px;">
                             <i class="fas fa-calendar-plus"></i>
                         </div>
                         <div>
@@ -204,7 +221,7 @@
                     </div>
                     
                     <div class="d-flex align-items-center mb-3 p-3 rounded bg-light">
-                        <div class="me-3 bg-secondary rounded-circle p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <div class="me-3 rounded-circle p-2 d-flex align-items-center justify-content-center text-secondary bg-white border" style="width: 40px; height: 40px;">
                             <i class="fas fa-tag"></i>
                         </div>
                         <div>
@@ -220,7 +237,7 @@
                     </div>
                     
                     <div class="d-flex align-items-center mb-3 p-3 rounded bg-light">
-                        <div class="me-3 bg-transparent rounded-circle p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <div class="me-3 rounded-circle p-2 d-flex align-items-center justify-content-center text-primary bg-white border" style="width: 40px; height: 40px;">
                             <i class="fas fa-check-circle"></i>
                         </div>
                         <div>
@@ -233,7 +250,7 @@
                                 {% elif activity.status == 'approved' %}
                                 <span class="badge bg-success activity-status-badge">已批准</span>
                                 {% elif activity.status == 'active' %}
-                                <span class="badge bg-transparent activity-status-badge">进行中</span>
+                                <span class="badge bg-primary activity-status-badge">进行中</span>
                                 {% elif activity.status == 'completed' %}
                                 <span class="badge bg-info activity-status-badge">已完成</span>
                                 {% elif activity.status == 'cancelled' %}
@@ -246,7 +263,7 @@
                     </div>
                     
                     <div class="d-flex align-items-center mb-3 p-3 rounded bg-light">
-                        <div class="me-3 {% if activity.checkin_enabled %}bg-success{% else %}bg-secondary{% endif %} rounded-circle p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                        <div class="me-3 rounded-circle p-2 d-flex align-items-center justify-content-center {% if activity.checkin_enabled %}text-success{% else %}text-secondary{% endif %} bg-white border" style="width: 40px; height: 40px;">
                             <i class="fas fa-clipboard-check"></i>
                         </div>
                         <div>
@@ -335,13 +352,21 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>您确定要删除活动 <strong>{{ activity.title }}</strong> 吗？此操作无法撤销。</p>
+                <div class="alert alert-warning mb-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    删除后将标记为已取消，相关报名记录将保留。
+                </div>
+                <p class="mb-0">如需彻底删除活动及关联数据，请点击“永久删除”。此操作不可恢复。</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <form action="{{ url_for('admin.delete_activity', id=activity.id) }}" method="post">
+                <form action="{{ url_for('admin.delete_activity', id=activity.id) }}" method="post" class="d-inline" data-no-global-loading="true">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-danger">确认删除</button>
+                    <button type="submit" class="btn btn-outline-danger" data-no-global-loading="true">删除（取消活动）</button>
+                </form>
+                <form action="{{ url_for('admin.delete_activity', id=activity.id) }}?force=true" method="post" class="d-inline" data-no-global-loading="true">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger" data-no-global-loading="true">永久删除</button>
                 </form>
             </div>
         </div>
@@ -393,7 +418,7 @@
                                 statusText = '已批准';
                                 break;
                             case 'active':
-                                badgeClass = 'bg-transparent';
+                                badgeClass = 'bg-primary';
                                 statusText = '进行中';
                                 break;
                             case 'completed':
@@ -515,6 +540,117 @@
                 }
             });
         }
+
+        const infoRows = document.querySelectorAll('.activity-signup-info-table tbody tr[data-row-index]');
+        const actionRows = document.querySelectorAll('.activity-signup-action-table tbody tr[data-row-index]');
+        if (infoRows.length && actionRows.length && infoRows.length === actionRows.length) {
+            const clearHover = () => {
+                infoRows.forEach(row => row.classList.remove('split-row-hover'));
+                actionRows.forEach(row => row.classList.remove('split-row-hover'));
+            };
+
+            const bindHover = (rows, targetRows) => {
+                rows.forEach(row => {
+                    row.addEventListener('mouseenter', () => {
+                        clearHover();
+                        const idx = row.getAttribute('data-row-index');
+                        const target = Array.from(targetRows).find(item => item.getAttribute('data-row-index') === idx);
+                        row.classList.add('split-row-hover');
+                        if (target) target.classList.add('split-row-hover');
+                    });
+                    row.addEventListener('mouseleave', clearHover);
+                });
+            };
+
+            bindHover(infoRows, actionRows);
+            bindHover(actionRows, infoRows);
+        }
     });
 </script>
+{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.activity-signup-table-wrap {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+.activity-signup-split-table {
+    display: flex;
+    align-items: stretch;
+}
+
+.activity-signup-info-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+.activity-signup-info-wrap::-webkit-scrollbar {
+    height: 8px;
+}
+
+.activity-signup-info-table {
+    width: max-content;
+    min-width: 100%;
+}
+
+.activity-signup-action-wrap {
+    flex: 0 0 150px;
+    width: 150px;
+    background: #fff;
+    border-left: 1px solid #e9edf3;
+}
+
+.activity-signup-action-table {
+    width: 100%;
+    margin-bottom: 0;
+    table-layout: fixed;
+}
+
+.activity-signup-info-table th,
+.activity-signup-info-table td,
+.activity-signup-action-table th,
+.activity-signup-action-table td {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    white-space: nowrap;
+}
+
+.activity-signup-info-table tbody td,
+.activity-signup-action-table tbody td {
+    height: 72px;
+    vertical-align: middle;
+}
+
+.activity-signup-action-table th,
+.activity-signup-action-table td {
+    text-align: center;
+}
+
+.activity-signup-info-table tbody tr.split-row-hover td,
+.activity-signup-action-table tbody tr.split-row-hover td {
+    background: #f8f9fa;
+}
+
+@media (max-width: 991.98px) {
+    .activity-signup-action-wrap {
+        flex: 0 0 140px;
+        width: 140px;
+    }
+
+    .activity-signup-info-table {
+        min-width: 860px;
+    }
+
+    .activity-signup-action-table .checkin-btn {
+        white-space: nowrap;
+    }
+}
+</style>
 {% endblock %}

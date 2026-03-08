@@ -8,6 +8,32 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 {% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+@media (max-width: 576px) {
+    #action-buttons {
+        align-items: flex-start !important;
+        gap: 0.6rem;
+    }
+
+    #action-buttons > .student-action-main {
+        width: 100%;
+    }
+
+    #action-buttons > .student-action-main .btn,
+    #action-buttons > .student-action-main .badge,
+    #action-buttons > .student-action-main .alert {
+        margin-bottom: 0.35rem;
+    }
+
+    #action-buttons > a.btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
     <div class="row">
@@ -18,7 +44,7 @@
                     <div class="d-flex flex-wrap align-items-center mb-3">
                         <span class="badge bg-transparent me-2">{{ activity.type }}</span>
                         <span class="text-muted small">
-                            <i class="fas fa-calendar-alt me-1"></i> 发布于 {{ display_datetime(activity.created_at) }}
+                            <i class="fas fa-calendar-alt me-1"></i> 发布于 {{ activity.created_at.strftime('%Y-%m-%d %H:%M') if activity.created_at else '未知' }}
                         </span>
                     </div>
                     
@@ -35,14 +61,14 @@
                     <div class="activity-description mb-4">
                         <h5 class="fw-bold mb-3">活动介绍</h5>
                         <div class="formatted-content">
-                            {{ activity.description|safe }}
+                            {{ activity.description|default('', true)|striptags|replace('\n', '<br>')|safe }}
                         </div>
                     </div>
                     
                     <div class="activity-requirements mb-4">
                         <h5 class="fw-bold mb-3">活动要求</h5>
                         <div class="formatted-content">
-                            {{ activity.requirements|safe }}
+                            {{ activity.requirements|default('', true)|striptags|replace('\n', '<br>')|safe }}
                         </div>
                     </div>
                     
@@ -57,7 +83,7 @@
                     </div>
                     
                     <div id="action-buttons" class="d-flex justify-content-between align-items-center flex-wrap">
-                        <div class="mb-3 mb-md-0">
+                        <div class="mb-3 mb-md-0 d-flex flex-wrap align-items-center gap-2 student-action-main">
                             {% if registration %}
                                 {% if registration.status == 'attended' or registration.check_in_time %}
                                     <div class="alert alert-info d-inline-block p-2">
@@ -85,10 +111,18 @@
                                 <button id="register-btn" class="btn btn-primary">
                                     <i class="fas fa-user-plus me-1"></i>立即报名
                                 </button>
+                                {% elif activity.status == 'active' and activity.registration_start_time and safe_greater_than(activity.registration_start_time, now) %}
+                                    <button class="btn btn-secondary" disabled>
+                                        <i class="fas fa-hourglass-start me-1"></i>报名未开始
+                                    </button>
                                 {% elif activity.status == 'active' and (activity.registration_deadline and safe_greater_than_equal(activity.registration_deadline, now)) %}
                                     {% if activity.max_participants > 0 and registered_count >= activity.max_participants %}
                                         <button class="btn btn-secondary" disabled>
                                             <i class="fas fa-users-slash me-1"></i>名额已满
+                                        </button>
+                                    {% else %}
+                                        <button class="btn btn-secondary" disabled>
+                                            <i class="fas fa-ban me-1"></i>当前不可报名
                                         </button>
                                     {% endif %}
                                 {% else %}
@@ -98,9 +132,51 @@
                                 {% endif %}
                             {% endif %}
                         </div>
-                        <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary">
+                        <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary mt-2 mt-md-0">
                             <i class="fas fa-arrow-left me-1"></i>返回活动列表
                         </a>
+                    </div>
+
+                    {% if activity.status == 'completed' and registration and (registration.status == 'attended' or registration.check_in_time) %}
+                    <div class="mt-4 d-flex justify-content-end">
+                        <a href="{{ url_for('student.review_activity', activity_id=activity.id) }}" class="btn btn-outline-primary">
+                            <i class="fas fa-star me-1"></i>{{ '我的评价' if current_user_review else '去评价（+5积分）' }}
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    <hr class="my-4">
+
+                    <div class="activity-reviews">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0">活动评价</h5>
+                            <span class="text-muted small">{{ review_count }} 条评价</span>
+                        </div>
+
+                        {% if review_count > 0 %}
+                        <div class="mb-3">
+                            <span class="badge bg-warning text-dark">综合评分 {{ '%.1f'|format(average_rating) }}/5</span>
+                        </div>
+                        <div class="list-group list-group-flush">
+                            {% for review in reviews[:5] %}
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="fw-semibold">{{ '匿名同学' if review.is_anonymous else '同学' }}</span>
+                                    <small class="text-muted">{{ review.display_created_at }}</small>
+                                </div>
+                                <div class="text-warning small mb-1">
+                                    {% for i in range(review.rating) %}<i class="fas fa-star"></i>{% endfor %}{% for i in range(5 - review.rating) %}<i class="far fa-star"></i>{% endfor %}
+                                </div>
+                                <p class="mb-0 text-muted">{{ review.review }}</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% if review_count > 5 %}
+                        <small class="text-muted d-block mt-2">仅展示最近 5 条评价</small>
+                        {% endif %}
+                        {% else %}
+                        <p class="text-muted mb-0">暂无评价，欢迎第一个分享你的活动体验。</p>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -111,8 +187,11 @@
                     <h5 class="fw-bold mb-3">活动信息</h5>
                     <ul class="list-unstyled">
                         <li class="mb-3"><i class="fas fa-map-marker-alt text-primary me-2"></i> <strong>地点:</strong> {{ activity.location }}</li>
-                        <li class="mb-3"><i class="fas fa-clock text-primary me-2"></i> <strong>时间:</strong> {{ display_datetime(activity.start_time) }} 至 {{ display_datetime(activity.end_time) }}</li>
-                        <li class="mb-3"><i class="fas fa-hourglass-end text-primary me-2"></i> <strong>报名截止:</strong> {{ display_datetime(activity.registration_deadline) }}</li>
+                        <li class="mb-3"><i class="fas fa-clock text-primary me-2"></i> <strong>时间:</strong> {{ display_datetime(activity.start_time, 'Asia/Shanghai') }} 至 {{ display_datetime(activity.end_time, 'Asia/Shanghai') }}</li>
+                        {% if activity.registration_start_time %}
+                        <li class="mb-3"><i class="fas fa-play-circle text-primary me-2"></i> <strong>报名开始:</strong> {{ display_datetime(activity.registration_start_time, 'Asia/Shanghai') }}</li>
+                        {% endif %}
+                        <li class="mb-3"><i class="fas fa-hourglass-end text-primary me-2"></i> <strong>报名截止:</strong> {{ display_datetime(activity.registration_deadline, 'Asia/Shanghai') }}</li>
                         <li><i class="fas fa-users text-primary me-2"></i> <strong>人数:</strong> 
                             {% if activity.max_participants > 0 %}
                                 <span id="registration-count">{{ registered_count }}</span>/{{ activity.max_participants }}

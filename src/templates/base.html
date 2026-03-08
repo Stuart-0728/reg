@@ -319,9 +319,10 @@
         }
         
         .btn-group {
-            box-shadow: var(--box-shadow);
+            box-shadow: none;
+            background: transparent;
             border-radius: var(--border-radius);
-            overflow: hidden;
+            overflow: visible;
         }
         
         .btn-group .btn {
@@ -609,13 +610,25 @@
         }
     </style>
 </head>
-<body data-user-logged-in="{{ 'true' if current_user.is_authenticated else 'false' }}" style="padding-top: 100px;">
+<body data-user-logged-in="{{ 'true' if current_user.is_authenticated else 'false' }}" data-user-role="{{ current_user.role.name|lower if current_user.is_authenticated and current_user.role else '' }}" style="padding-top: 100px;">
+    <div id="header-notice-bar" class="header-notice-bar d-none" aria-live="polite">
+        <div class="header-notice-inner">
+            <span class="header-notice-label"><i class="fas fa-bell me-1"></i>通知</span>
+            <div id="header-notice-link" class="header-notice-track" role="button" tabindex="0" aria-label="查看通知详情">
+                <span id="header-notice-content" class="header-notice-content"></span>
+            </div>
+            <button id="header-notice-close" type="button" class="header-notice-close" aria-label="关闭通知">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
     <nav class="navbar navbar-expand-lg glass-nav">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('main.index') }}">
                 <i class="fas fa-graduation-cap me-2"></i>智能社团+
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="切换导航">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
@@ -643,6 +656,9 @@
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('admin.manage_tags') }}">标签管理</a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('admin.announcements') }}">公告管理</a>
+                            </li>
                         {% else %}
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('student.dashboard') }}">我的面板</a>
@@ -655,7 +671,12 @@
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="{{ url_for('student.messages') }}">
-                                    消息 <span id="unread-messages-badge" class="badge bg-danger" style="display: none;"></span>
+                                    问题反馈 <span id="unread-messages-badge" class="badge bg-danger" style="display: none;"></span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{ url_for('student.notifications') }}">
+                                    通知 <span class="badge bg-danger notification-badge" style="display: none;"></span>
                                 </a>
                             </li>
                             <li class="nav-item">
@@ -689,6 +710,9 @@
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     {% if current_user.role.name|lower == 'student' %}
                                         <li><a class="dropdown-item" href="{{ url_for('student.profile') }}">个人资料</a></li>
+                                    {% elif current_user.role.name|lower == 'admin' %}
+                                        <li><a class="dropdown-item" href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
+                                        <li><a class="dropdown-item" href="{{ url_for('admin.messages') }}">站内信</a></li>
                                     {% endif %}
                                     <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">修改密码</a></li>
                                     <li><hr class="dropdown-divider"></li>
@@ -932,7 +956,7 @@
                     });
             }
 
-            if (document.body.dataset.userLoggedIn === 'true') {
+            if (document.body.dataset.userLoggedIn === 'true' && document.body.dataset.userRole === 'student') {
                 updateUnreadMessages();
                 // 每5分钟更新一次（减少频率）
                 setInterval(updateUnreadMessages, 300000);

@@ -16,5 +16,6 @@ requests
 Flask-Session
 Pillow
 pandas
+openpyxl
 psycopg2-binary
 email-validator

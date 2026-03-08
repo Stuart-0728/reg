@@ -4,10 +4,19 @@
 import requests
 import logging
 from datetime import datetime, timedelta
+import pytz
 from src.config import Config
 from src.utils.time_helpers import get_localized_now
 
 logger = logging.getLogger(__name__)
+
+def _get_beijing_now():
+    """获取北京时间（兼容 get_localized_now 返回 naive UTC 的情况）"""
+    now = get_localized_now()
+    beijing_tz = pytz.timezone('Asia/Shanghai')
+    if now.tzinfo is None:
+        return pytz.utc.localize(now).astimezone(beijing_tz)
+    return now.astimezone(beijing_tz)
 
 # 重庆市的adcode（区域编码）
 CHONGQING_ADCODE = '500000'
@@ -139,7 +148,7 @@ def get_weather_data(city_adcode=CHONGQING_ADCODE, extensions='base'):
                 'wind_direction': live_data.get('winddirection', ''),
                 'wind_power': live_data.get('windpower', ''),
                 'report_time': live_data.get('reporttime', ''),
-                'date': get_localized_now().strftime('%Y-%m-%d'),
+                'date': _get_beijing_now().strftime('%Y-%m-%d'),
                 'is_forecast': False
             }
             logger.info(f"获取{weather_info['location']}当前天气成功: {weather_info['description']}")
@@ -215,7 +224,7 @@ def get_openweather_data(city='Chongqing', date=None):
             logger.warning("OpenWeather API密钥未配置")
             return None
         
-        now = get_localized_now()
+        now = _get_beijing_now()
         
         # OpenWeatherMap API URL
         if date and date.date() != now.date():
@@ -260,7 +269,7 @@ def get_openweather_data(city='Chongqing', date=None):
                         'province': '重庆市',
                         'wind_direction': '',
                         'wind_power': '',
-                        'report_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'report_time': _get_beijing_now().strftime('%Y-%m-%d %H:%M:%S'),
                         'date': date.strftime('%Y-%m-%d'),
                         'is_forecast': True,
                         'api_source': 'openweather'
@@ -282,7 +291,7 @@ def get_openweather_data(city='Chongqing', date=None):
                 'province': '重庆市',
                 'wind_direction': '',
                 'wind_power': '',
-                'report_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'report_time': _get_beijing_now().strftime('%Y-%m-%d %H:%M:%S'),
                 'date': now.strftime('%Y-%m-%d'),
                 'is_forecast': False,
                 'api_source': 'openweather'
@@ -383,9 +392,15 @@ def get_activity_weather(activity_start_time):
         return None
     
     try:
-        now = get_localized_now()
-        activity_date = activity_start_time.date()
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        if activity_start_time.tzinfo is None:
+            localized_activity_start_time = pytz.utc.localize(activity_start_time).astimezone(beijing_tz)
+        else:
+            localized_activity_start_time = activity_start_time.astimezone(beijing_tz)
+
+        now = _get_beijing_now()
         current_date = now.date()
+        activity_date = localized_activity_start_time.date()
         
         # 计算活动距离今天的天数
         days_diff = (activity_date - current_date).days
@@ -423,8 +438,8 @@ def get_activity_weather(activity_start_time):
         
         if weather_data:
             # 添加活动相关信息
-            weather_data['activity_date'] = activity_start_time.strftime('%Y-%m-%d')
-            weather_data['activity_time'] = activity_start_time.strftime('%H:%M')
+            weather_data['activity_date'] = localized_activity_start_time.strftime('%Y-%m-%d')
+            weather_data['activity_time'] = localized_activity_start_time.strftime('%H:%M')
             weather_data['is_forecast'] = is_forecast
             weather_data['forecast_note'] = forecast_note
             

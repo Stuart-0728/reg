@@ -41,9 +41,12 @@
                             <h5>活动信息</h5>
                             <ul class="list-group list-group-flush">
                                 <li class="list-group-item"><i class="fas fa-map-marker-alt me-2"></i> <strong>地点：</strong>{{ activity.location }}</li>
-                                <li class="list-group-item"><i class="fas fa-calendar-alt me-2"></i> <strong>开始时间：</strong>{{ display_datetime(activity.start_time) }}</li>
-                                <li class="list-group-item"><i class="fas fa-calendar-check me-2"></i> <strong>结束时间：</strong>{{ display_datetime(activity.end_time) }}</li>
-                                <li class="list-group-item"><i class="fas fa-clock me-2"></i> <strong>报名截止：</strong>{{ display_datetime(activity.registration_deadline) }}</li>
+                                <li class="list-group-item"><i class="fas fa-calendar-alt me-2"></i> <strong>开始时间：</strong>{{ display_datetime(activity.start_time, 'Asia/Shanghai') }}</li>
+                                <li class="list-group-item"><i class="fas fa-calendar-check me-2"></i> <strong>结束时间：</strong>{{ display_datetime(activity.end_time, 'Asia/Shanghai') }}</li>
+                                {% if activity.registration_start_time %}
+                                <li class="list-group-item"><i class="fas fa-play-circle me-2"></i> <strong>报名开始：</strong>{{ display_datetime(activity.registration_start_time, 'Asia/Shanghai') }}</li>
+                                {% endif %}
+                                <li class="list-group-item"><i class="fas fa-clock me-2"></i> <strong>报名截止：</strong>{{ display_datetime(activity.registration_deadline, 'Asia/Shanghai') }}</li>
                                 {% if activity.max_participants > 0 %}
                                 <li class="list-group-item"><i class="fas fa-users me-2"></i> <strong>人数限制：</strong>{{ activity.max_participants }}人</li>
                                 {% endif %}
@@ -57,7 +60,7 @@
                                         {% if registration and registration.status == 'registered' %}
                                             <div class="alert alert-success">
                                                 <i class="fas fa-check-circle me-2"></i> 您已成功报名此活动
-                                                <p class="small mb-0">报名时间：{{ display_datetime(registration.register_time) }}</p>
+                                                <p class="small mb-0">报名时间：{{ display_datetime(registration.register_time, 'Asia/Shanghai') }}</p>
                                             </div>
                                             
                                             {% if activity.start_time and safe_greater_than(activity.start_time, now) %}
@@ -68,14 +71,19 @@
                                         {% elif can_register %}
                                             <div class="alert alert-info">
                                                 <i class="fas fa-info-circle me-2"></i> 此活动正在接受报名
-                                                <p class="small mb-0">截止时间：{{ display_datetime(activity.registration_deadline) }}</p>
+                                                <p class="small mb-0">截止时间：{{ display_datetime(activity.registration_deadline, 'Asia/Shanghai') }}</p>
                                             </div>
                                             
                                             <button type="button" class="btn btn-primary w-100" id="registerBtn">
                                                 <i class="fas fa-user-plus me-2"></i> 立即报名
                                             </button>
                                         {% else %}
-                                            {% if activity.registration_deadline and safe_less_than(activity.registration_deadline, now) %}
+                                            {% if activity.registration_start_time and safe_greater_than(activity.registration_start_time, now) %}
+                                                <div class="alert alert-info">
+                                                    <i class="fas fa-hourglass-start me-2"></i> 报名尚未开始
+                                                    <p class="small mb-0">开始时间：{{ display_datetime(activity.registration_start_time, 'Asia/Shanghai') }}</p>
+                                                </div>
+                                            {% elif activity.registration_deadline and safe_less_than(activity.registration_deadline, now) %}
                                                 <div class="alert alert-secondary">
                                                     <i class="fas fa-ban me-2"></i> 报名已截止
                                                 </div>

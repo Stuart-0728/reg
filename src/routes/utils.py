@@ -10,6 +10,7 @@ import random
 import string
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from werkzeug.exceptions import HTTPException
 from src.models import db, Activity, Tag, StudentInfo, SystemLog, Registration, AIChatHistory, AIChatSession, activity_tags, PointsHistory, User, Role, Message
 from src.utils.time_helpers import get_beijing_time, ensure_timezone_aware
 from src import csrf # Import csrf
@@ -39,12 +40,12 @@ def admin_required(f):
             role_name = getattr(current_user.role, 'name', None)
             logger.info(f"权限检查: 用户={current_user.username}, 角色={role_name}, 路径={request.path}")
 
-            # 检查角色名称
-            if not hasattr(current_user.role, 'name') or current_user.role.name.lower() != 'admin':
-                # 特殊情况：允许所有用户访问/activities路由
-                if request.path == '/activities' or request.path.startswith('/activities/'):
-                    return f(*args, **kwargs)
+            # 强制以数据库最新角色为准，防止客户端伪造请求头/缓存态导致越权
+            db_user = db.session.get(User, current_user.id)
+            db_role_name = (db_user.role.name.lower() if db_user and db_user.role and db_user.role.name else '')
 
+            # 检查角色名称
+            if db_role_name != 'admin':
                 logger.warning(f"非管理员访问尝试: 用户={current_user.username}, 角色={role_name}, 路径={request.path}")
                 flash('您没有管理员权限', 'danger')
                 return redirect(url_for('main.index'))
@@ -208,6 +209,44 @@ def build_activity_context(activities):
         return "当前暂无可推荐的活动。"
     return "\n".join([f"{a.title}：{a.description[:40]}..." for a in activities])
 
+def build_site_data_context(max_activities=20):
+    """构建站内活动与标签映射上下文，供AI回答平台数据问题。"""
+    try:
+        activities = db.session.execute(
+            db.select(Activity).order_by(Activity.created_at.desc()).limit(max_activities)
+        ).scalars().all()
+
+        if not activities:
+            activity_lines = ["- 暂无活动数据"]
+        else:
+            activity_lines = []
+            for activity in activities:
+                tag_names = [tag.name for tag in activity.tags] if activity.tags else []
+                start_time = activity.start_time.strftime('%Y-%m-%d %H:%M') if activity.start_time else '未设置'
+                activity_lines.append(
+                    f"- {activity.title} | 状态:{activity.status} | 标签:{'、'.join(tag_names) if tag_names else '无标签'} | 开始:{start_time}"
+                )
+
+        popular_tags = db.session.query(
+            Tag.name,
+            db.func.count(activity_tags.c.activity_id).label('count')
+        ).join(activity_tags).group_by(Tag.id).order_by(db.text('count DESC')).limit(10).all()
+
+        if popular_tags:
+            tag_lines = [f"- {tag_name}: {count} 个活动关联" for tag_name, count in popular_tags]
+        else:
+            tag_lines = ["- 暂无标签关联数据"]
+
+        return (
+            "【活动与标签映射】\n"
+            + "\n".join(activity_lines)
+            + "\n\n【标签热度】\n"
+            + "\n".join(tag_lines)
+        )
+    except Exception as e:
+        logger.error(f"构建站内数据上下文失败: {e}")
+        return "【活动与标签映射】数据暂不可用"
+
 # 独立的AI聊天API路由 - 添加到utils_bp蓝图
 @utils_bp.route('/utils/ai_chat/api', methods=['GET'])
 def utils_ai_chat_api():
@@ -256,6 +295,7 @@ def ai_chat():
         is_admin = current_user.role.name == 'Admin'
 
     # 构建用户上下文信息
+    site_data_context = build_site_data_context(max_activities=20)
     user_context = ""
     if student_info:  # 学生用户
         # 获取学生标签
@@ -284,6 +324,9 @@ def ai_chat():
 
 最近活动：
 {chr(10).join([f'- {a.title} ({a.start_time.strftime("%Y-%m-%d")})' for a in active_activities[:5]]) if active_activities else '- 暂无活动'}
+
+站内数据：
+{site_data_context}
 """
     else:  # 管理员用户
         # 获取统计数据
@@ -318,6 +361,9 @@ def ai_chat():
 
 热门标签：
 {chr(10).join([f'- {tag[0]}: {tag[1]}次使用' for tag in popular_tags]) if popular_tags else '- 暂无数据'}
+
+站内数据：
+{site_data_context}
 """
 
     # 获取历史消息
@@ -362,7 +408,7 @@ def ai_chat():
 我可以访问以下信息：
 {user_context}
 
-您可以询问我关于平台数据的分析、学生参与情况、活动建议等方面的问题。
+您可以询问我关于平台数据的分析、学生参与情况、活动与标签映射关系、活动建议等方面的问题。
 """
     else:
         system_prompt = f"""您好，我是基于DeepSeek大语言模型的智能助手，为重庆师范大学智能社团+平台提供服务。
@@ -379,7 +425,7 @@ def ai_chat():
 
 如果我无法回答您的某些问题，您可以联系平台管理员(2023051101095@stu.cqnu.edu.cn)获取更详细的帮助。
 
-请告诉我您需要什么帮助？
+请告诉我您需要什么帮助？如果您询问“某个标签对应哪些活动”或“某活动有哪些标签”，我会基于站内数据回答。
 """
 
     # 添加系统消息
@@ -524,7 +570,8 @@ def ai_chat_history_endpoint():
         return jsonify({
             'success': True,
             'message': '成功获取历史记录',
-            'data': messages
+            'data': messages,
+            'messages': messages
         })
     except Exception as e:
         logger.error(f"获取AI聊天历史记录失败: {str(e)}")
@@ -791,6 +838,14 @@ def check_login_status():
 def debug_user_info():
     """调试用户信息的API端点（不需要登录）"""
     try:
+        # 仅允许在调试模式下由管理员访问
+        if not current_app.debug:
+            abort(404)
+        if (not current_user.is_authenticated or
+            not getattr(current_user, 'role', None) or
+            str(getattr(current_user.role, 'name', '')).lower() != 'admin'):
+            abort(403)
+
         from flask import session
 
         debug_info = {
@@ -822,6 +877,8 @@ def debug_user_info():
 
         return jsonify(debug_info)
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"获取用户调试信息失败: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -829,6 +886,14 @@ def debug_user_info():
 def debug_force_login(username):
     """强制登录指定用户（仅用于调试）"""
     try:
+        # 仅允许在调试模式下由管理员访问
+        if not current_app.debug:
+            abort(404)
+        if (not current_user.is_authenticated or
+            not getattr(current_user, 'role', None) or
+            str(getattr(current_user.role, 'name', '')).lower() != 'admin'):
+            abort(403)
+
         from src.models import User
         from flask_login import login_user
 
@@ -848,5 +913,7 @@ def debug_force_login(username):
                 'message': f'用户不存在: {username}'
             }), 404
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"强制登录失败: {e}")
         return jsonify({'error': str(e)}), 500

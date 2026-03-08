@@ -1,5 +1,5 @@
 /**
- * 师能素质协会 - AI聊天助手
+ * 智能社团+ - AI聊天助手
  * 
  * 实现功能：
  * 1. 聊天历史记录的数据库存储和加载
@@ -13,14 +13,14 @@ const AI_CHAT_CONFIG = {
     cookiePrefix: 'cqnu_ai_chat_',
     maxStoredMessages: 50,  // 最大存储消息数
     cookieExpireDays: 7,    // Cookie保存天数
-    initialBotMessage: '您好，欢迎来到重庆师范大学师能素质协会平台，我是基于DeepSeek大语言模型的智能助手，有什么可以帮助您的吗？',
+    initialBotMessage: '您好，欢迎来到重庆师范大学智能社团+平台，我是基于DeepSeek大语言模型的智能助手，有什么可以帮助您的吗？',
     notLoggedInMessage: '您好！AI助手功能需要登录后使用。请先<a href="/auth/login" class="ai-chat-link">登录</a>或<a href="/auth/register" class="ai-chat-link">注册</a>。'
 };
 
 // 智能助手信息
 const ASSOCIATION_INFO = {
     name: 'DeepSeek AI智能助手',
-    description: '基于DeepSeek大语言模型的智能聊天助手，为师能素质协会平台提供智能服务',
+    description: '基于DeepSeek大语言模型的智能聊天助手，为智能社团+平台提供智能服务',
     model: 'deepseek-r1-distill-qwen-7b-250120',
     capabilities: [
         '回答关于活动的问题',
@@ -33,7 +33,7 @@ const ASSOCIATION_INFO = {
         address: '重庆市沙坪坝区大学城中路37号',
         qqGroup: '995213034',
         adminEmail: '2023051101095@stu.cqnu.edu.cn',
-        website: 'http://shineng.cqnu.edu.cn'
+        website: 'http://reg.cqaibase.cn'
     },
     features: [
         '实时对话', '历史记录保存', '个性化推荐', '多轮交互', '上下文理解'
@@ -246,9 +246,18 @@ class AIChatSession {
             })
             .then(data => {
                 console.log('从服务器加载的消息:', data);
-                if (data && data.messages) {
+                if (!data) {
+                    return [];
+                }
+
+                if (Array.isArray(data.messages)) {
                     return data.messages;
                 }
+
+                if (Array.isArray(data.data)) {
+                    return data.data;
+                }
+
                 return [];
             })
             .catch(error => {

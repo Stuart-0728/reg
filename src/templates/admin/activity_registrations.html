@@ -3,7 +3,7 @@
 {% block title %}活动报名情况 - 重庆师范大学智能社团+{% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container-fluid wide-page">
     <div class="row mb-4">
         <div class="col-md-8">
             <h2>活动报名情况</h2>
@@ -86,93 +86,114 @@
             <h5 class="mb-0">报名学生列表</h5>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>姓名</th>
-                            <th>学号</th>
-                            <th>年级</th>
-                            <th>学院</th>
-                            <th>专业</th>
-                            <th>联系方式</th>
-                            <th>报名时间</th>
-                            <th>状态</th>
-                            <th>积分</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for reg in registrations %}
+            <div class="activity-registrations-split-table">
+                <div class="table-responsive activity-registrations-info-wrap">
+                    <table class="table table-hover align-middle mb-0 activity-registrations-info-table">
+                        <thead>
                             <tr>
-                                <td>{{ reg.real_name }}</td>
-                                <td>{{ reg.student_id }}</td>
-                                <td>{{ reg.grade }}</td>
-                                <td>{{ reg.college }}</td>
-                                <td>{{ reg.major }}</td>
-                                <td>{{ reg.phone }}</td>
-                                <td>{{ display_datetime(reg.register_time) }}</td>
-                                <td>
-                                    {% if reg.status == 'registered' %}
-                                        <span class="badge bg-transparent">已报名</span>
-                                    {% elif reg.status == 'attended' %}
-                                        <span class="badge bg-success">已参加</span>
-                                    {% else %}
-                                        <span class="badge bg-danger">已取消</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ reg.points }}</td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
+                                <th>姓名</th>
+                                <th>学号</th>
+                                <th>年级</th>
+                                <th>学院</th>
+                                <th>专业</th>
+                                <th>联系方式</th>
+                                <th>报名时间</th>
+                                <th>状态</th>
+                                <th>积分</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reg in registrations %}
+                                <tr data-row-index="{{ loop.index0 }}">
+                                    <td>{{ reg.real_name }}</td>
+                                    <td>{{ reg.student_id }}</td>
+                                    <td>{{ reg.grade }}</td>
+                                    <td>{{ reg.college }}</td>
+                                    <td>{{ reg.major }}</td>
+                                    <td>{{ reg.phone }}</td>
+                                    <td>{{ display_datetime(reg.register_time) }}</td>
+                                    <td>
                                         {% if reg.status == 'registered' %}
-                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
-                                                {{ form.hidden_tag() }}
-                                                <input type="hidden" name="status" value="attended">
-                                                <button type="submit" class="btn btn-outline-success" title="标记为已参加">
-                                                    <i class="fas fa-check"></i>
-                                                </button>
-                                            </form>
-                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
-                                                {{ form.hidden_tag() }}
-                                                <input type="hidden" name="status" value="cancelled">
-                                                <button type="submit" class="btn btn-outline-danger" title="标记为已取消">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </form>
+                                            <span class="badge bg-light text-dark border">已报名</span>
                                         {% elif reg.status == 'attended' %}
-                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
-                                                {{ form.hidden_tag() }}
-                                                <input type="hidden" name="status" value="registered">
-                                                <button type="submit" class="btn btn-outline-primary" title="恢复为已报名">
-                                                    <i class="fas fa-undo"></i>
-                                                </button>
-                                            </form>
-                                        {% elif reg.status == 'cancelled' %}
-                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
-                                                {{ form.hidden_tag() }}
-                                                <input type="hidden" name="status" value="registered">
-                                                <button type="submit" class="btn btn-outline-primary" title="恢复为已报名">
-                                                    <i class="fas fa-undo"></i>
-                                                </button>
-                                            </form>
-                                            <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
-                                                {{ form.hidden_tag() }}
-                                                <input type="hidden" name="status" value="attended">
-                                                <button type="submit" class="btn btn-outline-success" title="标记为已参加">
-                                                    <i class="fas fa-check"></i>
-                                                </button>
-                                            </form>
+                                            <span class="badge bg-success text-white">已参加</span>
+                                        {% else %}
+                                            <span class="badge bg-danger text-white">已取消</span>
                                         {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                        {% else %}
+                                    </td>
+                                    <td>{{ reg.points }}</td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="9" class="text-center">暂无报名信息</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="activity-registrations-action-wrap">
+                    <table class="table align-middle mb-0 activity-registrations-action-table">
+                        <thead>
                             <tr>
-                                <td colspan="10" class="text-center">暂无报名信息</td>
+                                <th>操作</th>
                             </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {% for reg in registrations %}
+                                <tr data-row-index="{{ loop.index0 }}">
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            {% if reg.status == 'registered' %}
+                                                <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                    {{ form.hidden_tag() }}
+                                                    <input type="hidden" name="status" value="attended">
+                                                    <button type="submit" class="btn btn-outline-success" title="标记为已参加">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                </form>
+                                                <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                    {{ form.hidden_tag() }}
+                                                    <input type="hidden" name="status" value="cancelled">
+                                                    <button type="submit" class="btn btn-outline-danger" title="标记为已取消">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </form>
+                                            {% elif reg.status == 'attended' %}
+                                                <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                    {{ form.hidden_tag() }}
+                                                    <input type="hidden" name="status" value="registered">
+                                                    <button type="submit" class="btn btn-outline-primary" title="恢复为已报名">
+                                                        <i class="fas fa-undo"></i>
+                                                    </button>
+                                                </form>
+                                            {% elif reg.status == 'cancelled' %}
+                                                <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                    {{ form.hidden_tag() }}
+                                                    <input type="hidden" name="status" value="registered">
+                                                    <button type="submit" class="btn btn-outline-primary" title="恢复为已报名">
+                                                        <i class="fas fa-undo"></i>
+                                                    </button>
+                                                </form>
+                                                <form action="{{ url_for('admin.update_registration_status', id=reg.registration_id) }}" method="post" style="display:inline;" data-no-loading>
+                                                    {{ form.hidden_tag() }}
+                                                    <input type="hidden" name="status" value="attended">
+                                                    <button type="submit" class="btn btn-outline-success" title="标记为已参加">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td class="text-center">暂无报名信息</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -207,6 +228,117 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    const infoRows = document.querySelectorAll('.activity-registrations-info-table tbody tr[data-row-index]');
+    const actionRows = document.querySelectorAll('.activity-registrations-action-table tbody tr[data-row-index]');
+    if (infoRows.length && actionRows.length && infoRows.length === actionRows.length) {
+        const clearHover = () => {
+            infoRows.forEach(row => row.classList.remove('split-row-hover'));
+            actionRows.forEach(row => row.classList.remove('split-row-hover'));
+        };
+
+        const bindHover = (rows, targetRows) => {
+            rows.forEach(row => {
+                row.addEventListener('mouseenter', () => {
+                    clearHover();
+                    const idx = row.getAttribute('data-row-index');
+                    const target = Array.from(targetRows).find(item => item.getAttribute('data-row-index') === idx);
+                    row.classList.add('split-row-hover');
+                    if (target) target.classList.add('split-row-hover');
+                });
+                row.addEventListener('mouseleave', clearHover);
+            });
+        };
+
+        bindHover(infoRows, actionRows);
+        bindHover(actionRows, infoRows);
+    }
 });
 </script>
 {% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.wide-page {
+    width: min(96vw, 1780px);
+    margin: 0 auto;
+}
+
+.activity-registrations-split-table {
+    display: flex;
+    align-items: stretch;
+}
+
+.activity-registrations-info-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+.activity-registrations-info-wrap::-webkit-scrollbar {
+    height: 8px;
+}
+
+.activity-registrations-info-table {
+    width: max-content;
+    min-width: 100%;
+}
+
+.activity-registrations-action-wrap {
+    flex: 0 0 190px;
+    width: 190px;
+    background: #fff;
+    border-left: 1px solid #e9edf3;
+}
+
+.activity-registrations-action-table {
+    width: 100%;
+    margin-bottom: 0;
+    table-layout: fixed;
+}
+
+.activity-registrations-info-table th,
+.activity-registrations-info-table td,
+.activity-registrations-action-table th,
+.activity-registrations-action-table td {
+    white-space: nowrap;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+
+.activity-registrations-info-table tbody td,
+.activity-registrations-action-table tbody td {
+    height: 72px;
+    vertical-align: middle;
+}
+
+.activity-registrations-action-table th,
+.activity-registrations-action-table td {
+    text-align: center;
+}
+
+.activity-registrations-info-table tbody tr.split-row-hover td,
+.activity-registrations-action-table tbody tr.split-row-hover td {
+    background: #f8f9fa;
+}
+
+@media (max-width: 991.98px) {
+    .wide-page {
+        width: 100%;
+    }
+
+    .activity-registrations-info-table {
+        min-width: 1050px;
+    }
+
+    .activity-registrations-action-wrap {
+        flex: 0 0 170px;
+        width: 170px;
+    }
+}
+</style>
+{% endblock %}
+

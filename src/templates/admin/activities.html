@@ -3,7 +3,7 @@
 {% block title %}活动管理 - 重庆师范大学智能社团+{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4 admin-activities-page">
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}" class="text-decoration-none">管理面板</a></li>
@@ -50,7 +50,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive" style="overflow-x: auto; overflow-y: visible;">
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0 table-cell-scroll">
                     <thead class="table-light">
                         <tr>
                             <th style="width: 25%;">活动标题</th>
@@ -68,7 +68,7 @@
                             <td class="fw-medium text-truncate" style="max-width: 200px;" title="{{ activity.title }}">
                                 {{ activity.title }}
                                 {% if activity.is_featured %}
-                                <span class="badge bg-warning ms-1" title="重点活动"><i class="fas fa-star"></i></span>
+                                <span class="badge featured-badge ms-1" title="重点活动"><i class="fas fa-star"></i></span>
                                 {% endif %}
                             </td>
                             <td class="text-truncate" style="max-width: 120px;" title="{{ activity.location }}">{{ activity.location }}</td>
@@ -92,7 +92,7 @@
                             </td>
                             <td>
                                 <div class="dropdown">
-                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle action-btn" type="button" id="actionMenu{{ activity.id }}" data-bs-toggle="dropdown" aria-expanded="false" data-no-loading="true" data-no-global-loading="true">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle action-btn" type="button" id="actionMenu{{ activity.id }}" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-offset="0,8" aria-expanded="false" data-no-loading="true" data-no-global-loading="true">
                                         操作
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="actionMenu{{ activity.id }}" style="min-width: 220px;">
@@ -170,13 +170,17 @@
             <!-- 分页 -->
             {% if activities.pages > 1 %}
             <div class="p-3">
-                <nav aria-label="Page navigation">
-                    <ul class="pagination justify-content-center mb-0">
-                        <li class="page-item {% if not activities.has_prev %}disabled{% endif %}">
-                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.prev_num) if activities.has_prev else '#' }}">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <small class="text-muted">共 {{ activities.total }} 条活动，每页 10 条，当前第 {{ activities.page }}/{{ activities.pages }} 页</small>
+                    <nav aria-label="活动分页">
+                    <ul class="pagination pagination-sm justify-content-center mb-0">
+                        {% if activities.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.prev_num) }}">
                                 <i class="fas fa-chevron-left"></i>
                             </a>
                         </li>
+                        {% endif %}
                         
                         {% for page_num in activities.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                             {% if page_num %}
@@ -190,13 +194,16 @@
                             {% endif %}
                         {% endfor %}
                         
-                        <li class="page-item {% if not activities.has_next %}disabled{% endif %}">
-                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.next_num) if activities.has_next else '#' }}">
+                        {% if activities.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.next_num) }}">
                                 <i class="fas fa-chevron-right"></i>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </nav>
+                </div>
             </div>
             {% endif %}
         </div>
@@ -365,4 +372,41 @@ function updateActivityStatus(activityId, status) {
     }
 }
 </script>
+
+<style>
+.admin-activities-page {
+    padding-bottom: 9rem !important;
+}
+
+.activities-card,
+.activities-card .card-body,
+.activities-card .table-responsive {
+    overflow: visible !important;
+}
+
+.activities-card .table-responsive {
+    position: relative;
+    z-index: 1;
+}
+
+.activities-card .dropdown,
+.activities-card .dropdown-menu {
+    position: relative;
+    z-index: 1080;
+}
+
+.activities-card {
+    margin-bottom: 5rem !important;
+}
+
+@media (max-width: 991.98px) {
+    .admin-activities-page {
+        padding-bottom: 6rem !important;
+    }
+
+    .activities-card {
+        margin-bottom: 3.5rem !important;
+    }
+}
+</style>
 {% endblock %}

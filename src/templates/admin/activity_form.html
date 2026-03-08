@@ -26,7 +26,12 @@
           <div class="col-md-12">
             <div class="mb-3">
               {{ form.title.label(class="form-label fw-medium") }}
-              {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""), placeholder="请输入活动标题") }}
+              <div class="input-group">
+                {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""), placeholder="请输入活动标题") }}
+                <button type="button" class="btn btn-outline-primary" id="aiGenerateDescBtn">
+                  <i class="fas fa-wand-magic-sparkles me-1"></i>AI生成描述
+                </button>
+              </div>
               {% if form.title.errors %}
                 <div class="invalid-feedback">
                   {% for error in form.title.errors %}
@@ -46,6 +51,17 @@
                   {% endfor %}
                 </div>
               {% endif %}
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-medium">AI智能填表</label>
+              <textarea class="form-control" id="aiRawContent" rows="4" placeholder="可粘贴通知文案/活动策划文本，AI将尝试自动填充标题、地点、时间、人数、积分等字段"></textarea>
+              <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
+                <small class="text-muted">建议粘贴包含时间、地点、人数等信息的完整文本，自动填表更准确。</small>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="aiParseContentBtn">
+                  <i class="fas fa-file-import me-1"></i>AI自动填充表格
+                </button>
+              </div>
             </div>
             
             <div class="mb-3">
@@ -101,6 +117,22 @@
             <div class="row">
               <div class="col-md-6">
                 <div class="mb-3">
+                  {{ form.registration_start_time.label(class="form-label fw-medium") }}
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-play-circle"></i></span>
+                  {{ form.registration_start_time(class="form-control date-time-picker" + (" is-invalid" if form.registration_start_time.errors else ""), placeholder="可选，默认立即可报名") }}
+                  </div>
+                  {% if form.registration_start_time.errors %}
+                    <div class="invalid-feedback">
+                      {% for error in form.registration_start_time.errors %}
+                        {{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
                   {{ form.registration_deadline.label(class="form-label fw-medium") }}
                   <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-clock"></i></span>
@@ -115,7 +147,7 @@
                   {% endif %}
                 </div>
               </div>
-              <div class="col-md-6">
+              <div class="col-md-12">
                 <div class="mb-3">
                   {{ form.max_participants.label(class="form-label fw-medium") }}
                   <div class="input-group">
@@ -173,6 +205,7 @@
             
             <div class="mb-3">
               <label class="form-label fw-medium">活动海报</label>
+              <input type="hidden" name="ai_poster_url" id="aiPosterUrl" value="">
               <div class="input-group">
                 <span class="input-group-text"><i class="fas fa-image"></i></span>
                 {{ form.poster(class="form-control" + (" is-invalid" if form.poster.errors else ""), id="posterInput") }}
@@ -185,12 +218,31 @@
                 </div>
               {% endif %}
               <small class="form-text text-muted">支持jpg、jpeg、png、gif格式，建议尺寸800x600像素</small>
+
+              <div class="mt-2">
+                <label for="aiPosterRequirements" class="form-label">AI海报要求（可选）</label>
+                <div class="mb-2">
+                  <label for="aiPosterModel" class="form-label mb-1">图片模型</label>
+                  <select class="form-select" id="aiPosterModel">
+                    <option value="ark:doubao-seedream-5-0-260128" selected>火山方舟 · doubao-seedream-5-0-260128（默认）</option>
+                    <option value="gemini:gemini-2.5-flash-image">Gemini · gemini-2.5-flash-image</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <input type="text" class="form-control" id="aiPosterRequirements" placeholder="如：蓝紫科技风、加入志愿服务元素、简洁留白构图">
+                  <button type="button" class="btn btn-outline-primary" id="aiGeneratePosterBtn">
+                    <i class="fas fa-image me-1"></i>AI生成海报
+                  </button>
+                </div>
+                <small class="form-text text-muted">支持一键生成；你也可以继续手动上传海报，手动上传优先。</small>
+              </div>
               
               <!-- 海报预览区域 -->
               <div class="mt-3">
                 <div id="posterPreviewContainer" class="d-none">
                   <p class="mb-1">上传预览:</p>
                   <img id="posterPreview" src="#" alt="海报预览" class="img-thumbnail" style="max-height: 200px;">
+                  <div id="aiPosterPromptHint" class="small text-muted mt-2 d-none"></div>
                 </div>
                 
                 {% if activity and activity.poster_image %}
@@ -269,6 +321,29 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = '{{ csrf_token() }}';
+
+    async function postJson(url, payload) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(payload)
+      });
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = {};
+      }
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || '请求失败');
+      }
+      return data;
+    }
+
     // 初始化日期时间选择器
     flatpickr(".date-time-picker", {
       enableTime: true,
@@ -296,10 +371,198 @@
     const posterInput = document.getElementById('posterInput');
     const posterPreview = document.getElementById('posterPreview');
     const posterPreviewContainer = document.getElementById('posterPreviewContainer');
+    const aiPosterUrlInput = document.getElementById('aiPosterUrl');
+    const aiPosterPromptHint = document.getElementById('aiPosterPromptHint');
+
+    const aiGenerateDescBtn = document.getElementById('aiGenerateDescBtn');
+    const aiParseContentBtn = document.getElementById('aiParseContentBtn');
+    const aiGeneratePosterBtn = document.getElementById('aiGeneratePosterBtn');
+    const aiRawContent = document.getElementById('aiRawContent');
+    const aiPosterRequirements = document.getElementById('aiPosterRequirements');
+    const aiPosterModel = document.getElementById('aiPosterModel');
+
+    async function loadPosterModels() {
+      if (!aiPosterModel) {
+        return;
+      }
+
+      const currentValue = aiPosterModel.value;
+      aiPosterModel.disabled = true;
+      try {
+        const response = await fetch('{{ url_for("admin.ai_poster_models") }}', {
+          method: 'GET',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (e) {
+          data = {};
+        }
+
+        if (!response.ok || !data.success || !Array.isArray(data.models) || !data.models.length) {
+          return;
+        }
+
+        aiPosterModel.innerHTML = '';
+        data.models.forEach((item) => {
+          const option = document.createElement('option');
+          option.value = item.value;
+          option.textContent = item.label || item.value;
+          aiPosterModel.appendChild(option);
+        });
+
+        const hasCurrent = data.models.some((item) => item.value === currentValue);
+        aiPosterModel.value = hasCurrent ? currentValue : data.models[0].value;
+      } catch (error) {
+        console.warn('加载AI海报模型失败，使用静态模型列表', error);
+      } finally {
+        aiPosterModel.disabled = false;
+      }
+    }
+
+    loadPosterModels();
+
+    const titleInput = document.getElementById('title');
+    const descriptionInput = document.getElementById('description');
+    const locationInput = document.getElementById('location');
+    const startTimeInput = document.getElementById('start_time');
+    const endTimeInput = document.getElementById('end_time');
+    const regStartInput = document.getElementById('registration_start_time');
+    const regDeadlineInput = document.getElementById('registration_deadline');
+    const maxParticipantsInput = document.getElementById('max_participants');
+    const pointsInputForAI = document.getElementById('points');
+    const statusInput = document.getElementById('status');
+    const isFeaturedInput = document.getElementById('is_featured');
+
+    if (aiGenerateDescBtn && titleInput && descriptionInput) {
+      aiGenerateDescBtn.addEventListener('click', async function() {
+        const title = (titleInput.value || '').trim();
+        if (!title) {
+          alert('请先输入活动标题');
+          return;
+        }
+        const originalText = aiGenerateDescBtn.innerHTML;
+        aiGenerateDescBtn.disabled = true;
+        aiGenerateDescBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+        try {
+          const data = await postJson('{{ url_for("admin.ai_generate_activity_description") }}', { title });
+          descriptionInput.value = data.description || '';
+          if (window.showToast) {
+            showToast('AI已生成活动描述', 'success');
+          }
+        } catch (error) {
+          alert(error.message || 'AI生成失败');
+        } finally {
+          aiGenerateDescBtn.disabled = false;
+          aiGenerateDescBtn.innerHTML = originalText;
+        }
+      });
+    }
+
+    if (aiParseContentBtn && aiRawContent) {
+      aiParseContentBtn.addEventListener('click', async function() {
+        const content = (aiRawContent.value || '').trim();
+        if (!content) {
+          alert('请先粘贴活动内容');
+          return;
+        }
+        const originalText = aiParseContentBtn.innerHTML;
+        aiParseContentBtn.disabled = true;
+        aiParseContentBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>解析中...';
+        try {
+          const data = await postJson('{{ url_for("admin.ai_parse_activity_content") }}', { content });
+          const parsed = data.data || {};
+          if (parsed.title && titleInput) titleInput.value = parsed.title;
+          if (parsed.description && descriptionInput) descriptionInput.value = parsed.description;
+          if (parsed.location && locationInput) locationInput.value = parsed.location;
+          if (parsed.start_time && startTimeInput) startTimeInput.value = parsed.start_time;
+          if (parsed.end_time && endTimeInput) endTimeInput.value = parsed.end_time;
+          if (parsed.registration_start_time && regStartInput) regStartInput.value = parsed.registration_start_time;
+          if (parsed.registration_deadline && regDeadlineInput) regDeadlineInput.value = parsed.registration_deadline;
+          if (parsed.max_participants !== '' && maxParticipantsInput) maxParticipantsInput.value = parsed.max_participants;
+          if (parsed.points !== '' && pointsInputForAI) pointsInputForAI.value = parsed.points;
+          if (parsed.status && statusInput) statusInput.value = parsed.status;
+          if (typeof parsed.is_featured === 'boolean' && isFeaturedInput) isFeaturedInput.checked = parsed.is_featured;
+          if (window.showToast) {
+            showToast('AI已自动填充表单', 'success');
+          }
+        } catch (error) {
+          alert(error.message || 'AI解析失败');
+        } finally {
+          aiParseContentBtn.disabled = false;
+          aiParseContentBtn.innerHTML = originalText;
+        }
+      });
+    }
+
+    if (aiGeneratePosterBtn) {
+      aiGeneratePosterBtn.addEventListener('click', async function() {
+        const title = (titleInput?.value || '').trim();
+        if (!title) {
+          alert('请先输入活动标题，再生成海报');
+          return;
+        }
+        const originalText = aiGeneratePosterBtn.innerHTML;
+        aiGeneratePosterBtn.disabled = true;
+        aiGeneratePosterBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+        try {
+          const data = await postJson('{{ url_for("admin.ai_generate_activity_poster") }}', {
+            title,
+            description: descriptionInput?.value || '',
+            requirements: aiPosterRequirements?.value || '',
+            model: aiPosterModel?.value || 'ark:doubao-seedream-5-0-260128'
+          });
+
+          const imageUrl = data.image_url || '';
+          if (!imageUrl) {
+            throw new Error('未获得可用海报链接');
+          }
+
+          if (aiPosterUrlInput) {
+            aiPosterUrlInput.value = imageUrl;
+          }
+          if (posterPreview) {
+            posterPreview.src = imageUrl;
+          }
+          if (posterPreviewContainer) {
+            posterPreviewContainer.classList.remove('d-none');
+          }
+          if (aiPosterPromptHint) {
+            const modelUsedText = data.model_used ? `模型：${data.model_used}` : '';
+            const fallbackText = data.fallback ? '（已自动回退）' : '';
+            const promptText = data.prompt ? `\nAI提示词：${data.prompt}` : '';
+            const hintText = (modelUsedText || data.prompt)
+              ? `${modelUsedText}${fallbackText}${promptText}`.trim()
+              : '';
+            aiPosterPromptHint.textContent = hintText;
+            aiPosterPromptHint.classList.toggle('d-none', !hintText);
+          }
+          if (window.showToast) {
+            showToast(data.message || 'AI海报已生成，可直接保存活动', 'success');
+          }
+        } catch (error) {
+          alert(error.message || 'AI海报生成失败');
+        } finally {
+          aiGeneratePosterBtn.disabled = false;
+          aiGeneratePosterBtn.innerHTML = originalText;
+        }
+      });
+    }
     
     if (posterInput && posterPreview && posterPreviewContainer) {
       posterInput.addEventListener('change', function() {
         if (this.files && this.files[0]) {
+          if (aiPosterUrlInput) {
+            aiPosterUrlInput.value = '';
+          }
+          if (aiPosterPromptHint) {
+            aiPosterPromptHint.textContent = '';
+            aiPosterPromptHint.classList.add('d-none');
+          }
           const file = this.files[0];
           
           // 检查文件类型

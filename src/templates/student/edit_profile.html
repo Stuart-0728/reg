@@ -92,21 +92,34 @@
                                 {% for tag in all_tags %}
                                 <input type="checkbox" class="btn-check" name="tags" id="tag{{ tag.id }}" value="{{ tag.id }}" autocomplete="off"
                                     {% if tag.id in selected_tag_ids %}checked{% endif %}>
-                                <label class="btn btn-outline-primary tag-btn" for="tag{{ tag.id }}">{{ tag.name }}</label>
+                                <label class="btn btn-outline-primary tag-btn {% if tag.id in selected_tag_ids %}tag-selected{% endif %}" for="tag{{ tag.id }}">
+                                    <span class="tag-check-mark">✓</span>{{ tag.name }}
+                                </label>
                                 {% endfor %}
                             </div>
                         </div>
                         <style>
                         .tag-btn {
-                            border-radius: 20px;
-                            padding: 0.5rem 1.2rem;
-                            font-size: 1rem;
-                            transition: background 0.2s, color 0.2s;
+                            border-radius: 999px !important;
+                            padding: 0.5rem 1.2rem !important;
+                            font-size: 1rem !important;
+                            border-width: 2px !important;
+                            transition: all 0.2s ease !important;
+                            font-weight: 600;
+                        }
+                        .tag-check-mark {
+                            display: none;
+                            margin-right: 0.35rem;
                         }
                         .btn-check:checked + .tag-btn {
-                            background: #2196F3;
-                            color: #fff;
-                            border-color: #2196F3;
+                            background: #2563eb !important;
+                            color: #fff !important;
+                            border-color: #2563eb !important;
+                            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.32) !important;
+                            transform: translateY(-1px) scale(1.04);
+                        }
+                        .btn-check:checked + .tag-btn .tag-check-mark {
+                            display: inline-block;
                         }
                         </style>
                         
@@ -120,4 +133,18 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tagInputs = document.querySelectorAll('input[name="tags"]');
+    tagInputs.forEach(input => {
+        input.addEventListener('change', function() {
+            const label = document.querySelector(`label[for="${input.id}"]`);
+            if (label) {
+                label.classList.toggle('tag-selected', input.checked);
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

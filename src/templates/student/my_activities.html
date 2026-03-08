@@ -50,7 +50,16 @@
                             </p>
                             <div class="d-flex justify-content-between align-items-center mt-2">
                                 <small class="text-muted">报名时间: {{ display_datetime(registration.register_time) }}</small>
-                                <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary">查看详情</a>
+                                <div class="d-flex gap-2">
+                                    <a href="{{ url_for('student.activity_detail', id=activity.id) }}" class="btn btn-sm btn-outline-primary">查看详情</a>
+                                    {% if activity.status == 'completed' and registration.status != 'cancelled' %}
+                                        {% if activity.id in pending_reviews %}
+                                            <a href="{{ url_for('student.review_activity', activity_id=activity.id) }}" class="btn btn-sm btn-primary">去评价</a>
+                                        {% elif activity.id in reviewed_activity_ids %}
+                                            <a href="{{ url_for('student.review_activity', activity_id=activity.id) }}" class="btn btn-sm btn-outline-secondary">我的评价</a>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
                             </div>
                             {% else %}
                             <p class="mb-1 text-muted">
@@ -63,49 +72,40 @@
                 
                 <!-- 分页 -->
                 {% if registrations.pages > 1 %}
-                <nav aria-label="Page navigation" class="mt-4">
-                    <ul class="pagination justify-content-center">
-                        {% if registrations.has_prev %}
-                            <li class="page-item">
-                                <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.prev_num, status=current_status) }}" aria-label="Previous">
-                                    <span aria-hidden="true">&laquo;</span>
-                                </a>
-                            </li>
-                        {% else %}
-                            <li class="page-item disabled">
-                                <a class="page-link" href="#" aria-label="Previous">
-                                    <span aria-hidden="true">&laquo;</span>
-                                </a>
-                            </li>
-                        {% endif %}
-                        
-                        {% for page_num in registrations.iter_pages() %}
-                            {% if page_num %}
-                                <li class="page-item {% if page_num == registrations.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('student.my_activities', page=page_num, status=current_status) }}">{{ page_num }}</a>
-                                </li>
-                            {% else %}
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#">...</a>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
+                    <small class="text-muted">共 {{ registrations.total }} 条报名，每页 10 条，当前第 {{ registrations.page }}/{{ registrations.pages }} 页</small>
+                    <nav aria-label="我的活动分页">
+                        <ul class="pagination pagination-sm justify-content-center mb-0">
+                            {% if registrations.has_prev %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.prev_num, status=current_status) }}" aria-label="Previous">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
                                 </li>
                             {% endif %}
-                        {% endfor %}
-                        
-                        {% if registrations.has_next %}
-                            <li class="page-item">
-                                <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.next_num, status=current_status) }}" aria-label="Next">
-                                    <span aria-hidden="true">&raquo;</span>
-                                </a>
-                            </li>
-                        {% else %}
-                            <li class="page-item disabled">
-                                <a class="page-link" href="#" aria-label="Next">
-                                    <span aria-hidden="true">&raquo;</span>
-                                </a>
-                            </li>
-                        {% endif %}
-                    </ul>
-                </nav>
+                            
+                            {% for page_num in registrations.iter_pages() %}
+                                {% if page_num %}
+                                    <li class="page-item {% if page_num == registrations.page %}active{% endif %}">
+                                        <a class="page-link" href="{{ url_for('student.my_activities', page=page_num, status=current_status) }}">{{ page_num }}</a>
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if registrations.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.next_num, status=current_status) }}" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
                 {% endif %}
             {% else %}
                 <div class="text-center py-5">

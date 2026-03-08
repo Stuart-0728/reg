@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 import logging
 from src.utils.time_helpers import get_localized_now, localize_time, ensure_timezone_aware, normalize_datetime_for_db
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
 checkin_bp = Blueprint('checkin', __name__, url_prefix='/checkin')
@@ -102,9 +103,10 @@ def scan_checkin(activity_id, checkin_key):
             logger.info(f"签到时间检查已忽略: 活动ID={activity_id}，已手动开启签到")
         
         # 检查用户是否已报名该活动
-        stmt = db.select(Registration).filter_by(
-            user_id=current_user.id,
-            activity_id=activity_id
+        stmt = db.select(Registration).filter(
+            Registration.user_id == current_user.id,
+            Registration.activity_id == activity_id,
+            Registration.status.in_(['registered', 'attended'])
         )
         registration = db.session.execute(stmt).scalar_one_or_none()
         
@@ -113,6 +115,10 @@ def scan_checkin(activity_id, checkin_key):
             return redirect(url_for('student.activity_detail', id=activity_id))
         
         # 检查是否已签到
+        if registration.check_in_time or registration.status == 'attended':
+            flash('您已经签到过了', 'info')
+            return redirect(url_for('student.activity_detail', id=activity_id))
+
         stmt = db.select(ActivityCheckin).filter_by(
             user_id=current_user.id,
             activity_id=activity_id
@@ -127,10 +133,13 @@ def scan_checkin(activity_id, checkin_key):
         checkin = ActivityCheckin(
             activity_id=activity_id,
             user_id=current_user.id,
-            checkin_time=datetime.now(timezone.utc),
-            is_manual=False
+            checkin_time=now
         )
         db.session.add(checkin)
+
+        # 同步更新报名记录签到状态
+        registration.check_in_time = now
+        registration.status = 'attended'
         
         # 记录签到时间的日志
         logger.info(f"用户签到: 用户ID={current_user.id}, 活动ID={activity_id}, 签到时间={checkin.checkin_time}")
@@ -145,7 +154,7 @@ def scan_checkin(activity_id, checkin_key):
             student_info.points = (student_info.points or 0) + points
             # 记录积分历史
             points_history = PointsHistory(
-                user_id=current_user.id,
+                student_id=student_info.id,
                 activity_id=activity.id,
                 points=points,
                 reason=f"参与活动：{activity.title}"
@@ -185,12 +194,23 @@ def checkin_statistics(activity_id):
 def register_activity(activity_id):
     """用户报名活动"""
     try:
-        # 获取活动信息
-        activity = db.get_or_404(Activity, activity_id)
+        # 获取并锁定活动信息，避免并发超额报名
+        activity = db.session.execute(
+            db.select(Activity).where(Activity.id == activity_id).with_for_update()
+        ).scalar_one_or_none()
+        if not activity:
+            flash('活动不存在', 'warning')
+            return redirect(url_for('main.activity_detail', activity_id=activity_id))
         
         # 检查活动是否可以报名
-        now = datetime.now(timezone.utc)
-        if now > activity.registration_deadline:
+        now = get_localized_now()
+        from src.utils.time_helpers import safe_less_than, safe_greater_than
+
+        if getattr(activity, 'registration_start_time', None) and safe_greater_than(activity.registration_start_time, now):
+            flash('报名尚未开始', 'warning')
+            return redirect(url_for('main.activity_detail', activity_id=activity_id))
+
+        if activity.registration_deadline and safe_less_than(activity.registration_deadline, now):
             flash('该活动已截止报名', 'warning')
             return redirect(url_for('main.activity_detail', activity_id=activity_id))
         
@@ -212,7 +232,10 @@ def register_activity(activity_id):
         
         # 检查活动人数限制
         if activity.max_participants > 0:
-            count_stmt = db.select(func.count()).select_from(Registration).filter_by(activity_id=activity_id)
+            count_stmt = db.select(func.count()).select_from(Registration).filter(
+                Registration.activity_id == activity_id,
+                Registration.status.in_(['registered', 'attended'])
+            )
             current_count = db.session.execute(count_stmt).scalar()
             
             if current_count >= activity.max_participants:
@@ -224,13 +247,17 @@ def register_activity(activity_id):
             user_id=current_user.id,
             activity_id=activity_id,
             status='registered',
-            register_time=datetime.now(timezone.utc)
+            register_time=now
         )
         
         db.session.add(registration)
         db.session.commit()
         
         flash('报名成功！', 'success')
+        return redirect(url_for('main.activity_detail', activity_id=activity_id))
+    except IntegrityError:
+        db.session.rollback()
+        flash('您已经报名了此活动', 'info')
         return redirect(url_for('main.activity_detail', activity_id=activity_id))
         
     except Exception as e:

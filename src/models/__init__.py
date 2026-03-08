@@ -4,7 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
 import pytz
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Float, Table, func, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Float, Table, func, UniqueConstraint, Index
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from src import db
@@ -76,24 +76,14 @@ class User(db.Model, UserMixin):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
 
     def verify_password(self, password):
-        # 首先尝试新算法
-        if check_password_hash(str(self.password_hash), password):
-            return True
-        
-        # 如果失败，尝试旧的 scrypt 算法
         try:
-            # 检查密码哈希是否是旧格式
-            if 'scrypt' in str(self.password_hash):
-                # 由于scrypt算法可能不被支持，我们直接重置密码
-                # 这是一个临时解决方案
-                self.password = password
-                db.session.commit()
-                return True
-        except Exception as e:
-            # 如果旧算法验证失败或出现其他错误，则忽略
-            pass
-            
-        return False
+            return check_password_hash(str(self.password_hash), password)
+        except Exception:
+            return False
+
+    def needs_password_rehash(self):
+        hash_value = str(self.password_hash or '')
+        return hash_value.startswith('scrypt:')
     
     def ping(self):
         """更新用户最后访问时间"""
@@ -158,6 +148,7 @@ class Activity(db.Model):
     # 时间相关字段
     start_time = Column(DateTime)
     end_time = Column(DateTime)
+    registration_start_time = Column(DateTime)
     registration_deadline = Column(DateTime)
     completed_at = Column(DateTime)  # 活动完成时间
     
@@ -227,7 +218,11 @@ class Registration(db.Model):
     remark = Column(Text)  # 备注
     
     # 唯一约束，确保一个用户只能报名一个活动一次
-    __table_args__ = (UniqueConstraint('user_id', 'activity_id', name='_user_activity_uc'),)
+    __table_args__ = (
+        UniqueConstraint('user_id', 'activity_id', name='_user_activity_uc'),
+        Index('idx_registration_activity_status', 'activity_id', 'status'),
+        Index('idx_registration_user_activity', 'user_id', 'activity_id')
+    )
     
     def __repr__(self):
         return f'<Registration {self.user_id} {self.activity_id}>'

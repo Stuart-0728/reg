@@ -1,49 +1,128 @@
 {% extends 'base.html' %}
 
-{% block title %}站内信 - 重庆师范大学智能社团+{% endblock %}
+{% block title %}问题反馈 - 重庆师范大学智能社团+{% endblock %}
+
+{% block styles %}
+<style>
+    .feedback-card {
+        border-radius: 16px;
+    }
+    .feedback-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+    }
+    .feedback-filter-btn {
+        border-radius: 999px;
+        padding: 0.4rem 1rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        color: #4f46e5;
+        background: #fff;
+        transition: all .2s ease;
+    }
+    .feedback-filter-btn:hover {
+        background: rgba(79, 70, 229, 0.08);
+        border-color: rgba(79, 70, 229, 0.5);
+        color: #4338ca;
+    }
+    .feedback-filter-btn.active {
+        color: #fff;
+        border-color: #4f46e5;
+        background: linear-gradient(135deg, #6366f1, #4f46e5);
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+    }
+    .feedback-table thead th {
+        font-weight: 600;
+        color: var(--bs-secondary-color);
+        white-space: nowrap;
+    }
+    .feedback-table td {
+        vertical-align: middle;
+    }
+    .feedback-subject {
+        color: #334155;
+        text-decoration: none;
+        font-weight: 600;
+    }
+    .feedback-subject:hover {
+        color: #1d4ed8;
+        text-decoration: underline;
+    }
+    .feedback-empty {
+        border: 1px dashed var(--bs-border-color);
+        border-radius: 14px;
+    }
+    .wide-page {
+        width: min(96vw, 1780px);
+        margin: 0 auto;
+    }
+    @media (max-width: 991.98px) {
+        .wide-page {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container-fluid wide-page py-4">
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('student.dashboard') }}" class="text-decoration-none">个人中心</a></li>
-            <li class="breadcrumb-item active fw-medium" aria-current="page">站内信</li>
+            <li class="breadcrumb-item active fw-medium" aria-current="page">问题反馈</li>
         </ol>
     </nav>
 
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white border-0 p-4">
-            <div class="d-flex justify-content-between align-items-center">
+    <div class="card feedback-card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-0 p-4 pb-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div class="d-flex align-items-center">
-                    <div class="bg-transparent bg-opacity-10 rounded-circle p-3 me-3">
-                        <i class="fas fa-envelope text-primary"></i>
+                    <div class="bg-light rounded-circle p-3 me-3">
+                        <i class="fas fa-message text-primary"></i>
                     </div>
-                    <h3 class="mb-0 fw-bold">站内信</h3>
+                    <div>
+                        <h3 class="mb-1 fw-bold">问题反馈</h3>
+                        <div class="text-muted small">向管理员提交问题、建议与使用反馈</div>
+                    </div>
                 </div>
                 <a href="{{ url_for('student.create_message') }}" class="btn btn-primary">
-                    <i class="fas fa-paper-plane me-1"></i>发送消息
+                    <i class="fas fa-paper-plane me-1"></i>提交反馈
                 </a>
             </div>
         </div>
-        <div class="card-body p-4">
+        <div class="card-body p-4 pt-3">
             <!-- 过滤选项 -->
-            <div class="mb-3">
-                <div class="btn-group" role="group">
-                    <a href="{{ url_for('student.messages', filter='all') }}" class="btn btn-outline-primary {{ 'active' if filter_type == 'all' else '' }}">
-                        所有消息
+            <div class="feedback-toolbar mb-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="feedback-filters" role="group" aria-label="反馈筛选">
+                    <a href="{{ url_for('student.messages', filter='all') }}" class="btn feedback-filter-btn {{ 'active' if filter_type == 'all' else '' }}" data-no-loading>
+                        全部
                     </a>
-                    <a href="{{ url_for('student.messages', filter='sent') }}" class="btn btn-outline-primary {{ 'active' if filter_type == 'sent' else '' }}">
-                        已发送
+                    <a href="{{ url_for('student.messages', filter='sent') }}" class="btn feedback-filter-btn {{ 'active' if filter_type == 'sent' else '' }}" data-no-loading>
+                        我提交的
                     </a>
-                    <a href="{{ url_for('student.messages', filter='received') }}" class="btn btn-outline-primary {{ 'active' if filter_type == 'received' else '' }}">
-                        已接收
+                    <a href="{{ url_for('student.messages', filter='received') }}" class="btn feedback-filter-btn {{ 'active' if filter_type == 'received' else '' }}" data-no-loading>
+                        管理员回复
                     </a>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <form method="post" action="{{ url_for('student.mark_all_messages_read', filter=filter_type) }}" class="d-inline" data-no-global-loading="true">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-primary" data-no-loading="true">一键已读</button>
+                        </form>
+                        <form method="post" action="{{ url_for('student.delete_read_messages', filter=filter_type) }}" class="d-inline" onsubmit="return confirm('确定删除所有已读消息吗？');" data-no-global-loading="true">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" data-no-loading="true">删除已读</button>
+                        </form>
+                    </div>
                 </div>
             </div>
             
             {% if messages.items %}
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover table-cell-scroll feedback-table align-middle">
                     <thead>
                         <tr>
                             <th>状态</th>
@@ -58,15 +137,15 @@
                         <tr class="{{ 'table-light' if message.is_read and message.receiver_id == current_user.id else '' }}">
                             <td>
                                 {% if message.sender_id == current_user.id %}
-                                    <span class="badge bg-info">已发送</span>
+                                    <span class="badge bg-info">已提交</span>
                                 {% elif message.is_read %}
                                     <span class="badge bg-secondary">已读</span>
                                 {% else %}
-                                    <span class="badge bg-transparent">未读</span>
+                                    <span class="badge bg-warning text-dark">未读</span>
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="{{ url_for('student.view_message', id=message.id) }}">
+                                <a href="{{ url_for('student.view_message', id=message.id) }}" class="feedback-subject">
                                     {{ message.subject }}
                                 </a>
                             </td>
@@ -77,15 +156,15 @@
                                     管理员
                                 {% endif %}
                             </td>
-                            <td>{{ display_datetime(message.created_at) }}</td>
+                            <td>{{ display_datetime(message.created_at) if message.created_at else '—' }}</td>
                             <td>
                                 <div class="btn-group" role="group">
                                     <a href="{{ url_for('student.view_message', id=message.id) }}" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-eye"></i> 查看
                                     </a>
-                                    <form method="post" action="{{ url_for('student.delete_message', id=message.id) }}" onsubmit="return confirm('确定要删除此消息吗？');" class="d-inline">
+                                    <form method="post" action="{{ url_for('student.delete_message', id=message.id) }}" onsubmit="return confirm('确定要删除此消息吗？');" class="d-inline" data-no-global-loading="true">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger delete-confirm" data-no-loading="true">
                                             <i class="fas fa-trash-alt"></i> 删除
                                         </button>
                                     </form>
@@ -98,54 +177,51 @@
             </div>
             
             <!-- 分页 -->
-            <nav aria-label="消息分页">
-                <ul class="pagination justify-content-center">
-                    {% if messages.has_prev %}
-                    <li class="page-item">
-                        <a class="page-link" href="{{ url_for('student.messages', page=messages.prev_num, filter=filter_type) }}">上一页</a>
-                    </li>
-                    {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">上一页</span>
-                    </li>
-                    {% endif %}
-                    
-                    {% for page_num in messages.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
-                        {% if page_num %}
-                            {% if page_num == messages.page %}
-                            <li class="page-item active">
-                                <span class="page-link">{{ page_num }}</span>
-                            </li>
-                            {% else %}
-                            <li class="page-item">
-                                <a class="page-link" href="{{ url_for('student.messages', page=page_num, filter=filter_type) }}">{{ page_num }}</a>
-                            </li>
-                            {% endif %}
-                        {% else %}
-                            <li class="page-item disabled">
-                                <span class="page-link">...</span>
-                            </li>
+            {% if messages.pages > 1 %}
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
+                <small class="text-muted">共 {{ messages.total }} 条，每页 10 条，当前第 {{ messages.page }}/{{ messages.pages }} 页</small>
+                <nav aria-label="消息分页">
+                    <ul class="pagination pagination-sm justify-content-center mb-0">
+                        {% if messages.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('student.messages', page=messages.prev_num, filter=filter_type) }}">上一页</a>
+                        </li>
                         {% endif %}
-                    {% endfor %}
-                    
-                    {% if messages.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="{{ url_for('student.messages', page=messages.next_num, filter=filter_type) }}">下一页</a>
-                    </li>
-                    {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">下一页</span>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
+                        
+                        {% for page_num in messages.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+                            {% if page_num %}
+                                {% if page_num == messages.page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('student.messages', page=page_num, filter=filter_type) }}">{{ page_num }}</a>
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if messages.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('student.messages', page=messages.next_num, filter=filter_type) }}">下一页</a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
             {% else %}
-            <div class="text-center py-5">
+            <div class="text-center py-5 feedback-empty">
                 <div class="mb-3">
-                    <i class="fas fa-envelope-open fa-4x text-muted"></i>
+                    <i class="fas fa-inbox fa-4x text-muted"></i>
                 </div>
-                <h5 class="text-muted">暂无消息</h5>
-                <p class="text-muted">点击上方"发送消息"按钮创建新消息</p>
+                <h5 class="text-muted">暂无反馈记录</h5>
+                <p class="text-muted mb-0">点击上方“提交反馈”向管理员反馈问题</p>
             </div>
             {% endif %}
         </div>

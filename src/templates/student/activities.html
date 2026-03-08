@@ -44,7 +44,9 @@
                                         <h5 class="mb-0 fw-bold">{{ activity.title }}</h5>
                                         <div class="ms-3">
                                             {% if activity.status == 'active' %}
-                                                {% if not safe_less_than(activity.registration_deadline, now) or safe_compare(activity.registration_deadline, now) %}
+                                                {% if activity.registration_start_time and safe_greater_than(activity.registration_start_time, now) %}
+                                                    <span class="badge bg-info text-dark rounded-pill">报名未开始</span>
+                                                {% elif not safe_less_than(activity.registration_deadline, now) or safe_compare(activity.registration_deadline, now) %}
                                                     <span class="badge bg-success rounded-pill">报名中</span>
                                                 {% else %}
                                                     <span class="badge bg-warning text-dark rounded-pill">报名已截止</span>
@@ -67,21 +69,25 @@
                                     <div class="d-flex align-items-center text-muted">
                                         <i class="fas fa-hourglass-end me-2"></i>
                                         <span>
-                                            {% if not safe_less_than(activity.registration_deadline, now) or safe_compare(activity.registration_deadline, now) and activity.status == 'active' %}
-                                                报名截止: {{ display_datetime(activity.registration_deadline, 'Asia/Shanghai', '%Y-%m-%d %H:%M') }}
-                                            {% else %}
-                                                报名已截止
+                                            {% if activity.registration_start_time %}
+                                                报名开始: {{ display_datetime(activity.registration_start_time, 'Asia/Shanghai', '%Y-%m-%d %H:%M') }}
+                                                &nbsp;|&nbsp;
                                             {% endif %}
+                                            报名截止: {{ display_datetime(activity.registration_deadline, 'Asia/Shanghai', '%Y-%m-%d %H:%M') }}
                                         </span>
                                     </div>
                                 </div>
                                 <div class="col-md-4 d-flex flex-column justify-content-center align-items-end mt-3 mt-md-0">
                                     <div class="d-flex gap-2 flex-wrap justify-content-end">
                                         {% if activity.id in registered_activity_ids %}
-                                            <span class="badge bg-info rounded-pill px-3 py-2 mb-2">
+                                            <span class="badge registered-badge rounded-pill px-3 py-2 mb-2">
                                                 <i class="fas fa-check-circle me-1"></i>已报名
                                             </span>
-                                        {% elif activity.status == 'active' and (not safe_less_than(activity.registration_deadline, now) or safe_compare(activity.registration_deadline, now)) %}
+                                        {% elif current_user.role and current_user.role.name|lower == 'admin' %}
+                                            <a href="{{ url_for('admin.activity_view', id=activity.id) }}" class="btn btn-outline-warning">
+                                                <i class="fas fa-cog me-1"></i>管理活动
+                                            </a>
+                                        {% elif activity.status == 'active' and (not activity.registration_start_time or safe_less_than_equal(activity.registration_start_time, now)) and (not safe_less_than(activity.registration_deadline, now) or safe_compare(activity.registration_deadline, now)) %}
                                             <button type="button" class="btn btn-primary register-btn" data-activity-id="{{ activity.id }}">
                                                 <i class="fas fa-user-plus me-1"></i>立即报名
                                             </button>
@@ -99,17 +105,13 @@
                 <!-- 分页 -->
                 {% if activities.pages > 1 %}
                 <div class="p-3">
-                    <nav aria-label="Page navigation">
-                        <ul class="pagination justify-content-center flex-wrap mb-0">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <small class="text-muted">共 {{ activities.total }} 条活动，每页 10 条，当前第 {{ activities.page }}/{{ activities.pages }} 页</small>
+                        <nav aria-label="活动分页">
+                        <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
                             {% if activities.has_prev %}
                                 <li class="page-item">
                                     <a class="page-link" href="{{ url_for('student.activities', page=activities.prev_num, status=current_status) }}" aria-label="Previous">
-                                        <span aria-hidden="true">&laquo;</span>
-                                    </a>
-                                </li>
-                            {% else %}
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#" aria-label="Previous">
                                         <span aria-hidden="true">&laquo;</span>
                                     </a>
                                 </li>
@@ -133,15 +135,10 @@
                                         <span aria-hidden="true">&raquo;</span>
                                     </a>
                                 </li>
-                            {% else %}
-                                <li class="page-item disabled">
-                                    <a class="page-link" href="#" aria-label="Next">
-                                        <span aria-hidden="true">&raquo;</span>
-                                    </a>
-                                </li>
                             {% endif %}
                         </ul>
                     </nav>
+                    </div>
                 </div>
                 {% endif %}
             {% else %}
@@ -164,6 +161,17 @@
 {% block styles %}
 {{ super() }}
 <style>
+    .registered-badge {
+        background: #e8f5ff !important;
+        color: #0b6aa2 !important;
+        border: 1px solid #8fd1ff !important;
+        font-weight: 700;
+    }
+
+    .card.border-0.shadow-sm.mb-4 {
+        margin-bottom: 2.25rem !important;
+    }
+
     /* 移动端优化 */
     @media (max-width: 576px) {
         .list-group-item {

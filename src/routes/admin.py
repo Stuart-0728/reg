@@ -17,6 +17,7 @@ import pandas as pd  # 添加pandas导入
 import tempfile  # 添加tempfile导入
 import zipfile  # 添加zipfile导入
 import pytz
+import requests
 from flask import (
     Blueprint, render_template, redirect, url_for, flash, request, current_app, 
     send_from_directory, send_file, Response, make_response, jsonify
@@ -37,6 +38,415 @@ admin_bp = Blueprint('admin', __name__)
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
+
+def _to_utc_naive_datetime(dt):
+    """将表单时间统一转换为 UTC naive，避免数据库时区字段混乱导致 +8h 偏移。"""
+    if not dt:
+        return None
+    aware_dt = ensure_timezone_aware(dt, 'Asia/Shanghai')
+    return aware_dt.astimezone(pytz.utc).replace(tzinfo=None)
+
+def _format_review_time_for_display(dt):
+    """评价时间展示：兼容历史 naive 数据，统一显示北京时间。"""
+    if not dt:
+        return '未设置'
+    beijing_tz = pytz.timezone('Asia/Shanghai')
+    if dt.tzinfo is None:
+        localized = beijing_tz.localize(dt)
+    else:
+        localized = dt.astimezone(beijing_tz)
+    return localized.strftime('%Y-%m-%d %H:%M')
+
+def _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.6, max_tokens=1200):
+    api_key = os.environ.get("ARK_API_KEY") or current_app.config.get('VOLCANO_API_KEY')
+    if not api_key:
+        raise ValueError('未配置ARK_API_KEY，无法使用AI生成能力')
+
+    url = current_app.config.get('VOLCANO_API_URL', "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+    payload = {
+        "model": current_app.config.get('VOLCANO_MODEL', 'doubao-1-5-pro-32k-250115'),
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    response = requests.post(url, headers=headers, json=payload, timeout=45)
+    response.raise_for_status()
+    data = response.json()
+    return data['choices'][0]['message']['content'].strip()
+
+def _extract_json_block(raw_text):
+    text = (raw_text or '').strip()
+    if not text:
+        return {}
+
+    if text.startswith('```'):
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    match = re.search(r'\{[\s\S]*\}', text)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except Exception:
+            return {}
+    return {}
+
+def _normalize_activity_ai_payload(payload):
+    if not isinstance(payload, dict):
+        return {}
+
+    normalized = {
+        'title': str(payload.get('title', '') or '').strip(),
+        'description': str(payload.get('description', '') or '').strip(),
+        'location': str(payload.get('location', '') or '').strip(),
+        'start_time': str(payload.get('start_time', '') or '').strip(),
+        'end_time': str(payload.get('end_time', '') or '').strip(),
+        'registration_start_time': str(payload.get('registration_start_time', '') or '').strip(),
+        'registration_deadline': str(payload.get('registration_deadline', '') or '').strip(),
+        'max_participants': payload.get('max_participants', ''),
+        'points': payload.get('points', ''),
+        'status': str(payload.get('status', '') or '').strip(),
+        'is_featured': bool(payload.get('is_featured', False))
+    }
+
+    for int_key in ('max_participants', 'points'):
+        value = normalized[int_key]
+        if value in ('', None):
+            normalized[int_key] = ''
+            continue
+        try:
+            normalized[int_key] = int(value)
+        except Exception:
+            normalized[int_key] = ''
+
+    if normalized['status'] not in ('active', 'completed', 'cancelled'):
+        normalized['status'] = 'active'
+    return normalized
+
+def _attach_ai_poster_from_url(activity, image_url):
+    if not image_url:
+        return False
+
+    if image_url.startswith('data:image/'):
+        try:
+            header, encoded = image_url.split(',', 1)
+        except ValueError as exc:
+            raise ValueError('AI生成图片数据格式无效') from exc
+
+        mime_match = re.match(r'^data:(image/[a-zA-Z0-9.+-]+);base64$', header)
+        if not mime_match:
+            raise ValueError('AI生成图片MIME类型无效')
+
+        mime_type = mime_match.group(1).lower()
+        raw_bytes = base64.b64decode(encoded)
+
+        ext_map = {
+            'image/png': 'png',
+            'image/jpeg': 'jpg',
+            'image/jpg': 'jpg',
+            'image/webp': 'webp'
+        }
+        extension = ext_map.get(mime_type, 'png')
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        filename = f"activity_{activity.id}_ai_{timestamp}.{extension}"
+
+        activity.poster_image = filename
+        activity.poster_data = raw_bytes
+        activity.poster_mimetype = mime_type
+        return True
+
+    response = requests.get(image_url, timeout=60)
+    response.raise_for_status()
+
+    mime_type = response.headers.get('Content-Type', 'image/png').split(';')[0].strip().lower()
+    if not mime_type.startswith('image/'):
+        raise ValueError('AI生成结果不是图片格式')
+
+    ext_map = {
+        'image/png': 'png',
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/webp': 'webp'
+    }
+    extension = ext_map.get(mime_type, 'png')
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    filename = f"activity_{activity.id}_ai_{timestamp}.{extension}"
+
+    activity.poster_image = filename
+    activity.poster_data = response.content
+    activity.poster_mimetype = mime_type
+    return True
+
+def _generate_poster_via_ark(prompt, model_name):
+    api_key = os.environ.get("ARK_API_KEY") or current_app.config.get('VOLCANO_API_KEY')
+    if not api_key:
+        raise ValueError('未配置ARK_API_KEY，无法生成海报')
+
+    image_api = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
+    image_payload = {
+        "model": model_name,
+        "prompt": prompt,
+        "sequential_image_generation": "disabled",
+        "response_format": "url",
+        "size": "2K",
+        "stream": False,
+        "watermark": True
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    response = requests.post(image_api, headers=headers, json=image_payload, timeout=(8, 55))
+    response.raise_for_status()
+    result = response.json()
+    data_list = result.get('data') or []
+    image_url = ''
+    if data_list and isinstance(data_list[0], dict):
+        image_url = data_list[0].get('url', '')
+
+    if not image_url:
+        raise ValueError('ARK已返回，但未拿到可用图片链接')
+
+    return image_url
+
+def _generate_poster_via_gemini(prompt, model_name):
+    api_key = _get_gemini_api_key()
+    if not api_key:
+        raise ValueError('未配置GEMINI_API_KEY，无法生成海报')
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "responseModalities": ["TEXT", "IMAGE"]
+        }
+    }
+
+    response = requests.post(url, json=payload, timeout=(8, 30))
+    response.raise_for_status()
+    result = response.json()
+
+    for candidate in result.get('candidates', []):
+        content = candidate.get('content') or {}
+        for part in content.get('parts', []):
+            inline_data = part.get('inlineData') or part.get('inline_data')
+            if not inline_data:
+                continue
+            image_b64 = inline_data.get('data')
+            mime_type = inline_data.get('mimeType') or inline_data.get('mime_type') or 'image/png'
+            if image_b64:
+                return f"data:{mime_type};base64,{image_b64}"
+
+    raise ValueError('Gemini已返回，但未拿到可用图片数据')
+
+def _get_gemini_api_key():
+    return (
+        os.environ.get('GEMINI_API_KEY')
+        or current_app.config.get('GEMINI_API_KEY')
+        or os.environ.get('GOOGLE_API_KEY')
+    )
+
+def _list_gemini_image_models():
+    api_key = _get_gemini_api_key()
+    if not api_key:
+        return []
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+    response = requests.get(url, timeout=(6, 12))
+    response.raise_for_status()
+    payload = response.json() or {}
+
+    models = []
+    for item in payload.get('models', []):
+        name = str(item.get('name') or '').strip()
+        if not name.startswith('models/'):
+            continue
+
+        supported_methods = item.get('supportedGenerationMethods') or []
+        if 'generateContent' not in supported_methods:
+            continue
+
+        short_name = name.replace('models/', '', 1)
+        lower_name = short_name.lower()
+        if 'image' not in lower_name and 'imagen' not in lower_name:
+            continue
+
+        models.append(short_name)
+
+    if not models:
+        return []
+
+    priority = {
+        'gemini-2.5-flash-image': 0,
+        'gemini-2.0-flash-exp-image-generation': 1,
+        'gemini-3-pro-image-preview': 2
+    }
+    models = sorted(set(models), key=lambda name: (priority.get(name, 99), name))
+    return models
+
+@admin_bp.route('/activity/ai/poster-models', methods=['GET'])
+@admin_required
+def ai_poster_models():
+    try:
+        static_models = [
+            {
+                'value': 'ark:doubao-seedream-5-0-260128',
+                'label': '火山方舟 · doubao-seedream-5-0-260128（默认）'
+            }
+        ]
+
+        gemini_models = []
+        try:
+            for model_name in _list_gemini_image_models():
+                gemini_models.append({
+                    'value': f'gemini:{model_name}',
+                    'label': f'Gemini · {model_name}'
+                })
+        except Exception as gemini_error:
+            logger.warning(f"拉取Gemini模型列表失败，使用静态回退: {gemini_error}")
+
+        if not gemini_models:
+            gemini_models = [
+                {
+                    'value': 'gemini:gemini-2.5-flash-image',
+                    'label': 'Gemini · gemini-2.5-flash-image'
+                }
+            ]
+
+        return jsonify({
+            'success': True,
+            'models': static_models + gemini_models
+        })
+    except Exception as e:
+        logger.error(f"获取海报模型列表失败: {e}")
+        return jsonify({'success': False, 'message': f'获取模型列表失败: {str(e)}'}), 500
+
+@admin_bp.route('/activity/ai/generate-description', methods=['POST'])
+@admin_required
+def ai_generate_activity_description():
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        payload = request.get_json(silent=True) or {}
+        title = (payload.get('title') or '').strip()
+        if not title:
+            return jsonify({'success': False, 'message': '请先输入活动标题'}), 400
+
+        system_prompt = "你是高校活动运营助手，只输出简洁、可直接发布的活动文案。"
+        user_prompt = (
+            f"活动标题：{title}\n"
+            "请输出一段活动描述，包含：活动亮点、参与对象、流程要点、收获价值。"
+            "要求：中文、150-280字、自然口语化、不要使用Markdown标题。"
+        )
+        content = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.7, max_tokens=800)
+        return jsonify({'success': True, 'description': content})
+    except Exception as e:
+        logger.error(f"AI生成活动描述失败: {e}")
+        return jsonify({'success': False, 'message': f'生成失败: {str(e)}'}), 500
+
+@admin_bp.route('/activity/ai/parse-content', methods=['POST'])
+@admin_required
+def ai_parse_activity_content():
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        payload = request.get_json(silent=True) or {}
+        raw_content = (payload.get('content') or '').strip()
+        if not raw_content:
+            return jsonify({'success': False, 'message': '请先粘贴活动内容'}), 400
+
+        system_prompt = "你是活动表单解析助手，必须输出严格JSON。"
+        user_prompt = (
+            "请从下面文本提取活动表单字段，并仅输出JSON对象，不要其他文字。\n"
+            "字段: title, description, location, start_time, end_time, registration_start_time, registration_deadline, max_participants, points, status, is_featured\n"
+            "规则:\n"
+            "1) 时间格式必须是 YYYY-MM-DD HH:MM，无法确定填空字符串\n"
+            "2) status 仅可为 active/completed/cancelled，默认active\n"
+            "3) max_participants/points 返回数字；未知返回空字符串\n"
+            "4) is_featured 返回布尔值\n"
+            f"\n原始文本:\n{raw_content}"
+        )
+        parsed_text = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.2, max_tokens=1200)
+        parsed_json = _extract_json_block(parsed_text)
+        normalized = _normalize_activity_ai_payload(parsed_json)
+        return jsonify({'success': True, 'data': normalized})
+    except Exception as e:
+        logger.error(f"AI解析活动内容失败: {e}")
+        return jsonify({'success': False, 'message': f'解析失败: {str(e)}'}), 500
+
+@admin_bp.route('/activity/ai/generate-poster', methods=['POST'])
+@admin_required
+def ai_generate_activity_poster():
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        payload = request.get_json(silent=True) or {}
+        title = (payload.get('title') or '').strip()
+        description = (payload.get('description') or '').strip()
+        requirements = (payload.get('requirements') or '').strip()
+        model_value = (payload.get('model') or 'ark:doubao-seedream-5-0-260128').strip()
+
+        if not title:
+            return jsonify({'success': False, 'message': '请先输入活动标题'}), 400
+
+        prompt = (
+            f"高校活动海报，主题：{title}。"
+            f"活动简介：{description[:220]}。"
+            "视觉要求：现代、青春、清晰排版、主体突出、适合校园宣传。"
+        )
+        if requirements:
+            prompt += f" 额外要求：{requirements}。"
+
+        provider, _, model_name = model_value.partition(':')
+        provider = provider.strip().lower()
+        model_name = model_name.strip()
+
+        if not provider or not model_name:
+            return jsonify({'success': False, 'message': '模型参数无效'}), 400
+
+        if provider == 'ark':
+            image_url = _generate_poster_via_ark(prompt, model_name)
+            return jsonify({'success': True, 'image_url': image_url, 'prompt': prompt, 'model': model_value, 'model_used': model_value})
+        elif provider == 'gemini':
+            try:
+                image_url = _generate_poster_via_gemini(prompt, model_name)
+                return jsonify({'success': True, 'image_url': image_url, 'prompt': prompt, 'model': model_value, 'model_used': model_value})
+            except Exception as gemini_error:
+                logger.warning(f"Gemini生图失败，自动回退ARK: {gemini_error}")
+                fallback_model = 'ark:doubao-seedream-5-0-260128'
+                fallback_url = _generate_poster_via_ark(prompt, 'doubao-seedream-5-0-260128')
+                return jsonify({
+                    'success': True,
+                    'image_url': fallback_url,
+                    'prompt': prompt,
+                    'model': model_value,
+                    'model_used': fallback_model,
+                    'fallback': True,
+                    'message': 'Gemini暂时不可用，已自动切换到ARK模型生成'
+                })
+        else:
+            return jsonify({'success': False, 'message': '暂不支持该图片模型提供商'}), 400
+    except Exception as e:
+        logger.error(f"AI生成海报失败: {e}")
+        if isinstance(e, requests.exceptions.Timeout):
+            return jsonify({'success': False, 'message': 'AI生图超时，请稍后重试或切换ARK模型'}), 504
+        return jsonify({'success': False, 'message': f'生成海报失败: {str(e)}'}), 500
 
 def handle_poster_upload(file_data, activity_id):
     """处理活动海报上传
@@ -272,40 +682,23 @@ def create_activity():
             location = form.location.data
             start_time = form.start_time.data
             end_time = form.end_time.data
+            registration_start_time = form.registration_start_time.data
             registration_deadline = form.registration_deadline.data
             max_participants = form.max_participants.data
             points = form.points.data
             status = form.status.data
             is_featured = form.is_featured.data
+            ai_poster_url = (request.form.get('ai_poster_url') or '').strip()
             
-            # 改进的时区处理逻辑
-            # 先检查时间对象是否为None
-            if start_time:
-                # 检查是否已有时区信息，避免重复添加
-                if start_time.tzinfo is None:
-                    start_time = ensure_timezone_aware(start_time)
-                    logger.info(f"为start_time添加了北京时区: {start_time}")
-                else:
-                    # 如果已有时区信息，只需确保是UTC时区
-                    start_time = start_time.astimezone(pytz.utc)
-            
-            if end_time:
-                # 检查是否已有时区信息，避免重复添加
-                if end_time.tzinfo is None:
-                    end_time = ensure_timezone_aware(end_time)
-                    logger.info(f"为end_time添加了北京时区: {end_time}")
-                else:
-                    # 如果已有时区信息，只需确保是UTC时区
-                    end_time = end_time.astimezone(pytz.utc)
-            
-            if registration_deadline:
-                # 检查是否已有时区信息，避免重复添加
-                if registration_deadline.tzinfo is None:
-                    registration_deadline = ensure_timezone_aware(registration_deadline)
-                    logger.info(f"为registration_deadline添加了北京时区: {registration_deadline}")
-                else:
-                    # 如果已有时区信息，只需确保是UTC时区
-                    registration_deadline = registration_deadline.astimezone(pytz.utc)
+            # 统一写库：北京时间输入 -> UTC naive（数据库）
+            start_time = _to_utc_naive_datetime(start_time)
+            end_time = _to_utc_naive_datetime(end_time)
+            registration_start_time = _to_utc_naive_datetime(registration_start_time)
+            registration_deadline = _to_utc_naive_datetime(registration_deadline)
+
+            if registration_start_time and registration_deadline and registration_start_time > registration_deadline:
+                flash('报名开始时间不能晚于报名截止时间', 'warning')
+                return render_template('admin/activity_form.html', form=form, activity=None)
             
             # 创建活动
             activity = Activity(
@@ -314,6 +707,7 @@ def create_activity():
                 location=location,
                 start_time=start_time,
                 end_time=end_time,
+                registration_start_time=registration_start_time,
                 registration_deadline=registration_deadline,
                 max_participants=max_participants,
                 points=points,
@@ -321,6 +715,10 @@ def create_activity():
                 is_featured=is_featured,
                 created_by=current_user.id
             )
+
+            # 先加入会话并flush，确保新建活动拿到稳定ID，避免海报文件名异常
+            db.session.add(activity)
+            db.session.flush()
             
             # 处理标签
             selected_tag_ids = request.form.getlist('tags')
@@ -380,9 +778,15 @@ def create_activity():
                 except Exception as e:
                     logger.error(f"上传海报时出错: {e}", exc_info=True)
                     flash('上传海报时出错，但活动信息已保存', 'warning')
+            elif ai_poster_url:
+                try:
+                    _attach_ai_poster_from_url(activity, ai_poster_url)
+                    logger.info(f"活动海报已由AI链接写入: activity_id={activity.id}")
+                except Exception as e:
+                    logger.error(f"AI海报写入失败: {e}", exc_info=True)
+                    flash('AI海报生成结果无法写入，活动信息已保存，可手动上传海报', 'warning')
             
             # 保存到数据库
-            db.session.add(activity)
             db.session.commit()
             
             # 记录操作
@@ -427,9 +831,6 @@ def edit_activity(id):
         
         if form.validate_on_submit():
             try:
-                # 导入pytz用于时区处理
-                beijing_tz = pytz.timezone('Asia/Shanghai')
-                
                 # 更新活动信息，但先保存标签引用
                 selected_tag_ids = request.form.getlist('tags')
                 logger.info(f"选中的标签IDs: {selected_tag_ids}")
@@ -445,33 +846,15 @@ def edit_activity(id):
                 checkin_key_expires = activity.checkin_key_expires
                 created_by_id = activity.created_by  # 保存创建者ID
                 
-                # 先保存表单中的时间字段，将它们转换为带时区的UTC时间
-                start_time = form.start_time.data
-                if start_time:
-                    # 检查是否已有时区信息，避免重复添加
-                    if start_time.tzinfo is None:
-                        start_time = beijing_tz.localize(start_time).astimezone(pytz.utc)
-                    else:
-                        # 如果已有时区信息，只需确保是UTC时区
-                        start_time = start_time.astimezone(pytz.utc)
-                
-                end_time = form.end_time.data
-                if end_time:
-                    # 检查是否已有时区信息，避免重复添加
-                    if end_time.tzinfo is None:
-                        end_time = beijing_tz.localize(end_time).astimezone(pytz.utc)
-                    else:
-                        # 如果已有时区信息，只需确保是UTC时区
-                        end_time = end_time.astimezone(pytz.utc)
-                
-                registration_deadline = form.registration_deadline.data
-                if registration_deadline:
-                    # 检查是否已有时区信息，避免重复添加
-                    if registration_deadline.tzinfo is None:
-                        registration_deadline = beijing_tz.localize(registration_deadline).astimezone(pytz.utc)
-                    else:
-                        # 如果已有时区信息，只需确保是UTC时区
-                        registration_deadline = registration_deadline.astimezone(pytz.utc)
+                # 统一写库：北京时间输入 -> UTC naive（数据库）
+                start_time = _to_utc_naive_datetime(form.start_time.data)
+                end_time = _to_utc_naive_datetime(form.end_time.data)
+                registration_start_time = _to_utc_naive_datetime(form.registration_start_time.data)
+                registration_deadline = _to_utc_naive_datetime(form.registration_deadline.data)
+
+                if registration_start_time and registration_deadline and registration_start_time > registration_deadline:
+                    flash('报名开始时间不能晚于报名截止时间', 'warning')
+                    return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
                 
                 # 使用form填充对象
                 # 手动填充对象字段，避免标签处理错误
@@ -488,6 +871,7 @@ def edit_activity(id):
                 # 使用转换后的时间覆盖填充的时间字段
                 activity.start_time = start_time
                 activity.end_time = end_time
+                activity.registration_start_time = registration_start_time
                 activity.registration_deadline = registration_deadline
                 
                 # 恢复保存的值
@@ -592,6 +976,15 @@ def edit_activity(id):
                     except Exception as e:
                         logger.error(f"编辑活动: 上传海报时出错: {e}", exc_info=True)
                         flash('上传海报时出错，但其他活动信息已保存', 'warning')
+                else:
+                    ai_poster_url = (request.form.get('ai_poster_url') or '').strip()
+                    if ai_poster_url:
+                        try:
+                            _attach_ai_poster_from_url(activity, ai_poster_url)
+                            logger.info(f"编辑活动: AI海报已写入 activity_id={activity.id}")
+                        except Exception as e:
+                            logger.error(f"编辑活动: AI海报写入失败: {e}", exc_info=True)
+                            flash('AI海报写入失败，已保留原海报', 'warning')
                 
                 # 记录更新时间，使用UTC时间
                 activity.updated_at = datetime.now(pytz.utc)
@@ -658,12 +1051,14 @@ def students():
         query = query.order_by(StudentInfo.id.desc())
         students = get_compatible_paginate(db, query, page=page, per_page=20, error_out=False)
         
-        # 确保所有学生记录都有qq和has_selected_tags字段的值
+        # 确保所有学生记录都有qq和has_selected_tags字段的值，并标记是否为管理员
         for student in students.items:
+            user = db.session.get(User, student.user_id)
             if not hasattr(student, 'qq'):
                 student.qq = ''
             if not hasattr(student, 'has_selected_tags'):
                 student.has_selected_tags = False
+            student.is_admin = bool(user and user.role and (user.role.name or '').strip().lower() == 'admin')
         
         return render_template('admin/students.html', students=students, search=search)
     except Exception as e:
@@ -676,9 +1071,31 @@ def students():
 def delete_student(id):
     try:
         user = db.get_or_404(User, id)
-        if user.role.name != 'Student':
+        user_role = (user.role.name or '').strip().lower() if user.role else ''
+        if user_role != 'student':
             flash('只能删除学生账号', 'danger')
             return redirect(url_for('admin.students'))
+
+        # 清理外键依赖，避免删除失败
+        db.session.execute(db.text("UPDATE system_logs SET user_id = NULL WHERE user_id = :uid"), {'uid': user.id})
+        db.session.execute(db.text("UPDATE announcements SET created_by = NULL WHERE created_by = :uid"), {'uid': user.id})
+
+        # 显式清理与用户直接关联的数据
+        NotificationRead.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+        Notification.query.filter_by(created_by=user.id).delete(synchronize_session=False)
+        Message.query.filter(or_(Message.sender_id == user.id, Message.receiver_id == user.id)).delete(synchronize_session=False)
+        Registration.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+        ActivityReview.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+        ActivityCheckin.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+        AIChatHistory.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+        AIChatSession.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+        AIUserPreferences.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+
+        if user.student_info:
+            student_info_id = user.student_info.id
+            db.session.execute(student_tags.delete().where(student_tags.c.student_id == student_info_id))
+            PointsHistory.query.filter_by(student_id=student_info_id).delete(synchronize_session=False)
+            StudentInfo.query.filter_by(user_id=user.id).delete(synchronize_session=False)
 
         db.session.delete(user)
         db.session.commit()
@@ -691,6 +1108,96 @@ def delete_student(id):
         logger.error(f"Error deleting student: {e}")
         flash('删除学生账号时出错', 'danger')
         return redirect(url_for('admin.students'))
+
+@admin_bp.route('/student/<int:user_id>/promote-admin', methods=['POST'])
+@admin_required
+def promote_student_to_admin(user_id):
+    try:
+        csrf_token = request.form.get('csrf_token', '')
+        validate_csrf(csrf_token)
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(request.referrer or url_for('admin.students'))
+
+    try:
+        user = db.get_or_404(User, user_id)
+
+        user_role = (user.role.name or '').strip().lower() if user.role else ''
+        if user_role != 'student':
+            flash('仅可将学生账号设置为管理员', 'warning')
+            return redirect(request.referrer or url_for('admin.students'))
+
+        admin_role = db.session.execute(
+            db.select(Role).filter(func.lower(Role.name) == 'admin')
+        ).scalar_one_or_none()
+        if not admin_role:
+            flash('系统角色异常：未找到管理员角色', 'danger')
+            return redirect(request.referrer or url_for('admin.students'))
+
+        user.role_id = admin_role.id
+        db.session.commit()
+
+        log_action('promote_student_to_admin', f'将用户 {user.username}(ID:{user.id}) 设置为管理员')
+        flash('已成功将该学生设置为管理员', 'success')
+        return redirect(request.referrer or url_for('admin.students'))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error promoting student to admin: {e}")
+        flash('设置管理员时出错', 'danger')
+        return redirect(request.referrer or url_for('admin.students'))
+
+@admin_bp.route('/student/<int:user_id>/demote-admin', methods=['POST'])
+@admin_required
+def demote_admin_to_student(user_id):
+    try:
+        csrf_token = request.form.get('csrf_token', '')
+        validate_csrf(csrf_token)
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(request.referrer or url_for('admin.students'))
+
+    try:
+        user = db.get_or_404(User, user_id)
+
+        user_role = (user.role.name or '').strip().lower() if user.role else ''
+        if user_role != 'admin':
+            flash('仅可取消管理员账号的管理员身份', 'warning')
+            return redirect(request.referrer or url_for('admin.students'))
+
+        if user.id == current_user.id:
+            flash('不能取消自己的管理员身份', 'warning')
+            return redirect(request.referrer or url_for('admin.students'))
+
+        admin_role = db.session.execute(
+            db.select(Role).filter(func.lower(Role.name) == 'admin')
+        ).scalar_one_or_none()
+        student_role = db.session.execute(
+            db.select(Role).filter(func.lower(Role.name) == 'student')
+        ).scalar_one_or_none()
+
+        if not admin_role or not student_role:
+            flash('系统角色异常，请联系系统管理员', 'danger')
+            return redirect(request.referrer or url_for('admin.students'))
+
+        admin_count = db.session.execute(
+            db.select(func.count()).select_from(User).filter(User.role_id == admin_role.id)
+        ).scalar() or 0
+
+        if admin_count <= 1:
+            flash('系统至少需要保留一名管理员，无法继续操作', 'warning')
+            return redirect(request.referrer or url_for('admin.students'))
+
+        user.role_id = student_role.id
+        db.session.commit()
+
+        log_action('demote_admin_to_student', f'取消用户 {user.username}(ID:{user.id}) 的管理员身份')
+        flash('已成功取消该用户管理员身份', 'success')
+        return redirect(request.referrer or url_for('admin.students'))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error demoting admin to student: {e}")
+        flash('取消管理员身份时出错', 'danger')
+        return redirect(request.referrer or url_for('admin.students'))
 
 @admin_bp.route('/student/<int:user_id>')
 @admin_required
@@ -1139,7 +1646,7 @@ def export_activity_registrations(id):
 def export_students():
     try:
         # 获取所有学生信息
-        students = User.query.filter_by(role_id=2).join(
+        students = User.query.join(Role).filter(Role.name == 'Student').join(
             StudentInfo, User.id == StudentInfo.user_id
         ).add_columns(
             User.id,
@@ -1205,6 +1712,48 @@ def export_students():
         logger.error(f"Error exporting students: {e}")
         flash('导出学生信息时出错', 'danger')
         return redirect(url_for('admin.students'))
+
+def _sync_published_announcements_to_notifications():
+    """将已发布公告同步为公开通知，确保首页/学生头部可见。"""
+    try:
+        published_announcements = db.session.execute(
+            db.select(Announcement).filter_by(status='published').order_by(Announcement.updated_at.desc())
+        ).scalars().all()
+
+        created_count = 0
+        for ann in published_announcements:
+            exists = db.session.execute(
+                db.select(Notification).filter(
+                    Notification.title == ann.title,
+                    Notification.content == ann.content,
+                    Notification.created_by == ann.created_by,
+                    Notification.is_public == True
+                )
+            ).scalar_one_or_none()
+
+            if exists:
+                continue
+
+            notification = Notification(
+                title=ann.title,
+                content=ann.content,
+                is_important=False,
+                created_at=ann.updated_at or ann.created_at or datetime.now(pytz.utc),
+                created_by=ann.created_by,
+                expiry_date=None,
+                is_public=True
+            )
+            db.session.add(notification)
+            created_count += 1
+
+        if created_count > 0:
+            db.session.commit()
+            logger.info(f"公告同步通知完成，新增 {created_count} 条")
+        else:
+            db.session.rollback()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"同步公告到通知失败: {e}")
 
 @admin_bp.route('/backup', methods=['GET'])
 @admin_required
@@ -1321,6 +1870,7 @@ def create_backup():
                     'location': activity.location,
                     'start_time': activity.start_time.isoformat() if activity.start_time else None,
                     'end_time': activity.end_time.isoformat() if activity.end_time else None,
+                    'registration_start_time': activity.registration_start_time.isoformat() if activity.registration_start_time else None,
                     'registration_deadline': activity.registration_deadline.isoformat() if activity.registration_deadline else None,
                     'max_participants': activity.max_participants,
                     'status': activity.status,
@@ -1824,6 +2374,8 @@ def activity_reviews(id):
         
         activity = db.get_or_404(Activity, id)
         reviews = ActivityReview.query.filter_by(activity_id=id).order_by(ActivityReview.created_at.desc()).all()
+        for review in reviews:
+            review.display_created_at = _format_review_time_for_display(review.created_at)
         if reviews:
             average_rating = sum(r.rating for r in reviews) / len(reviews)
         else:
@@ -1844,6 +2396,140 @@ def activity_reviews(id):
         flash('查看活动评价时出错', 'danger')
         return redirect(url_for('admin.activities'))
 
+@admin_bp.route('/activity/review/<int:review_id>/delete', methods=['POST'])
+@admin_required
+def delete_activity_review(review_id):
+    try:
+        review = db.get_or_404(ActivityReview, review_id)
+        activity_id = review.activity_id
+        reclaim_points = request.form.get('reclaim_points') == '1'
+
+        if reclaim_points:
+            student_info = db.session.execute(
+                db.select(StudentInfo).filter_by(user_id=review.user_id)
+            ).scalar_one_or_none()
+            if student_info:
+                reclaim_amount = min(5, max(0, student_info.points or 0))
+                if reclaim_amount > 0:
+                    student_info.points -= reclaim_amount
+                    db.session.add(PointsHistory(
+                        student_id=student_info.id,
+                        points=-reclaim_amount,
+                        reason='管理员删除活动评价回收积分',
+                        activity_id=activity_id
+                    ))
+
+        db.session.delete(review)
+        db.session.commit()
+
+        log_action('delete_activity_review', f'删除活动评价: review_id={review_id}, activity_id={activity_id}, reclaim_points={reclaim_points}')
+        flash('活动评价已删除', 'success')
+        return redirect(url_for('admin.activity_reviews', id=activity_id))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in delete_activity_review: {e}")
+        flash('删除活动评价时出错', 'danger')
+        return redirect(url_for('admin.activities'))
+
+@admin_bp.route('/activity/<int:id>/ai/review-cluster-summary', methods=['POST'])
+@admin_required
+def ai_review_cluster_summary(id):
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        activity = db.get_or_404(Activity, id)
+        reviews = ActivityReview.query.filter_by(activity_id=id).order_by(ActivityReview.created_at.desc()).all()
+
+        if not reviews:
+            return jsonify({'success': True, 'summary': '该活动暂无评价数据，暂无法生成聚类总结。'})
+
+        review_lines = []
+        for idx, review in enumerate(reviews[:120], start=1):
+            review_text = (review.review or '').replace('\n', ' ').strip()
+            if len(review_text) > 180:
+                review_text = review_text[:180] + '…'
+            review_lines.append(
+                f"{idx}. 总评{review.rating}/5，内容{review.content_quality or '-'}，组织{review.organization or '-'}，设施{review.facility or '-'}，反馈：{review_text}"
+            )
+
+        system_prompt = "你是高校活动评价分析助手，擅长把大量反馈聚类并输出行动建议。"
+        user_prompt = (
+            f"活动标题：{activity.title}\n"
+            f"评价总数：{len(reviews)}\n"
+            f"评价样本：\n" + "\n".join(review_lines) + "\n\n"
+            "请输出：\n"
+            "1) 评价主题聚类（3-6类，每类含‘主题名、占比估计、典型反馈、优先级’）\n"
+            "2) Top3 优点\n"
+            "3) Top3 问题\n"
+            "4) 可执行改进清单（按高/中/低优先级）\n"
+            "要求：中文，结构清晰，直接可用于运营复盘。"
+        )
+
+        summary = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.3, max_tokens=1600)
+        return jsonify({'success': True, 'summary': summary})
+    except Exception as e:
+        logger.error(f"AI聚类总结失败: {e}")
+        return jsonify({'success': False, 'message': f'生成失败: {str(e)}'}), 500
+
+@admin_bp.route('/activity/<int:id>/ai/retrospective-report', methods=['POST'])
+@admin_required
+def ai_activity_retrospective_report(id):
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        activity = db.get_or_404(Activity, id)
+        reviews = ActivityReview.query.filter_by(activity_id=id).all()
+        registrations = Registration.query.filter_by(activity_id=id).all()
+
+        total_registered = len(registrations)
+        attended_count = sum(1 for r in registrations if (r.status == 'attended' or r.check_in_time is not None))
+        cancelled_count = sum(1 for r in registrations if r.status == 'cancelled')
+        no_show_count = max(total_registered - attended_count - cancelled_count, 0)
+        attendance_rate = (attended_count / total_registered * 100.0) if total_registered else 0.0
+
+        avg_rating = (sum((r.rating or 0) for r in reviews) / len(reviews)) if reviews else 0.0
+        avg_content = (sum((r.content_quality or 0) for r in reviews) / len(reviews)) if reviews else 0.0
+        avg_organization = (sum((r.organization or 0) for r in reviews) / len(reviews)) if reviews else 0.0
+        avg_facility = (sum((r.facility or 0) for r in reviews) / len(reviews)) if reviews else 0.0
+
+        sample_reviews = []
+        for idx, review in enumerate(reviews[:40], start=1):
+            text_sample = (review.review or '').replace('\n', ' ').strip()
+            if len(text_sample) > 160:
+                text_sample = text_sample[:160] + '…'
+            sample_reviews.append(f"{idx}. {text_sample}")
+
+        system_prompt = "你是高校活动运营复盘顾问，擅长产出可执行复盘报告。"
+        user_prompt = (
+            f"活动：{activity.title}\n"
+            f"状态：{activity.status}\n"
+            f"时间：{display_datetime(activity.start_time, None, '%Y-%m-%d %H:%M')} - {display_datetime(activity.end_time, None, '%Y-%m-%d %H:%M')}\n"
+            f"地点：{activity.location or '未设置'}\n"
+            f"积分：{activity.points or 0}\n"
+            f"报名人数：{total_registered}\n"
+            f"到场人数：{attended_count}\n"
+            f"取消人数：{cancelled_count}\n"
+            f"疑似未到场人数：{no_show_count}\n"
+            f"到场率：{attendance_rate:.1f}%\n"
+            f"评价数：{len(reviews)}\n"
+            f"平均总评分：{avg_rating:.2f}\n"
+            f"内容均分：{avg_content:.2f}\n"
+            f"组织均分：{avg_organization:.2f}\n"
+            f"设施均分：{avg_facility:.2f}\n"
+            f"评价样本：\n{chr(10).join(sample_reviews) if sample_reviews else '暂无评价样本'}\n\n"
+            "请生成复盘报告，包含：\n"
+            "1) 活动目标达成评估\n"
+            "2) 数据结论（报名/到场/评分）\n"
+            "3) 关键问题与根因\n"
+            "4) 下一次活动优化方案（会前/会中/会后）\n"
+            "5) 下次可量化KPI建议（3-5条）\n"
+            "要求：中文、结构清晰、可执行、不要空泛。"
+        )
+
+        report = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.35, max_tokens=1900)
+        return jsonify({'success': True, 'report': report})
+    except Exception as e:
+        logger.error(f"AI复盘报告生成失败: {e}")
+        return jsonify({'success': False, 'message': f'生成失败: {str(e)}'}), 500
+
 @admin_bp.route('/api/qrcode/checkin/<int:id>')
 @admin_required
 def generate_checkin_qrcode(id):
@@ -1857,15 +2543,15 @@ def generate_checkin_qrcode(id):
         # 生成唯一签到密钥，确保时效性和安全性
         checkin_key = hashlib.sha256(f"{activity.id}:{now.timestamp()}:{current_app.config['SECRET_KEY']}".encode()).hexdigest()[:16]
         
-        # 优先使用数据库存储
+        # 必须先成功写入数据库，再下发二维码
         try:
             activity.checkin_key = checkin_key
             activity.checkin_key_expires = now + timedelta(minutes=5)  # 5分钟有效期
             db.session.commit()
         except Exception as e:
+            db.session.rollback()
             logger.error(f"无法存储签到密钥到数据库: {e}")
-            # 如果数据库存储失败，记录错误但继续生成二维码
-            pass
+            return jsonify({'success': False, 'message': '签到密钥保存失败，请重试'}), 500
         
         # 生成带签到URL的二维码，使用完整域名
         base_url = request.host_url.rstrip('/')
@@ -2247,6 +2933,7 @@ def reset_system():
                     'location': activity.location,
                     'start_time': activity.start_time.isoformat() if activity.start_time else None,
                     'end_time': activity.end_time.isoformat() if activity.end_time else None,
+                    'registration_start_time': activity.registration_start_time.isoformat() if activity.registration_start_time else None,
                     'registration_deadline': activity.registration_deadline.isoformat() if activity.registration_deadline else None,
                     'max_participants': activity.max_participants,
                     'status': activity.status,
@@ -2566,19 +3253,36 @@ def edit_notification(id):
 def delete_notification(id):
     try:
         notification = db.get_or_404(Notification, id)
-        
+
+        # 批量删除同源重复通知（同标题+同内容+同创建者+同公开属性）
+        duplicate_ids = [row[0] for row in db.session.execute(
+            db.select(Notification.id).filter(
+                Notification.title == notification.title,
+                Notification.content == notification.content,
+                Notification.created_by == notification.created_by,
+                Notification.is_public == notification.is_public
+            )
+        ).all()]
+
+        if not duplicate_ids:
+            duplicate_ids = [id]
+
         # 删除所有关联的已读记录
-        db.session.execute(db.delete(NotificationRead).filter_by(notification_id=id))
-        
+        db.session.execute(
+            db.delete(NotificationRead).where(NotificationRead.notification_id.in_(duplicate_ids))
+        )
+
         # 删除通知
-        db.session.delete(notification)
+        db.session.execute(
+            db.delete(Notification).where(Notification.id.in_(duplicate_ids))
+        )
         db.session.commit()
         
         log_action(
             action='delete_notification', 
-            details=f'删除通知: {notification.title}'
+            details=f'删除通知: {notification.title}（共{len(duplicate_ids)}条）'
         )
-        flash('通知已删除', 'success')
+        flash(f'通知已删除（共清理 {len(duplicate_ids)} 条）', 'success')
         return redirect(url_for('admin.notifications'))
     except Exception as e:
         db.session.rollback()
@@ -2614,6 +3318,25 @@ def messages():
             flash('系统中没有其他用户，无法发送消息', 'warning')
             logger.warning("系统中没有可用的消息接收者")
         
+        # 修复历史数据中 created_at 为空导致“时间未知”
+        missing_time_count = Message.query.filter(
+            or_(
+                Message.sender_id == current_user.id,
+                Message.receiver_id == current_user.id
+            ),
+            Message.created_at.is_(None)
+        ).count()
+        if missing_time_count:
+            now = get_localized_now()
+            Message.query.filter(
+                or_(
+                    Message.sender_id == current_user.id,
+                    Message.receiver_id == current_user.id
+                ),
+                Message.created_at.is_(None)
+            ).update({Message.created_at: now}, synchronize_session=False)
+            db.session.commit()
+
         # 根据过滤类型查询消息
         if filter_type == 'sent':
             logger.info("查询已发送消息")
@@ -2623,8 +3346,6 @@ def messages():
             query = Message.query.filter_by(receiver_id=current_user.id)
         else:  # 'all'
             logger.info("查询所有消息")
-            # 使用显式导入的or_
-            from sqlalchemy import or_
             query = Message.query.filter(or_(
                 Message.sender_id == current_user.id,
                 Message.receiver_id == current_user.id
@@ -2688,7 +3409,8 @@ def create_message():
                     sender_id=current_user.id,
                     receiver_id=receiver_id,
                     subject=subject,
-                    content=content
+                    content=content,
+                    created_at=get_localized_now()
                 )
                 
                 db.session.add(message)
@@ -2705,14 +3427,100 @@ def create_message():
         students_stmt = db.select(User).join(Role).filter(Role.name == 'Student')
         students = db.session.execute(students_stmt).scalars().all()
         
+        prefill_receiver_id = request.args.get('receiver_id', type=int)
+        prefill_subject = request.args.get('subject', '', type=str)
+        prefill_content = request.args.get('content', '', type=str)
+
         return render_template('admin/message_form.html', 
-                              students=students,
-                              title='发送消息',
-                              form=form)
+                      students=students,
+                      title='发送消息',
+                      form=form,
+                      prefill_receiver_id=prefill_receiver_id,
+                      prefill_subject=prefill_subject,
+                      prefill_content=prefill_content)
     except Exception as e:
         logger.error(f"Error in create_message: {e}")
         flash('发送消息时出错', 'danger')
         return redirect(url_for('admin.messages'))
+
+@admin_bp.route('/messages/mark_all_read', methods=['POST'])
+@admin_required
+def mark_all_messages_read_admin():
+    try:
+        updated = Message.query.filter(
+            Message.receiver_id == current_user.id,
+            Message.is_read == False
+        ).update({Message.is_read: True}, synchronize_session=False)
+        db.session.commit()
+        flash(f'已标记 {updated} 条未读消息', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in mark_all_messages_read_admin: {e}")
+        flash('一键已读失败，请稍后重试', 'danger')
+    return redirect(url_for('admin.messages', filter=request.args.get('filter', 'all')))
+
+@admin_bp.route('/messages/delete_read', methods=['POST'])
+@admin_required
+def delete_read_messages_admin():
+    try:
+        deleted = Message.query.filter(
+            Message.receiver_id == current_user.id,
+            Message.is_read == True
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        flash(f'已删除 {deleted} 条已读消息', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in delete_read_messages_admin: {e}")
+        flash('删除已读消息失败，请稍后重试', 'danger')
+    return redirect(url_for('admin.messages', filter=request.args.get('filter', 'all')))
+
+@admin_bp.route('/message/<int:id>/ai-reply-draft', methods=['POST'])
+@admin_required
+def ai_generate_message_reply_draft(id):
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        message = db.get_or_404(Message, id)
+
+        if message.receiver_id != current_user.id:
+            return jsonify({'success': False, 'message': '仅可为收到的消息生成回复草稿'}), 403
+
+        sender = db.session.get(User, message.sender_id) if message.sender_id else None
+        sender_info = None
+        if sender:
+            sender_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=sender.id)).scalar_one_or_none()
+
+        sender_name = (
+            sender_info.real_name if sender_info and sender_info.real_name
+            else (sender.username if sender else '同学')
+        )
+        sender_student_id = sender_info.student_id if sender_info else ''
+
+        system_prompt = "你是高校社团管理后台助手，请生成专业、友好、可直接发送的中文回复。"
+        user_prompt = (
+            f"收到的消息主题：{message.subject or ''}\n"
+            f"发件人：{sender_name}"
+            f"{f'（学号：{sender_student_id}）' if sender_student_id else ''}\n"
+            f"消息内容：\n{(message.content or '').strip()}\n\n"
+            "请输出一段回复正文，要求：\n"
+            "1) 先表示已收到并理解问题\n"
+            "2) 给出明确处理建议或下一步\n"
+            "3) 语气简洁礼貌，不要空话\n"
+            "4) 120-220字\n"
+            "5) 不要使用Markdown标题"
+        )
+        reply_content = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.5, max_tokens=700)
+        reply_subject = f"回复：{message.subject}" if message.subject else "回复：你的反馈"
+
+        return jsonify({
+            'success': True,
+            'reply_subject': reply_subject,
+            'reply_content': reply_content,
+            'receiver_id': message.sender_id
+        })
+    except Exception as e:
+        logger.error(f"AI生成回复草稿失败: {e}")
+        return jsonify({'success': False, 'message': f'生成失败: {str(e)}'}), 500
 
 @admin_bp.route('/message/<int:id>')
 @admin_required
@@ -2791,9 +3599,6 @@ def fix_timezone():
                 fix_posters = 'fix_posters' in request.form
                 fix_notifications = 'fix_notifications' in request.form
                 fix_other_dates = 'fix_other_dates' in request.form
-                
-                # 设置环境变量，标记为Render环境
-                os.environ['RENDER'] = 'true'
                 
                 # 获取数据库连接
                 conn = None
@@ -3185,6 +3990,7 @@ def localize_time(dt):
 @admin_required
 def announcements():
     try:
+        _sync_published_announcements_to_notifications()
         page = request.args.get('page', 1, type=int)
         announcements = Announcement.query.order_by(Announcement.created_at.desc()).paginate(page=page, per_page=10)
         
@@ -3223,12 +4029,14 @@ def create_announcement():
                     content=content,
                     status=status,
                     created_by=current_user.id,
-                    created_at=datetime.now(),
-                    updated_at=datetime.now()
+                    created_at=get_localized_now(),
+                    updated_at=get_localized_now()
                 )
                 
                 db.session.add(announcement)
                 db.session.commit()
+
+                _sync_published_announcements_to_notifications()
                 
                 log_action('create_announcement', f'创建公告: {title}')
                 flash('公告创建成功', 'success')
@@ -3266,12 +4074,43 @@ def edit_announcement(id):
                     return redirect(url_for('admin.edit_announcement', id=id))
                 
                 # 更新公告
+                old_title = announcement.title
+                old_content = announcement.content
+
                 announcement.title = title
                 announcement.content = content
                 announcement.status = status
-                announcement.updated_at = datetime.now()
+                announcement.updated_at = get_localized_now()
+
+                # 清理旧的同步通知，避免首页显示历史公告内容
+                old_notification_ids = db.session.execute(
+                    db.select(Notification.id).filter(
+                        Notification.is_public == True,
+                        Notification.created_by == announcement.created_by,
+                        or_(
+                            Notification.title == old_title,
+                            Notification.content == old_content
+                        )
+                    )
+                ).scalars().all()
+
+                if old_notification_ids:
+                    db.session.execute(
+                        db.delete(NotificationRead).where(NotificationRead.notification_id.in_(old_notification_ids))
+                    )
+
+                Notification.query.filter(
+                    Notification.is_public == True,
+                    Notification.created_by == announcement.created_by,
+                    or_(
+                        Notification.title == old_title,
+                        Notification.content == old_content
+                    )
+                ).delete(synchronize_session=False)
                 
                 db.session.commit()
+
+                _sync_published_announcements_to_notifications()
                 
                 log_action('edit_announcement', f'编辑公告: {title}')
                 flash('公告更新成功', 'success')
@@ -3294,6 +4133,32 @@ def edit_announcement(id):
 def delete_announcement(id):
     try:
         announcement = db.get_or_404(Announcement, id)
+
+        # 删除由该公告同步生成的公开通知，避免首页残留
+        notification_ids = db.session.execute(
+            db.select(Notification.id).filter(
+                Notification.is_public == True,
+                Notification.created_by == announcement.created_by,
+                or_(
+                    Notification.title == announcement.title,
+                    Notification.content == announcement.content
+                )
+            )
+        ).scalars().all()
+
+        if notification_ids:
+            db.session.execute(
+                db.delete(NotificationRead).where(NotificationRead.notification_id.in_(notification_ids))
+            )
+
+        Notification.query.filter(
+            Notification.is_public == True,
+            Notification.created_by == announcement.created_by,
+            or_(
+                Notification.title == announcement.title,
+                Notification.content == announcement.content
+            )
+        ).delete(synchronize_session=False)
         
         # 删除公告
         db.session.delete(announcement)
@@ -3376,8 +4241,21 @@ def delete_activity(id):
         
         if force_delete:
             # 永久删除活动
-            # 首先删除相关的报名记录
-            Registration.query.filter_by(activity_id=id).delete()
+            # 先清理所有依赖活动ID的关联数据，避免外键约束失败
+            ActivityReview.query.filter_by(activity_id=id).delete(synchronize_session=False)
+            ActivityCheckin.query.filter_by(activity_id=id).delete(synchronize_session=False)
+            Registration.query.filter_by(activity_id=id).delete(synchronize_session=False)
+
+            # 历史积分记录保留，但解除与活动的关联
+            PointsHistory.query.filter_by(activity_id=id).update(
+                {'activity_id': None},
+                synchronize_session=False
+            )
+
+            # 清理活动-标签中间表
+            db.session.execute(
+                activity_tags.delete().where(activity_tags.c.activity_id == id)
+            )
             
             # 删除活动
             db.session.delete(activity)
@@ -3400,7 +4278,7 @@ def delete_activity(id):
         return redirect(url_for('admin.activities'))
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error deleting activity: {e}")
+        logger.exception(f"Error deleting activity: {e}")
         flash('删除活动时出错', 'danger')
         return redirect(url_for('admin.activities'))
 

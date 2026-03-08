@@ -15,16 +15,32 @@ document.addEventListener('DOMContentLoaded', function() {
     // 搜索功能优化
     setupSearchOptimization();
 
-    // 通知系统
-    // 检查是否已登录（通过查找用户菜单）
-    const userMenu = document.querySelector('.user-menu');
-    
-    if (userMenu) {
-        // 获取未读重要通知
+    // 移动端表格：单元格独立横向滑动
+    enableTableCellScroll();
+
+    // 表格最佳实践：自动固定“操作”列，避免横向滚动后找不到操作按钮
+    initStickyActionColumns();
+
+    // 通知系统（学生 + 游客公开通知）
+    const isStudent = document.body.dataset.userLoggedIn === 'true' && document.body.dataset.userRole === 'student';
+
+    const headerNoticeClose = document.getElementById('header-notice-close');
+    if (headerNoticeClose) {
+        headerNoticeClose.addEventListener('click', function() {
+            dismissHeaderNotification(isStudent, true);
+        });
+    }
+
+    if (isStudent) {
+        // 学生：获取未读通知
         fetchUnreadNotifications();
 
         // 设置定时刷新（每10分钟，减少频率）
         setInterval(fetchUnreadNotifications, 10 * 60 * 1000);
+    } else {
+        // 游客/管理员：获取公开通知
+        fetchPublicNotifications();
+        setInterval(fetchPublicNotifications, 10 * 60 * 1000);
     }
     
     // 为所有通知关闭按钮添加事件监听
@@ -127,6 +143,73 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     })();
 });
+
+function enableTableCellScroll() {
+    const isMobile = window.matchMedia('(max-width: 991.98px)').matches;
+    if (!isMobile) {
+        return;
+    }
+
+    const tables = document.querySelectorAll('table.table-cell-scroll');
+    tables.forEach(table => {
+        const cells = table.querySelectorAll('th, td');
+        cells.forEach(cell => {
+            const firstChild = cell.firstElementChild;
+            if (
+                firstChild &&
+                firstChild.classList &&
+                firstChild.classList.contains('cell-scroll') &&
+                cell.children.length === 1
+            ) {
+                return;
+            }
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'cell-scroll';
+
+            while (cell.firstChild) {
+                wrapper.appendChild(cell.firstChild);
+            }
+
+            cell.appendChild(wrapper);
+        });
+    });
+}
+
+function initStickyActionColumns() {
+    const wrappers = document.querySelectorAll('.table-responsive');
+
+    wrappers.forEach(wrapper => {
+        const table = wrapper.querySelector('table');
+        if (!table) return;
+
+        const headRow = table.querySelector('thead tr');
+        if (!headRow) return;
+
+        const headerCells = Array.from(headRow.children).filter(cell =>
+            cell.tagName === 'TH' || cell.tagName === 'TD'
+        );
+
+        if (!headerCells.length) return;
+
+        const actionIndex = headerCells.findIndex(cell => {
+            const text = (cell.textContent || '').trim().toLowerCase();
+            return text === '操作' || text === 'actions' || text.includes('操作');
+        });
+
+        if (actionIndex === -1) return;
+
+        wrapper.classList.add('has-sticky-action');
+        table.classList.add('table-has-sticky-action');
+
+        table.querySelectorAll('tr').forEach(row => {
+            const targetCell = row.children[actionIndex];
+            if (targetCell) {
+                targetCell.classList.add('sticky-action-col');
+            }
+        });
+    });
+}
 
 // 统一的加载系统
 function initUnifiedLoadingSystem() {
@@ -297,6 +380,7 @@ function setupButtonLoading() {
     // 按钮加载管理器
     window.ButtonLoadingManager = {
         loadingButtons: new Set(),
+        loadingTimers: new Map(),
 
         setLoading: function(button, loadingText = '处理中...') {
             if (this.loadingButtons.has(button)) {
@@ -326,14 +410,23 @@ function setupButtonLoading() {
             this.loadingButtons.add(button);
 
             // 安全超时
-            setTimeout(() => {
+            const timeoutId = setTimeout(() => {
                 this.clearLoading(button);
             }, 10000); // 10秒超时
+
+            this.loadingTimers.set(button, timeoutId);
         },
 
         clearLoading: function(button) {
             if (!this.loadingButtons.has(button)) {
                 return;
+            }
+
+            // 清除超时
+            const timeoutId = this.loadingTimers.get(button);
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                this.loadingTimers.delete(button);
             }
 
             // 恢复原始状态
@@ -354,7 +447,7 @@ function setupButtonLoading() {
         },
 
         clearAll: function() {
-            this.loadingButtons.forEach(button => {
+            Array.from(this.loadingButtons).forEach(button => {
                 this.clearLoading(button);
             });
         }
@@ -364,6 +457,13 @@ function setupButtonLoading() {
     document.addEventListener('click', function(e) {
         const button = e.target.closest('button, a.btn');
         if (!button) return;
+
+        const isAnchorButton = button.tagName === 'A';
+
+        // 普通导航型 a.btn 不应触发“处理中”动画；仅允许显式声明 data-force-loading 的场景
+        if (isAnchorButton && !button.hasAttribute('data-force-loading')) {
+            return;
+        }
 
         // 跳过特定按钮 - 更严格的过滤
         if (button.classList.contains('ai-chat-button') ||
@@ -450,13 +550,39 @@ function setupFormLoadingHandlers() {
 
         // 跳过特定表单
         if (form.hasAttribute('data-no-loading') ||
+            form.hasAttribute('data-no-global-loading') ||
             form.classList.contains('no-loading')) {
+            return;
+        }
+
+        // 带 confirm 的表单交互在用户确认前不显示加载，避免取消后卡在“提交中...”
+        const inlineOnsubmit = form.getAttribute('onsubmit') || '';
+        if (inlineOnsubmit.includes('confirm(')) {
+            return;
+        }
+
+        // 若表单已被其它逻辑阻止提交，不进入加载态
+        if (e.defaultPrevented) {
             return;
         }
         
         // 获取表单提交按钮
-        const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
-        if (submitBtn) {
+        const submitBtn = e.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
+        if (!submitBtn) return;
+
+        if (submitBtn.hasAttribute('data-no-loading') ||
+            submitBtn.hasAttribute('data-no-global-loading') ||
+            submitBtn.closest('[data-no-loading]') ||
+            submitBtn.closest('[data-no-global-loading]')) {
+            return;
+        }
+
+        // 下一帧再设置加载，确保浏览器先完成本次提交决策
+        requestAnimationFrame(() => {
+            if (e.defaultPrevented) {
+                return;
+            }
+
             // 确定加载文本
             let loadingText = '提交中...';
             if (form.action?.includes('/login')) loadingText = '登录中...';
@@ -464,7 +590,7 @@ function setupFormLoadingHandlers() {
 
             // 使用统一的按钮管理器
             window.ButtonLoadingManager.setLoading(submitBtn, loadingText);
-        }
+        });
     });
 }
 
@@ -516,40 +642,48 @@ function initToastSystem() {
     window.showToast = function(message, type = 'info', duration = 3000) {
         const toastId = 'toast-' + Date.now();
         const toast = document.createElement('div');
-        toast.className = `toast align-items-center border-0 show`;
+        toast.className = `toast align-items-center border-0 show app-toast-modern`;
         toast.setAttribute('role', 'alert');
         toast.setAttribute('aria-live', 'assertive');
         toast.setAttribute('aria-atomic', 'true');
         toast.id = toastId;
-        toast.style.maxWidth = '300px';
-        toast.style.fontSize = '0.85rem';
-        toast.style.padding = '0.25rem';
         
-        // 设置不同类型的背景色
+        // 现代极致紧凑图标映射 (Apple/Vercel 风格)
+        let iconHtml = '';
+        let iconColor = '';
+        let iconBg = '';
         switch(type) {
             case 'success':
-                toast.classList.add('bg-success');
+                iconHtml = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+                iconColor = '#10b981'; // 绿
+                iconBg = 'rgba(16, 185, 129, 0.15)';
                 break;
             case 'error':
-                toast.classList.add('bg-danger');
+                iconHtml = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+                iconColor = '#ef4444'; // 红
+                iconBg = 'rgba(239, 68, 68, 0.15)';
                 break;
             case 'warning':
-                toast.classList.add('bg-warning', 'text-dark');
+                iconHtml = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+                iconColor = '#f59e0b'; // 橙
+                iconBg = 'rgba(245, 158, 11, 0.15)';
                 break;
             case 'info':
-                toast.classList.add('bg-info', 'text-dark');
-                break;
             default:
-                toast.classList.add('bg-primary');
+                iconHtml = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+                iconColor = '#3b82f6'; // 蓝
+                iconBg = 'rgba(59, 130, 246, 0.15)';
                 break;
         }
         
         toast.innerHTML = `
-            <div class="d-flex">
-                <div class="toast-body py-1 px-2">
+            <div class="d-flex align-items-center" style="padding: 6px 12px 6px 8px; cursor: pointer;" title="点击关闭">
+                <div style="color: ${iconColor}; background: ${iconBg}; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 8px; flex-shrink: 0;">
+                    ${iconHtml}
+                </div>
+                <div class="toast-body p-0 m-0" style="color: #334155; font-size: 0.82rem; font-weight: 500; text-shadow: none; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                     ${message}
                 </div>
-                <button type="button" class="btn-close btn-close-white me-1 m-auto" data-bs-dismiss="toast" aria-label="Close" style="font-size: 0.7rem;"></button>
             </div>
         `;
         
@@ -559,7 +693,7 @@ function initToastSystem() {
         // 添加动画
         toast.style.transform = 'translateY(100%)';
         toast.style.opacity = '0';
-        toast.style.transition = 'all 0.3s ease-out';
+        toast.style.transition = 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
         
         // 触发重排，然后应用动画
         setTimeout(() => {
@@ -567,9 +701,8 @@ function initToastSystem() {
             toast.style.opacity = '1';
         }, 10);
         
-        // 添加关闭按钮事件
-        const closeBtn = toast.querySelector('.btn-close');
-        closeBtn.addEventListener('click', () => {
+        // 点击整个toast任意位置直接关闭，不仅限于关闭按钮（更适合这种紧凑设计）
+        toast.addEventListener('click', () => {
             closeToast(toastId);
         });
         
@@ -768,10 +901,11 @@ function setupAttendanceCheckin() {
                 return;
             }
             
-            fetch('/api/attendance/checkin', {
+            fetch('/student/api/attendance/checkin', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
                 },
                 body: JSON.stringify({
                     student_id: studentId,
@@ -904,6 +1038,57 @@ function updateRegistrationStatus(registrationId, newStatus) {
 let isFetchingNotifications = false;
 let lastNotificationFetch = 0;
 const NOTIFICATION_FETCH_COOLDOWN = 60000; // 1分钟冷却时间
+const HEADER_NOTICE_DISMISSED_KEY = 'header_notice_dismissed_ids_v1';
+
+function syncNavbarWithHeaderNotice(isVisible) {
+    const noticeBar = document.getElementById('header-notice-bar');
+    if (!noticeBar) {
+        return;
+    }
+
+    if (isVisible) {
+        const offset = noticeBar.offsetHeight + 10;
+        document.documentElement.style.setProperty('--header-notice-offset', `${offset}px`);
+        document.body.classList.add('header-notice-open');
+    } else {
+        document.body.classList.remove('header-notice-open');
+        document.documentElement.style.setProperty('--header-notice-offset', '0px');
+    }
+}
+
+function getDismissedHeaderNoticeIds() {
+    try {
+        const raw = localStorage.getItem(HEADER_NOTICE_DISMISSED_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function persistDismissedHeaderNoticeId(notificationId) {
+    if (!notificationId) {
+        return;
+    }
+
+    const ids = getDismissedHeaderNoticeIds();
+    const idStr = String(notificationId);
+    if (!ids.includes(idStr)) {
+        ids.push(idStr);
+    }
+
+    const compact = ids.slice(-100);
+    localStorage.setItem(HEADER_NOTICE_DISMISSED_KEY, JSON.stringify(compact));
+}
+
+function isHeaderNoticeDismissed(notificationId) {
+    if (!notificationId) {
+        return false;
+    }
+
+    const ids = getDismissedHeaderNoticeIds();
+    return ids.includes(String(notificationId));
+}
 
 // 获取未读通知
 function fetchUnreadNotifications() {
@@ -924,7 +1109,7 @@ function fetchUnreadNotifications() {
     isFetchingNotifications = true;
     lastNotificationFetch = now;
 
-    fetch('/api/notifications/unread')
+    fetch('/student/api/notifications/unread')
         .then(response => {
             if (response.status === 429) {
                 throw new Error('请求过于频繁，请稍后再试');
@@ -937,21 +1122,14 @@ function fetchUnreadNotifications() {
         })
         .then(data => {
             if (data.success) {
+                const visibleNotifications = (data.notifications || []).filter(n => !isHeaderNoticeDismissed(n.id));
+
                 // 更新通知徽章
-                updateNotificationBadge(data.notifications.length);
+                updateNotificationBadge(visibleNotifications.length);
 
-                // 显示通知横幅
-                if (data.notifications.length > 0) {
-                    // 移除旧的通知横幅
-                    removeNotificationBanner();
-
-                    // 添加新的通知横幅
-                    data.notifications.forEach((notification, index) => {
-                        // 错开显示时间，避免所有通知同时出现
-                        setTimeout(() => {
-                            showNotificationBanner(notification);
-                        }, index * 200); // 每个通知间隔200ms显示，减少等待时间
-                    });
+                // 显示头部通知条
+                if (visibleNotifications.length > 0) {
+                    showNotificationBanner(visibleNotifications[0], true);
                 }
             }
         })
@@ -966,6 +1144,29 @@ function fetchUnreadNotifications() {
         })
         .finally(() => {
             isFetchingNotifications = false;
+        });
+}
+
+function fetchPublicNotifications() {
+    fetch('/api/public-notifications')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('公开通知请求失败');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data.success) {
+                return;
+            }
+
+            const visibleNotifications = (data.notifications || []).filter(n => !isHeaderNoticeDismissed(n.id));
+            if (visibleNotifications.length > 0) {
+                showNotificationBanner(visibleNotifications[0], false);
+            }
+        })
+        .catch(error => {
+            console.error('获取公开通知失败:', error);
         });
 }
 
@@ -998,83 +1199,154 @@ function updateNotificationBadge(count) {
 }
 
 // 显示通知横幅
-function showNotificationBanner(notification) {
-    // 检查是否已存在相同ID的通知横幅
-    const existingBanner = document.querySelector(`.notification-banner[data-notification-id="${notification.id}"]`);
-    if (existingBanner) {
-        return; // 已存在，不再创建
+function showNotificationBanner(notification, allowMarkRead = false) {
+    const noticeBar = document.getElementById('header-notice-bar');
+    const noticeContent = document.getElementById('header-notice-content');
+    const noticeLink = document.getElementById('header-notice-link');
+
+    if (!noticeBar || !noticeContent || !noticeLink) {
+        return;
     }
-    
-    // 检查通知容器是否存在，如果不存在则创建
-    let notificationContainer = document.getElementById('notification-container');
-    if (!notificationContainer) {
-        notificationContainer = document.createElement('div');
-        notificationContainer.id = 'notification-container';
-        notificationContainer.style.position = 'fixed';
-        notificationContainer.style.top = '10px';
-        notificationContainer.style.right = '10px';
-        notificationContainer.style.maxWidth = '400px';
-        notificationContainer.style.zIndex = '9999';
-        document.body.appendChild(notificationContainer);
+
+    if (window.currentHeaderNotificationId === notification.id) {
+        return;
     }
-    
+
+    window.currentHeaderNotificationId = notification.id;
+    window.currentHeaderNotificationAutoTimer && clearTimeout(window.currentHeaderNotificationAutoTimer);
+
+    const titleText = (notification.title || '').toString();
+    const contentText = (notification.content || '').toString();
+    const fullText = `${titleText}：${contentText.replace(/<[^>]*>/g, '')}`;
+
+    const safeTitle = escapeNoticeText(titleText);
+    const safeContent = sanitizeNoticeContentHtml(contentText);
+    noticeContent.innerHTML = `<span class="header-notice-title">${safeTitle}：</span>${safeContent}`;
+    noticeContent.classList.remove('is-scrolling');
+    noticeContent.style.removeProperty('--ticker-duration');
+
+    if (allowMarkRead) {
+        noticeLink.style.cursor = 'pointer';
+        noticeLink.onclick = function(e) {
+            const inlineLink = e.target.closest('.header-notice-inline-link');
+            if (inlineLink) {
+                markNotificationAsRead(notification.id);
+                return;
+            }
+            markNotificationAsRead(notification.id);
+            window.location.href = `/student/notification/${notification.id}`;
+        };
+        noticeLink.onkeydown = function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                markNotificationAsRead(notification.id);
+                window.location.href = `/student/notification/${notification.id}`;
+            }
+        };
+    } else {
+        noticeLink.style.cursor = 'default';
+        noticeLink.onclick = function(e) {
+            const inlineLink = e.target.closest('.header-notice-inline-link');
+            if (inlineLink) {
+                return;
+            }
+        };
+        noticeLink.onkeydown = null;
+    }
+
+    noticeBar.classList.remove('d-none');
+    syncNavbarWithHeaderNotice(true);
+
+    const shouldScroll = fullText.length > 46;
+    const tickerDuration = Math.min(20, Math.max(10, fullText.length / 7));
+
+    if (shouldScroll) {
+        noticeContent.style.setProperty('--ticker-duration', `${tickerDuration}s`);
+        requestAnimationFrame(() => {
+            noticeContent.classList.add('is-scrolling');
+        });
+    }
+
+    const autoHideDelay = shouldScroll ? Math.max(30000, tickerDuration * 3000) : 12500;
+
+    window.currentHeaderNotificationAutoTimer = setTimeout(() => {
+        dismissHeaderNotification(false, false);
+    }, autoHideDelay);
+}
+
+function escapeNoticeText(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function sanitizeNoticeHref(href) {
+    const value = String(href || '').trim();
+    if (/^(https?:\/\/|mailto:|tel:|\/)/i.test(value)) {
+        return value;
+    }
+    return '#';
+}
+
+function sanitizeNoticeContentHtml(rawContent) {
     const container = document.createElement('div');
-    container.className = 'notification-banner alert alert-primary alert-dismissible fade show';
-    container.setAttribute('data-notification-id', notification.id);
-    container.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
-    container.style.transition = 'all 0.5s ease';
-    container.style.marginBottom = '10px';
-    container.style.animation = 'slideIn 0.5s ease-out';
-    
-    container.innerHTML = `
-        <strong>${notification.title}</strong>
-        <p class="mb-0">${notification.content.length > 100 ? notification.content.substring(0, 100) + '...' : notification.content}</p>
-        <button type="button" class="btn-close notification-close" data-notification-id="${notification.id}" aria-label="Close"></button>
-        <div class="mt-2">
-            <a href="/notification/${notification.id}" class="btn btn-sm btn-primary">查看详情</a>
-        </div>
-    `;
-    
-    // 添加动画样式
-    const style = document.createElement('style');
-    if (!document.getElementById('notification-animation-style')) {
-        style.id = 'notification-animation-style';
-        style.textContent = `
-            @keyframes slideIn {
-                from {
-                    transform: translateX(100%);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateX(0);
-                    opacity: 1;
-                }
-            }
-            @keyframes fadeOut {
-                from {
-                    opacity: 1;
-                }
-                to {
-                    opacity: 0;
-                }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-    
-    notificationContainer.appendChild(container);
-    
-    // 设置自动关闭（8秒后）
-    setTimeout(() => {
-        if (container && container.parentNode) {
-            container.style.animation = 'fadeOut 0.5s ease-out';
-            setTimeout(() => {
-                if (container && container.parentNode) {
-                    container.parentNode.removeChild(container);
-                }
-            }, 500);
+    container.innerHTML = String(rawContent || '');
+
+    function walk(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            return escapeNoticeText(node.textContent || '').replace(/\n/g, '<br>');
         }
-    }, 8000); // 减少通知显示时间
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+            return '';
+        }
+
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'br') {
+            return '<br>';
+        }
+
+        const children = Array.from(node.childNodes).map(walk).join('');
+        if (tag === 'a') {
+            const href = sanitizeNoticeHref(node.getAttribute('href'));
+            const target = node.getAttribute('target') === '_blank' ? ' target="_blank" rel="noopener noreferrer"' : '';
+            return `<a href="${escapeNoticeText(href)}" class="header-notice-inline-link"${target}>${children || '查看详情'}</a>`;
+        }
+
+        return children;
+    }
+
+    return Array.from(container.childNodes).map(walk).join('');
+}
+
+function dismissHeaderNotification(markAsRead = false, userDismissed = false) {
+    const noticeBar = document.getElementById('header-notice-bar');
+    const noticeContent = document.getElementById('header-notice-content');
+    if (!noticeBar || !noticeContent) {
+        return;
+    }
+
+    const currentId = window.currentHeaderNotificationId;
+    if (markAsRead && currentId) {
+        markNotificationAsRead(currentId);
+    }
+
+    if (userDismissed && currentId) {
+        persistDismissedHeaderNoticeId(currentId);
+    }
+
+    noticeBar.classList.add('d-none');
+    syncNavbarWithHeaderNotice(false);
+    noticeContent.classList.remove('is-scrolling');
+    noticeContent.innerHTML = '';
+    window.currentHeaderNotificationId = null;
+
+    if (window.currentHeaderNotificationAutoTimer) {
+        clearTimeout(window.currentHeaderNotificationAutoTimer);
+        window.currentHeaderNotificationAutoTimer = null;
+    }
 }
 
 // 移除所有通知横幅
@@ -1092,7 +1364,7 @@ function removeNotificationBanner() {
 
 // 标记通知为已读
 function markNotificationAsRead(notificationId) {
-    fetch(`/notification/${notificationId}/mark_read`, {
+    fetch(`/student/notification/${notificationId}/mark_read`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -1219,7 +1491,7 @@ function setupCheckinForm() {
             
             const formData = new FormData(checkinForm);
             
-            fetch('/api/attendance/checkin', {
+            fetch('/student/api/attendance/checkin', {
                 method: 'POST',
                 body: formData,
                 headers: {

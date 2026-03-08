@@ -82,20 +82,7 @@ def format_datetime(dt, format_str='%Y-%m-%d %H:%M'):
     if dt is None:
         return ''
     
-    # 确保时间是北京时间
-    beijing_time = dt
-    if dt.tzinfo is None:
-        # 如果没有时区信息，假设它是UTC时间，转换为北京时间
-        if is_render_environment():
-            beijing_time = pytz.utc.localize(dt).astimezone(pytz.timezone('Asia/Shanghai'))
-        else:
-            # 本地环境，假设已经是北京时间
-            beijing_time = pytz.timezone('Asia/Shanghai').localize(dt)
-    elif dt.tzinfo != pytz.timezone('Asia/Shanghai'):
-        # 如果有时区信息但不是北京时间，转换为北京时间
-        beijing_time = dt.astimezone(pytz.timezone('Asia/Shanghai'))
-        
-    return beijing_time.strftime(format_str)
+    return display_datetime(dt, 'Asia/Shanghai', format_str)
 
 def is_naive_datetime(dt):
     """
@@ -181,6 +168,9 @@ def display_datetime(dt, timezone_or_fmt=None, fmt=None):
         else:
             # 这是格式化字符串
             actual_fmt = timezone_or_fmt
+    elif fmt:
+        # 兼容 display_datetime(dt, None, '%Y-%m-%d %H:%M') 这种调用
+        actual_fmt = fmt
     
     # 获取时区对象
     try:
@@ -350,6 +340,11 @@ def can_register_activity(activity, current_time=None):
     # 活动必须是活跃状态
     if not is_activity_active(activity, current_time):
         return False
+
+    # 检查报名开始时间（未设置则默认立即可报名）
+    if getattr(activity, 'registration_start_time', None):
+        if safe_greater_than(activity.registration_start_time, current_time):
+            return False
     
     # 检查报名截止时间
     if activity.registration_deadline:

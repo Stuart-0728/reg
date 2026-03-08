@@ -8,11 +8,19 @@ from wtforms import StringField, PasswordField, SubmitField, SelectField, Valida
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Regexp
 from datetime import datetime
 import logging
+from urllib.parse import urlparse, urljoin
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
+
+def _is_safe_next_url(target):
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
 # 注册表单
 class RegistrationForm(FlaskForm):
@@ -195,6 +203,16 @@ def login():
                 if not user.active:
                     flash('账号已被禁用，请联系管理员。', 'danger')
                     return render_template('auth/login.html', form=form)
+
+                # 登录成功后按需迁移历史密码哈希算法
+                if hasattr(user, 'needs_password_rehash') and user.needs_password_rehash():
+                    try:
+                        user.password = password
+                        db.session.commit()
+                        logger.info(f"密码哈希已迁移: 用户ID={user.id}")
+                    except Exception as e:
+                        db.session.rollback()
+                        logger.error(f"密码哈希迁移失败: {e}", exc_info=True)
                 
                 # 登录成功
                 login_user(user)
@@ -224,7 +242,7 @@ def login():
                     next_page = url_for('main.index')
                 
                 # 如果有next参数，则重定向到next页面
-                if next_page and next_page != 'None' and next_page != url_for('auth.login'):
+                if next_page and next_page != 'None' and next_page != url_for('auth.login') and _is_safe_next_url(next_page):
                     logger.info(f"重定向到: {next_page}")
                     return redirect(next_page)
                 
