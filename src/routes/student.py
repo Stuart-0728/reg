@@ -702,21 +702,29 @@ def delete_account():
 @login_required
 def points():
     try:
-        # 导入display_datetime函数
-        from src.utils.time_helpers import display_datetime
-        
         student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
         if not student_info:
             flash('请先完善个人信息', 'warning')
             return redirect(url_for('student.edit_profile'))
-        
-        points_history = PointsHistory.query.filter_by(student_id=student_info.id)\
-            .order_by(PointsHistory.created_at.desc()).all()
+
+        page = request.args.get('page', 1, type=int)
+        query = db.select(PointsHistory).filter_by(student_id=student_info.id).order_by(PointsHistory.created_at.desc())
+        points_history = get_compatible_paginate(db, query, page=page, per_page=15, error_out=False)
+
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        for history in points_history.items:
+            if history.created_at:
+                if history.created_at.tzinfo is None:
+                    localized = beijing_tz.localize(history.created_at)
+                else:
+                    localized = history.created_at.astimezone(beijing_tz)
+                history.display_created_at = localized.strftime('%Y-%m-%d %H:%M')
+            else:
+                history.display_created_at = '未设置'
         
         return render_template('student/points.html', 
                              student_info=student_info,
-                             points_history=points_history,
-                             display_datetime=display_datetime)
+                             points_history=points_history)
     except Exception as e:
         logger.error(f"Error in student points page: {e}")
         flash('加载积分信息时出错', 'danger')
