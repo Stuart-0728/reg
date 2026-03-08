@@ -122,6 +122,11 @@
                                                 <i class="fas fa-qrcode text-primary me-2"></i>签到管理
                                             </a>
                                         </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('admin.export_activity_share_poster', id=activity.id) }}" data-no-loading="true">
+                                                <i class="fas fa-share-alt text-secondary me-2"></i>分享海报
+                                            </a>
+                                        </li>
                                         {% if activity.status == 'active' %}
                                         <li>
                                             <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'completed'); return false;" data-no-loading="true" data-no-global-loading="true">
