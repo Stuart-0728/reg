@@ -1,0 +1,248 @@
+:root {
+  --bg1: #0f0c29;
+  --bg2: #302b63;
+  --bg3: #24243e;
+  --glass: rgba(255, 255, 255, 0.08);
+  --glass-strong: rgba(255, 255, 255, 0.14);
+  --text: #e8ebf0;
+  --muted: #b7c0d1;
+  --accent: #8ab4ff;
+  --accent-2: #7af0b9;
+  --danger: #ff6b6b;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+  color: var(--text);
+  background: radial-gradient(1200px 700px at 20% 10%, #3a2f80 0%, transparent 60%),
+              radial-gradient(800px 600px at 80% 10%, #1f7a6a 0%, transparent 55%),
+              linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3));
+  background-attachment: fixed;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  background: linear-gradient(to bottom, rgba(10, 12, 25, 0.75), rgba(10, 12, 25, 0.2));
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.topbar .title {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.topbar a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+.topbar a:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+
+.container {
+  padding: 26px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 20px;
+}
+@media (max-width: 960px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+.card {
+  background: var(--glass);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+.card h2, .card h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+.card .subtle {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: -4px;
+  margin-bottom: 12px;
+}
+
+.panel-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .panel-row { grid-template-columns: 1fr; }
+}
+
+label { font-size: 13px; color: var(--muted); }
+.input, select, input[type="number"], input[type="text"], textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(0,0,0,0.25);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  outline: none;
+}
+textarea { min-height: 100px; resize: vertical; }
+
+.range {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 999px;
+  outline: none;
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border: 2px solid rgba(255,255,255,0.9);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  cursor: pointer;
+}
+
+.btn {
+  appearance: none;
+  border: none;
+  color: #0a0e1a;
+  background: linear-gradient(135deg, #b6d1ff, #7af0b9);
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  box-shadow: 0 10px 18px rgba(0,0,0,0.25);
+}
+.btn:hover { filter: brightness(1.05); }
+.btn:active { transform: translateY(1px); }
+.btn.secondary {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.btn.danger {
+  background: linear-gradient(135deg, #ff9a9e, #fad0c4);
+  color: #3b0a0a;
+}
+
+.kpi {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.kpi .item {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+.kpi .item .val {
+  font-size: 20px; font-weight: 800;
+}
+.kpi .item .lab {
+  font-size: 12px; color: var(--muted);
+}
+
+canvas.display {
+  width: 100%;
+  height: 420px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+}
+
+/* Chat widget base (structure by JS) */
+.cb-chat-fab {
+  position: fixed;
+  right: 22px; bottom: 22px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, #8ab4ff, #7af0b9);
+  border: none; cursor: pointer;
+  box-shadow: 0 16px 30px rgba(0,0,0,0.35);
+  color: #0a0e1a; font-weight: 800; font-size: 20px;
+  z-index: 11000;
+}
+.cb-chat-panel {
+  position: fixed;
+  right: 22px; bottom: 90px;
+  width: min(420px, calc(100vw - 44px));
+  height: 60vh;
+  min-height: 360px;
+  max-height: 800px;
+  display: flex; flex-direction: column;
+  background: var(--glass);
+  border: 1px solid rgba(255,255,255,0.1);
+  backdrop-filter: blur(14px);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  z-index: 11000;
+}
+.cb-chat-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.cb-chat-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.cb-msg {
+  padding: 10px 12px; border-radius: 12px;
+  max-width: 85%;
+  white-space: pre-wrap; line-height: 1.45;
+}
+.cb-msg.user { align-self: flex-end; background: rgba(255,255,255,0.2); }
+.cb-msg.bot { align-self: flex-start; background: rgba(0,0,0,0.25); }
+.cb-chat-input {
+  display: grid; grid-template-columns: 1fr auto auto;
+  gap: 8px; padding: 10px; border-top: 1px solid rgba(255,255,255,0.08);
+}
+.cb-chat-input textarea {
+  height: 64px; min-height: 64px; max-height: 150px;
+}
+.cb-chip {
+  padding: 6px 10px; border-radius: 999px; font-size: 12px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+  color: var(--muted);
+}
+
+/* Per feedback: hide topbar nav links, keep only title */
+.topbar nav { display: none !important; }
+
+/* Per feedback: disable experiment-level TTS buttons (keep AI Q&A TTS only) */
+#speak, #stopSpeak, #ttsStop { display: none !important; }
+
+/* elevate experiment modals above chat */
+.cb-modal, .status-overlay, #resultsModal, #loading-modal, #ai-modal, .modal, .modal-content { z-index: 12002 !important; }
+
+/* keep chat below */
+.cb-chat-fab { z-index: 12000; }
+.cb-chat-panel { z-index: 12000; }
+
+/* optional: allow overlays to capture clicks even if transparent areas overlap */
+.status-overlay { pointer-events: auto; }
