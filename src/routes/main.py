@@ -143,6 +143,12 @@ def index():
         except Exception as e:
             logger.error(f"获取热门活动出错: {e}")
             popular_activities = []
+
+        # 首页活动预告兜底：热门活动为空时回退到最新/即将开始活动
+        if not popular_activities:
+            fallback_source = latest_activities if latest_activities else upcoming_activities
+            popular_activities = fallback_source[:3] if fallback_source else []
+            logger.info(f"热门活动为空，已启用兜底列表，数量: {len(popular_activities)}")
         
         # 检查活动是否有二进制海报数据
         for activity in featured_activities + latest_activities:

@@ -333,6 +333,18 @@ document.addEventListener('DOMContentLoaded', function() {
         
         `;
     document.head.appendChild(style);
+
+    // 提升当前打开下拉菜单所在行层级，避免被其他行遮挡
+    document.querySelectorAll('.admin-activities-page .dropdown').forEach(dropdown => {
+        dropdown.addEventListener('show.bs.dropdown', function() {
+            const row = this.closest('tr');
+            if (row) row.classList.add('dropdown-row-open');
+        });
+        dropdown.addEventListener('hide.bs.dropdown', function() {
+            const row = this.closest('tr');
+            if (row) row.classList.remove('dropdown-row-open');
+        });
+    });
     
     // 添加键盘导航支持
     document.addEventListener('keydown', function(e) {
@@ -400,6 +412,14 @@ function updateActivityStatus(activityId, status) {
 
 .activities-card .dropdown-menu {
     z-index: 2200;
+}
+
+.activities-card tbody tr {
+    position: relative;
+}
+
+.activities-card tbody tr.dropdown-row-open {
+    z-index: 2201;
 }
 
 .activities-card {
