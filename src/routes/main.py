@@ -35,7 +35,9 @@ def index():
         # 检查是否存在管理员账户，如果没有则重定向到设置页面
         admin_role = db.session.execute(db.select(Role).filter_by(name='Admin')).scalar_one_or_none()
         if admin_role:
-            admin_exists = db.session.execute(db.select(User).filter_by(role_id=admin_role.id)).scalar_one_or_none()
+            admin_exists = db.session.execute(
+                db.select(User.id).filter_by(role_id=admin_role.id).limit(1)
+            ).scalar_one_or_none()
             if not admin_exists:
                 return redirect(url_for('auth.setup_admin'))
         else:
@@ -56,53 +58,26 @@ def index():
             ).order_by(Notification.is_important.desc(), Notification.created_at.desc()).limit(3)
         ).scalars().all()
 
-        # 统一活动查询基线，避免多个分支逻辑不一致
-        active_base = db.select(Activity).filter(Activity.status == 'active')
-
-        latest_activities = db.session.execute(
-            active_base.order_by(Activity.created_at.desc()).limit(6)
-        ).scalars().all()
-
-        featured_activities = db.session.execute(
-            active_base.filter(Activity.is_featured == True).order_by(Activity.created_at.desc()).limit(3)
-        ).scalars().all()
-
-        upcoming_activities = db.session.execute(
-            active_base.filter(
-                Activity.start_time.is_not(None),
-                Activity.start_time > now
-            ).order_by(Activity.start_time.asc()).limit(3)
-        ).scalars().all()
-
-        reg_count_subq = db.select(
-            Registration.activity_id,
-            func.count(Registration.id).label('reg_count')
-        ).filter(
-            Registration.status.in_(['registered', 'attended'])
-        ).group_by(Registration.activity_id).subquery()
-
-        popular_activities = db.session.execute(
-            db.select(Activity).outerjoin(
-                reg_count_subq,
-                Activity.id == reg_count_subq.c.activity_id
-            ).filter(
+        # 首页活动逻辑：仅显示进行中的活动，按发布时间倒序（越新越靠前）
+        active_activities = db.session.execute(
+            db.select(Activity).filter(
                 Activity.status == 'active'
             ).order_by(
-                func.coalesce(reg_count_subq.c.reg_count, 0).desc(),
                 Activity.created_at.desc()
-            ).limit(6)
+            )
         ).scalars().all()
 
-        # 稳健兜底：热门为空时使用最新，其次使用即将开始
-        if not popular_activities:
-            popular_activities = latest_activities[:3] if latest_activities else upcoming_activities[:3]
+        latest_activities = active_activities
+        popular_activities = active_activities
+        upcoming_activities = active_activities[:3]
 
+        featured_activities = [a for a in active_activities if getattr(a, 'is_featured', False)][:3]
         if not featured_activities:
-            featured_activities = popular_activities[:3]
+            featured_activities = active_activities[:3]
 
         logger.info(
-            f"首页活动统计: featured={len(featured_activities)}, latest={len(latest_activities)}, "
-            f"upcoming={len(upcoming_activities)}, popular={len(popular_activities)}"
+            f"首页活动统计(进行中按发布时间倒序): total_active={len(active_activities)}, "
+            f"featured={len(featured_activities)}"
         )
         
         # 渲染模板

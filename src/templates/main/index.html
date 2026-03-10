@@ -134,13 +134,7 @@
                                 <h5 class="card-title fw-bold text-dark mb-3" style="font-size: 1.15rem; line-height: 1.4;">{{ activity.title }}</h5>
                                 
                                 <div class="d-flex align-items-center mb-3" style="font-size: 0.85rem;">
-                                    {% if activity.registration_deadline and activity.registration_deadline < now %}
-                                        <span class="me-3 fw-normal" style="color:#6b7280;">已结束</span>
-                                    {% elif activity.start_time and activity.start_time < now %}
-                                        <span class="me-3 fw-normal" style="color:#f59e0b;">进行中</span>
-                                    {% else %}
-                                        <span class="me-3 fw-normal" style="color:#10b981;">可报名</span>
-                                    {% endif %}
+                                    <span class="me-3 fw-normal" style="color:#10b981;">进行中</span>
                                     
                                     <div class="d-flex align-items-center fw-normal" style="color:#111827;">
                                         <i class="far fa-calendar me-2" style="color:#111827; font-weight: 500;"></i> 
