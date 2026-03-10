@@ -643,13 +643,28 @@
 }
 
 @media (max-width: 991.98px) {
-    .activity-signup-action-wrap {
-        flex: 0 0 140px;
-        width: 140px;
+    .activity-signup-split-table {
+        display: block;
     }
 
-    .activity-signup-info-table {
-        min-width: 860px;
+    .activity-signup-info-wrap,
+    .activity-signup-action-wrap {
+        width: 100%;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+    }
+
+    .activity-signup-info-table,
+    .activity-signup-action-table {
+        width: max-content;
+        min-width: 100%;
+    }
+
+    .activity-signup-action-wrap {
+        flex: 1 1 auto;
+        border-left: none;
+        border-top: 1px solid #e9edf3;
+        margin-top: 0.35rem;
     }
 
     .activity-signup-action-table .checkin-btn {

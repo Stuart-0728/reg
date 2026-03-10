@@ -657,6 +657,38 @@
         }
         
         /* 响应式调整 */
+        @media (max-width: 1199.98px) {
+            .glass-nav .navbar-collapse {
+                margin-top: 0.85rem;
+                padding-top: 0.5rem;
+                border-top: 1px solid rgba(79, 70, 229, 0.12);
+            }
+
+            .glass-nav .bottom-area {
+                width: 100%;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.65rem;
+                margin-top: 0.6rem;
+            }
+
+            .glass-nav .bottom-area .search-form {
+                width: 100%;
+                margin-right: 0 !important;
+            }
+
+            .glass-nav .bottom-area .navbar-nav {
+                width: 100%;
+            }
+
+            .glass-nav .bottom-area .navbar-nav .dropdown-menu {
+                position: static;
+                width: 100%;
+                margin-top: 0.4rem;
+                border-radius: 12px;
+            }
+        }
+
         @media (max-width: 768px) {
             .card {
                 margin-bottom: 1rem;
@@ -690,7 +722,7 @@
         </div>
     </div>
 
-    <nav class="navbar navbar-expand-lg glass-nav">
+    <nav class="navbar navbar-expand-xl glass-nav">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('main.index') }}">
                 <i class="fas fa-graduation-cap me-2"></i>智能社团+

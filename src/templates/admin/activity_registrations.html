@@ -330,13 +330,28 @@ document.addEventListener('DOMContentLoaded', function() {
         width: 100%;
     }
 
-    .activity-registrations-info-table {
-        min-width: 1050px;
+    .activity-registrations-split-table {
+        display: block;
+    }
+
+    .activity-registrations-info-wrap,
+    .activity-registrations-action-wrap {
+        width: 100%;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+    }
+
+    .activity-registrations-info-table,
+    .activity-registrations-action-table {
+        width: max-content;
+        min-width: 100%;
     }
 
     .activity-registrations-action-wrap {
-        flex: 0 0 170px;
-        width: 170px;
+        flex: 1 1 auto;
+        border-left: none;
+        border-top: 1px solid #e9edf3;
+        margin-top: 0.35rem;
     }
 }
 </style>
