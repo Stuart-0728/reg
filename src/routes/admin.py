@@ -4219,23 +4219,33 @@ def activity_view(id):
     try:
         # 获取活动详情
         activity = db.get_or_404(Activity, id)
+
+        active_statuses = ['registered', 'attended']
         
         # 获取报名统计
         registrations_count = db.session.execute(
-            db.select(func.count()).select_from(Registration).filter_by(activity_id=id)
+            db.select(func.count()).select_from(Registration).filter(
+                Registration.activity_id == id,
+                Registration.status.in_(active_statuses)
+            )
         ).scalar()
         
         # 获取签到统计
         checkins_count = db.session.execute(
-            db.select(func.count()).select_from(Registration).filter_by(
-                activity_id=id, 
-                status='attended'
+            db.select(func.count()).select_from(Registration).filter(
+                Registration.activity_id == id,
+                Registration.status.in_(active_statuses),
+                or_(
+                    Registration.status == 'attended',
+                    Registration.check_in_time.is_not(None)
+                )
             )
         ).scalar()
         
         # 获取报名学生列表
-        registrations = Registration.query.filter_by(
-            activity_id=id
+        registrations = Registration.query.filter(
+            Registration.activity_id == id,
+            Registration.status.in_(active_statuses)
         ).join(
             User, Registration.user_id == User.id
         ).join(

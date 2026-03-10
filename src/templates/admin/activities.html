@@ -394,10 +394,12 @@ function updateActivityStatus(activityId, status) {
     z-index: 1;
 }
 
-.activities-card .dropdown,
+.activities-card .dropdown {
+    position: static;
+}
+
 .activities-card .dropdown-menu {
-    position: relative;
-    z-index: 1080;
+    z-index: 2200;
 }
 
 .activities-card {

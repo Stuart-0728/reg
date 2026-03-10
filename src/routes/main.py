@@ -136,7 +136,9 @@ def index():
             ).filter(
                 Activity.status == 'active'
             ).order_by(
-                reg_count_subq.c.reg_count.desc().nullslast()
+                func.coalesce(reg_count_subq.c.reg_count, 0).desc(),
+                Activity.start_time.asc(),
+                Activity.created_at.desc()
             ).limit(3).all()
         except Exception as e:
             logger.error(f"获取热门活动出错: {e}")
