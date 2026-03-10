@@ -3777,25 +3777,3 @@ body {
 .activities-card .dropdown-menu {
     z-index: 2000 !important;
 }
-
-/* ====== 强制注入新的悬浮岛圆角搜索栏与导航栏 ====== */
-.navbar.glass-nav {
-    background: rgba(255, 255, 255, 0.8) !important;
-    backdrop-filter: blur(15px) !important;
-    -webkit-backdrop-filter: blur(15px) !important;
-    border-radius: 50px !important;
-    margin: 15px auto !important;
-    max-width: 95% !important;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08) !important;
-    padding: 10px 25px !important;
-    color: #333 !important;
-}
-.glass-nav .nav-link { color: #4b5563 !important; font-weight: 500; }
-.glass-nav .nav-link:hover { color: #4f46e5 !important; background: rgba(79, 70, 229, 0.1) !important; border-radius: 50px !important; }
-.glass-nav .navbar-brand { color: #1f2937 !important; font-weight: 700; }
-.navbar .search-form { position: relative; border-radius: 50px !important; margin-right: 20px !important; }
-.navbar .search-form .form-control { border-radius: 50px !important; padding: 0.6rem 2rem 0.6rem 40px !important; border: 1px solid #e5e7eb !important; background-color: #f9fafb !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02) !important; }
-.navbar .search-form i.fa-search { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #6b7280; z-index: 10; cursor: pointer; }
-.navbar .search-form .btn { display: none !important; }
-.card { border-radius: 20px !important; border: none !important; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05) !important; }
-.btn { border-radius: 50px !important; }

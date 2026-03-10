@@ -64,7 +64,7 @@ def index():
                 Activity.status == 'active'
             ).order_by(
                 Activity.created_at.desc()
-            )
+            ).limit(12)
         ).scalars().all()
 
         latest_activities = active_activities

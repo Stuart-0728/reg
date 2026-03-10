@@ -81,62 +81,45 @@
                     <div class="mb-4">
                         <h5 class="mb-3 text-dark fw-bold"><i class="fas fa-user-graduate me-2 text-primary"></i>报名学生</h5>
                         {% if registrations %}
-                        <div class="activity-signup-split-table">
-                            <div class="table-responsive activity-signup-info-wrap">
-                                <table class="table table-hover align-middle mb-0 activity-signup-info-table">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>学号</th>
-                                            <th>姓名</th>
-                                            <th>学院</th>
-                                            <th>专业</th>
-                                            <th>报名时间</th>
-                                            <th>签到状态</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for reg in registrations %}
-                                        <tr data-row-index="{{ loop.index0 }}">
-                                            <td>{{ reg.student_id }}</td>
-                                            <td>{{ reg.student_name }}</td>
-                                            <td>{{ reg.college }}</td>
-                                            <td>{{ reg.major }}</td>
-                                            <td>{{ display_datetime(reg.registration_time, 'Asia/Shanghai') }}</td>
-                                            <td>
-                                                {% if reg.check_in_time %}
-                                                <span class="badge bg-success">已签到 ({{ display_datetime(reg.check_in_time, 'Asia/Shanghai') }})</span>
-                                                {% else %}
-                                                <span class="badge bg-secondary">未签到</span>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div class="activity-signup-action-wrap">
-                                <table class="table align-middle mb-0 activity-signup-action-table">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for reg in registrations %}
-                                        <tr data-row-index="{{ loop.index0 }}">
-                                            <td>
-                                                {% if reg.check_in_time %}
-                                                <button class="btn btn-sm btn-outline-danger checkin-btn" onclick="cancelCheckin({{ reg.id }})" data-no-global-loading="true">取消签到</button>
-                                                {% else %}
-                                                <button class="btn btn-sm btn-outline-success checkin-btn" onclick="manualCheckin({{ reg.id }})" data-no-global-loading="true">签到</button>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
+                        <div class="table-responsive activity-signup-table-wrap">
+                            <table class="table table-hover align-middle mb-0 activity-signup-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>学号</th>
+                                        <th>姓名</th>
+                                        <th>学院</th>
+                                        <th>专业</th>
+                                        <th>报名时间</th>
+                                        <th>签到状态</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for reg in registrations %}
+                                    <tr>
+                                        <td>{{ reg.student_id }}</td>
+                                        <td>{{ reg.student_name }}</td>
+                                        <td>{{ reg.college }}</td>
+                                        <td>{{ reg.major }}</td>
+                                        <td>{{ display_datetime(reg.registration_time, 'Asia/Shanghai') }}</td>
+                                        <td>
+                                            {% if reg.check_in_time %}
+                                            <span class="badge bg-success">已签到 ({{ display_datetime(reg.check_in_time, 'Asia/Shanghai') }})</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">未签到</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if reg.check_in_time %}
+                                            <button class="btn btn-sm btn-outline-danger checkin-btn" onclick="cancelCheckin({{ reg.id }})" data-no-global-loading="true">取消签到</button>
+                                            {% else %}
+                                            <button class="btn btn-sm btn-outline-success checkin-btn" onclick="manualCheckin({{ reg.id }})" data-no-global-loading="true">签到</button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
                         {% else %}
                         <div class="alert alert-info">
@@ -545,30 +528,6 @@
             });
         }
 
-        const infoRows = document.querySelectorAll('.activity-signup-info-table tbody tr[data-row-index]');
-        const actionRows = document.querySelectorAll('.activity-signup-action-table tbody tr[data-row-index]');
-        if (infoRows.length && actionRows.length && infoRows.length === actionRows.length) {
-            const clearHover = () => {
-                infoRows.forEach(row => row.classList.remove('split-row-hover'));
-                actionRows.forEach(row => row.classList.remove('split-row-hover'));
-            };
-
-            const bindHover = (rows, targetRows) => {
-                rows.forEach(row => {
-                    row.addEventListener('mouseenter', () => {
-                        clearHover();
-                        const idx = row.getAttribute('data-row-index');
-                        const target = Array.from(targetRows).find(item => item.getAttribute('data-row-index') === idx);
-                        row.classList.add('split-row-hover');
-                        if (target) target.classList.add('split-row-hover');
-                    });
-                    row.addEventListener('mouseleave', clearHover);
-                });
-            };
-
-            bindHover(infoRows, actionRows);
-            bindHover(actionRows, infoRows);
-        }
     });
 </script>
 {% endblock %}
@@ -578,96 +537,33 @@
 <style>
 .activity-signup-table-wrap {
     overflow-x: auto !important;
-    overflow-y: visible !important;
-    -webkit-overflow-scrolling: touch;
-}
-
-.activity-signup-split-table {
-    display: flex;
-    align-items: stretch;
-}
-
-.activity-signup-info-wrap {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-x: auto !important;
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch;
 }
 
-.activity-signup-info-wrap::-webkit-scrollbar {
+.activity-signup-table-wrap::-webkit-scrollbar {
     height: 8px;
 }
 
-.activity-signup-info-table {
+.activity-signup-table {
     width: max-content;
     min-width: 100%;
 }
 
-.activity-signup-action-wrap {
-    flex: 0 0 150px;
-    width: 150px;
-    background: #fff;
-    border-left: 1px solid #e9edf3;
-}
-
-.activity-signup-action-table {
-    width: 100%;
-    margin-bottom: 0;
-    table-layout: fixed;
-}
-
-.activity-signup-info-table th,
-.activity-signup-info-table td,
-.activity-signup-action-table th,
-.activity-signup-action-table td {
+.activity-signup-table th,
+.activity-signup-table td {
     padding-left: 0.5rem;
     padding-right: 0.5rem;
     white-space: nowrap;
 }
 
-.activity-signup-info-table tbody td,
-.activity-signup-action-table tbody td {
+.activity-signup-table tbody td {
     height: 72px;
     vertical-align: middle;
 }
 
-.activity-signup-action-table th,
-.activity-signup-action-table td {
-    text-align: center;
-}
-
-.activity-signup-info-table tbody tr.split-row-hover td,
-.activity-signup-action-table tbody tr.split-row-hover td {
-    background: #f8f9fa;
-}
-
 @media (max-width: 991.98px) {
-    .activity-signup-split-table {
-        display: block;
-    }
-
-    .activity-signup-info-wrap,
-    .activity-signup-action-wrap {
-        width: 100%;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-    }
-
-    .activity-signup-info-table,
-    .activity-signup-action-table {
-        width: max-content;
-        min-width: 100%;
-    }
-
-    .activity-signup-action-wrap {
-        flex: 1 1 auto;
-        border-left: none;
-        border-top: 1px solid #e9edf3;
-        margin-top: 0.35rem;
-    }
-
-    .activity-signup-action-table .checkin-btn {
+    .activity-signup-table .checkin-btn {
         white-space: nowrap;
     }
 }
