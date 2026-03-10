@@ -45,133 +45,91 @@ def index():
         now = get_localized_now()
         logger.info(f"当前北京时间: {now}")
         
-        # 获取静态文件目录
-        static_folder = current_app.static_folder
-        logger.info(f"静态文件目录: {static_folder}")
-        
         # 获取公共通知
-        try:
-            public_notifications = Notification.query.filter(
+        public_notifications = db.session.execute(
+            db.select(Notification).filter(
                 Notification.is_public == True,
                 or_(
                     Notification.expiry_date == None,
                     Notification.expiry_date > now
                 )
-            ).order_by(Notification.is_important.desc(), Notification.created_at.desc()).limit(3).all()
-            logger.info(f"获取到{len(public_notifications)}条公共通知")
-        except Exception as e:
-            logger.error(f"获取公共通知出错: {e}")
-            public_notifications = []
-        
-        # 获取特色活动
-        try:
-            featured_activities = Activity.query.filter(
-                Activity.is_featured == True,
-                Activity.status == 'active'
-            ).order_by(Activity.created_at.desc()).limit(3).all()
-        except Exception as e:
-            logger.error(f"获取特色活动出错: {e}")
-            featured_activities = []
-        
-        # 记录特色活动信息
-        for i, activity in enumerate(featured_activities, 1):
-            logger.info(f"特色活动 {i}: ID={activity.id}, 标题={activity.title}, 海报={activity.poster_image}")
-            
-            # 检查海报文件是否存在
-            if activity.poster_image:
-                poster_path = os.path.join(static_folder, 'uploads', 'posters', activity.poster_image)
-                if os.path.exists(poster_path):
-                    logger.info(f"  海报文件存在: {poster_path}")
-                else:
-                    logger.info(f"  海报文件不存在: {poster_path}")
-                    
-                    # 尝试查找匹配的海报文件
-                    if static_folder:  # 确保static_folder不为None
-                        poster_dir = os.path.join(static_folder, 'uploads', 'posters')
-                        if os.path.exists(poster_dir):
-                            matching_files = [f for f in os.listdir(poster_dir) if f.startswith(f"activity_{activity.id}_")]
-                            if matching_files:
-                                logger.info(f"  找到匹配的海报文件: {matching_files[0]}")
-                                activity.poster_image = matching_files[0]
-                    
-                    # 如果仍然没有找到海报，设置默认图片
-                    poster_path = os.path.join(static_folder, 'uploads', 'posters', activity.poster_image) if static_folder and activity.poster_image else ""
-                    if not os.path.exists(poster_path):
-                        logger.info(f"设置活动详情页备用风景图: landscape.jpg")
-        
-        # 获取最新活动
-        try:
-            latest_activities = Activity.query.filter_by(
-                status='active'
-            ).order_by(Activity.created_at.desc()).limit(6).all()
-        except Exception as e:
-            logger.error(f"获取最新活动出错: {e}")
-            latest_activities = []
-            
-        # 获取即将开始的活动
-        try:
-            upcoming_activities = Activity.query.filter(
-                Activity.status == 'active',
+            ).order_by(Notification.is_important.desc(), Notification.created_at.desc()).limit(3)
+        ).scalars().all()
+
+        # 统一活动查询基线，避免多个分支逻辑不一致
+        active_base = db.select(Activity).filter(Activity.status == 'active')
+
+        latest_activities = db.session.execute(
+            active_base.order_by(Activity.created_at.desc()).limit(6)
+        ).scalars().all()
+
+        featured_activities = db.session.execute(
+            active_base.filter(Activity.is_featured == True).order_by(Activity.created_at.desc()).limit(3)
+        ).scalars().all()
+
+        upcoming_activities = db.session.execute(
+            active_base.filter(
+                Activity.start_time.is_not(None),
                 Activity.start_time > now
-            ).order_by(Activity.start_time.asc()).limit(3).all()
-        except Exception as e:
-            logger.error(f"获取即将开始的活动出错: {e}")
-            upcoming_activities = []
-            
-        # 获取热门活动（按报名人数排序）
-        try:
-            # 使用子查询计算每个活动的报名人数
-            reg_count_subq = db.session.query(
-                Registration.activity_id,
-                func.count(Registration.id).label('reg_count')
-            ).filter(
-                Registration.status.in_(['registered', 'attended'])
-            ).group_by(Registration.activity_id).subquery()
-        
-            # 查询活动并按报名人数排序
-            popular_activities = db.session.query(Activity).join(
+            ).order_by(Activity.start_time.asc()).limit(3)
+        ).scalars().all()
+
+        reg_count_subq = db.select(
+            Registration.activity_id,
+            func.count(Registration.id).label('reg_count')
+        ).filter(
+            Registration.status.in_(['registered', 'attended'])
+        ).group_by(Registration.activity_id).subquery()
+
+        popular_activities = db.session.execute(
+            db.select(Activity).outerjoin(
                 reg_count_subq,
-                Activity.id == reg_count_subq.c.activity_id,
-                isouter=True
+                Activity.id == reg_count_subq.c.activity_id
             ).filter(
                 Activity.status == 'active'
             ).order_by(
                 func.coalesce(reg_count_subq.c.reg_count, 0).desc(),
-                Activity.start_time.asc(),
                 Activity.created_at.desc()
-            ).limit(3).all()
-        except Exception as e:
-            logger.error(f"获取热门活动出错: {e}")
-            popular_activities = []
+            ).limit(6)
+        ).scalars().all()
 
-        # 首页活动预告兜底：热门活动为空时回退到最新/即将开始活动
+        # 稳健兜底：热门为空时使用最新，其次使用即将开始
         if not popular_activities:
-            fallback_source = latest_activities if latest_activities else upcoming_activities
-            popular_activities = fallback_source[:3] if fallback_source else []
-            logger.info(f"热门活动为空，已启用兜底列表，数量: {len(popular_activities)}")
-        
-        # 检查活动是否有二进制海报数据
-        for activity in featured_activities + latest_activities:
-            if hasattr(activity, 'poster_data') and activity.poster_data:
-                logger.info(f"活动ID={activity.id}在数据库中有二进制海报数据，大小: {len(activity.poster_data)} 字节")
+            popular_activities = latest_activities[:3] if latest_activities else upcoming_activities[:3]
+
+        if not featured_activities:
+            featured_activities = popular_activities[:3]
+
+        logger.info(
+            f"首页活动统计: featured={len(featured_activities)}, latest={len(latest_activities)}, "
+            f"upcoming={len(upcoming_activities)}, popular={len(popular_activities)}"
+        )
         
         # 渲染模板
         return render_template('main/index.html',
                             featured_activities=featured_activities,
-                              latest_activities=latest_activities,
+                            latest_activities=latest_activities,
                             upcoming_activities=upcoming_activities,
                             popular_activities=popular_activities,
                             public_notifications=public_notifications,
-                              now=now,
+                            now=now,
                             display_datetime=display_datetime)
     except Exception as e:
-        logger.error(f"Error in index: {e}")
-        # 在出错时返回一个简化的页面
+        logger.error(f"Error in index: {e}", exc_info=True)
+        # 最终兜底：至少返回活动列表，避免首页活动区块完全空白
+        fallback_activities = []
+        try:
+            fallback_activities = db.session.execute(
+                db.select(Activity).filter(Activity.status == 'active').order_by(Activity.created_at.desc()).limit(3)
+            ).scalars().all()
+        except Exception:
+            fallback_activities = []
+
         return render_template('main/index.html', 
-                              featured_activities=[],
-                              latest_activities=[],
-                               upcoming_activities=[],
-                               popular_activities=[],
+                              featured_activities=fallback_activities,
+                              latest_activities=fallback_activities,
+                              upcoming_activities=fallback_activities,
+                              popular_activities=fallback_activities,
                               public_notifications=[],
                               now=datetime.now(pytz.timezone('Asia/Shanghai')),
                               display_datetime=display_datetime)
