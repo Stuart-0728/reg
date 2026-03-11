@@ -7,6 +7,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, SelectField, ValidationError
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Regexp
 from datetime import datetime, timedelta
+import time
 from sqlalchemy import or_
 import logging
 from urllib.parse import urlparse, urljoin
@@ -280,7 +281,7 @@ def logout():
     logout_user()
     session.clear()
 
-    response = redirect(url_for('main.index'))
+    response = redirect(url_for('auth.login', logged_out=1, t=int(time.time())))
     # 显式删除认证cookie（双保险）
     response.delete_cookie(current_app.config.get('SESSION_COOKIE_NAME', 'session'), path='/')
     response.delete_cookie('remember_token', path='/')

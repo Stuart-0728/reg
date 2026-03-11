@@ -528,6 +528,69 @@ def ai_chat():
 
     return Response(generate(), mimetype='text/event-stream')
 
+
+@utils_bp.route('/api/ai/chat', methods=['POST'])
+@login_required
+@csrf.exempt
+def ai_chat_legacy_post():
+    """兼容旧教育页面使用的 /api/ai/chat POST 接口。"""
+    try:
+        data = request.get_json(silent=True) or {}
+        prompt = (data.get('message') or data.get('prompt') or '').strip()
+        if not prompt:
+            return jsonify({'success': False, 'error': '缺少message参数'}), 400
+
+        api_key = os.environ.get("ARK_API_KEY") or current_app.config.get('VOLCANO_API_KEY')
+        if not api_key:
+            return jsonify({'success': False, 'error': 'AI 服务配置错误：API 密钥未设置'}), 500
+
+        url = current_app.config.get('VOLCANO_API_URL', "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        messages = [
+            {
+                'role': 'system',
+                'content': '你是高校物理教育辅助AI，请简洁、准确、可操作地回答问题。'
+            }
+        ]
+
+        history = data.get('history') or []
+        if isinstance(history, list):
+            for item in history[-6:]:
+                role = item.get('role') if isinstance(item, dict) else None
+                content = item.get('content') if isinstance(item, dict) else None
+                if role in ('user', 'assistant') and content:
+                    messages.append({'role': role, 'content': str(content)[:1200]})
+
+        messages.append({'role': 'user', 'content': prompt})
+
+        payload = {
+            'model': 'deepseek-v3-250324',
+            'messages': messages,
+            'temperature': 0.6,
+        }
+
+        resp = requests.post(url, json=payload, headers=headers, timeout=30)
+        if resp.status_code != 200:
+            return jsonify({'success': False, 'error': f'AI服务暂不可用({resp.status_code})'}), 502
+
+        response_data = resp.json()
+        choices = response_data.get('choices') or []
+        content = ''
+        if choices:
+            content = (choices[0].get('message') or {}).get('content') or ''
+
+        return jsonify({
+            'success': True,
+            'response': content or '抱歉，AI助手未返回有效内容。'
+        })
+    except Exception as e:
+        logger.error(f"/api/ai/chat 处理失败: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': '处理请求失败，请稍后重试'}), 500
+
 # 添加与前端对应的新路由
 @utils_bp.route('/api/ai_chat', methods=['GET'], endpoint='api_ai_chat')
 def api_ai_chat():
