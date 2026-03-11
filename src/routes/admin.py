@@ -2414,8 +2414,36 @@ def activity_reviews(id):
         
         activity = db.get_or_404(Activity, id)
         reviews = ActivityReview.query.filter_by(activity_id=id).order_by(ActivityReview.created_at.desc()).all()
+
+        # 预加载评价人信息，避免模板中姓名为空（非匿名时优先显示真实姓名）
+        user_ids = {review.user_id for review in reviews if review.user_id}
+        reviewer_name_map = {}
+        if user_ids:
+            reviewer_rows = db.session.execute(
+                db.select(User.id, User.username, StudentInfo.real_name)
+                .outerjoin(StudentInfo, StudentInfo.user_id == User.id)
+                .where(User.id.in_(user_ids))
+            ).all()
+            reviewer_name_map = {
+                row.id: {
+                    'username': row.username,
+                    'real_name': row.real_name
+                }
+                for row in reviewer_rows
+            }
+
         for review in reviews:
             review.display_created_at = _format_review_time_for_display(review.created_at)
+            if review.is_anonymous:
+                review.reviewer_name = '匿名同学'
+            else:
+                reviewer_info = reviewer_name_map.get(review.user_id, {})
+                review.reviewer_name = (
+                    reviewer_info.get('real_name')
+                    or reviewer_info.get('username')
+                    or f'用户{review.user_id}'
+                )
+
         if reviews:
             average_rating = sum(r.rating for r in reviews) / len(reviews)
         else:
