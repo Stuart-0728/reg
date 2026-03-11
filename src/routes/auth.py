@@ -13,6 +13,7 @@ import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.header import Header
 from urllib.parse import urlparse, urljoin
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 # 配置日志
@@ -76,7 +77,7 @@ def _send_html_email(subject, recipient, html_body):
         raise RuntimeError('邮件配置不完整，请检查 MAIL_SERVER / MAIL_USERNAME / MAIL_DEFAULT_SENDER')
 
     message = MIMEMultipart('alternative')
-    message['Subject'] = f"{subject_prefix}{subject}"
+    message['Subject'] = str(Header(f"{subject_prefix}{subject}", 'utf-8'))
     message['From'] = sender
     message['To'] = recipient
     message.attach(MIMEText(html_body, 'html', 'utf-8'))
