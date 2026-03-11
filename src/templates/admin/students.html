@@ -4,17 +4,6 @@
 
 {% block styles %}
 <style>
-    .students-split-table {
-        display: flex;
-        align-items: stretch;
-    }
-
-    .students-info-wrap {
-        flex: 1 1 auto;
-        min-width: 0;
-        border-right: none;
-    }
-
     .students-table-wrap {
         overflow-x: auto !important;
         overflow-y: hidden !important;
@@ -25,30 +14,13 @@
         height: 8px;
     }
 
-    .students-info-table {
+    .students-table {
         table-layout: fixed;
         width: max-content;
         min-width: 100%;
     }
 
-    .students-action-wrap {
-        flex: 0 0 220px;
-        width: 220px;
-        background: #fff;
-        border-left: 1px solid #e9edf3;
-    }
-
-    .students-action-table {
-        width: 100%;
-        margin-bottom: 0;
-        table-layout: fixed;
-    }
-
-    .students-action-table thead th {
-        border-left: 0;
-    }
-
-    .students-info-table .cell-ellipsis {
+    .students-table .cell-ellipsis {
         display: inline-block;
         max-width: 100%;
         overflow: hidden;
@@ -57,7 +29,7 @@
         vertical-align: middle;
     }
 
-    .students-action-table .action-group {
+    .students-table .action-group {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -65,41 +37,26 @@
         flex-wrap: nowrap;
     }
 
-    .students-action-table .action-group .btn {
+    .students-table .action-group .btn {
         flex: 0 0 auto;
         padding: 0.2rem 0.4rem;
     }
 
-    .students-info-table th,
-    .students-info-table td,
-    .students-action-table th,
-    .students-action-table td {
+    .students-table th,
+    .students-table td {
         padding-left: 0.5rem;
         padding-right: 0.5rem;
     }
 
-    .students-info-table tbody td,
-    .students-action-table tbody td {
+    .students-table tbody td {
         height: 72px;
     }
 
-    .students-info-table tbody tr.split-row-hover td,
-    .students-action-table tbody tr.split-row-hover td {
-        background: #f8f9fa;
-    }
-
-    .students-action-table th,
-    .students-action-table td {
+    .students-table th:last-child,
+    .students-table td:last-child {
         text-align: center;
         vertical-align: middle;
         white-space: nowrap;
-    }
-
-    @media (max-width: 991.98px) {
-        .students-action-wrap {
-            flex-basis: 200px;
-            width: 200px;
-        }
     }
 </style>
 {% endblock %}
@@ -141,99 +98,83 @@
     <!-- 学生列表 -->
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">
-            <div class="students-split-table">
-                <div class="table-responsive students-table-wrap students-info-wrap">
-                    <table class="table table-hover align-middle mb-0 table-cell-scroll students-info-table">
-                        <colgroup>
-                            <col style="width: 70px;">
-                            <col style="width: 110px;">
-                            <col style="width: 180px;">
-                            <col style="width: 110px;">
-                            <col style="width: 180px;">
-                            <col style="width: 110px;">
-                            <col style="width: 140px;">
-                            <col style="width: 130px;">
-                            <col style="width: 90px;">
-                        </colgroup>
-                        <thead class="table-light">
-                            <tr>
-                                <th>ID</th>
-                                <th>姓名</th>
-                                <th>学号</th>
-                                <th>年级</th>
-                                <th>学院</th>
-                                <th>专业</th>
-                                <th>QQ</th>
-                                <th>标签状态</th>
-                                <th>积分</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for student in students.items %}
-                            <tr>
-                                <td>{{ student.id }}</td>
-                                <td class="fw-medium"><span class="cell-ellipsis" title="{{ student.real_name }}">{{ student.real_name }}</span></td>
-                                <td><span class="cell-ellipsis" title="{{ student.student_id }}">{{ student.student_id }}</span></td>
-                                <td><span class="cell-ellipsis" title="{{ student.grade }}">{{ student.grade }}</span></td>
-                                <td><span class="cell-ellipsis" title="{{ student.college }}">{{ student.college }}</span></td>
-                                <td><span class="cell-ellipsis" title="{{ student.major }}">{{ student.major }}</span></td>
-                                <td><span class="cell-ellipsis" title="{{ student.qq or '-' }}">{{ student.qq or '-' }}</span></td>
-                                <td>
-                                    {% if student.has_selected_tags %}
-                                    <span class="badge bg-success">已选择</span>
+            <div class="table-responsive students-table-wrap">
+                <table class="table table-hover align-middle mb-0 table-cell-scroll students-table">
+                    <colgroup>
+                        <col style="width: 70px;">
+                        <col style="width: 110px;">
+                        <col style="width: 180px;">
+                        <col style="width: 110px;">
+                        <col style="width: 180px;">
+                        <col style="width: 110px;">
+                        <col style="width: 140px;">
+                        <col style="width: 130px;">
+                        <col style="width: 90px;">
+                        <col style="width: 220px;">
+                    </colgroup>
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>姓名</th>
+                            <th>学号</th>
+                            <th>年级</th>
+                            <th>学院</th>
+                            <th>专业</th>
+                            <th>QQ</th>
+                            <th>标签状态</th>
+                            <th>积分</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for student in students.items %}
+                        <tr>
+                            <td>{{ student.id }}</td>
+                            <td class="fw-medium"><span class="cell-ellipsis" title="{{ student.real_name }}">{{ student.real_name }}</span></td>
+                            <td><span class="cell-ellipsis" title="{{ student.student_id }}">{{ student.student_id }}</span></td>
+                            <td><span class="cell-ellipsis" title="{{ student.grade }}">{{ student.grade }}</span></td>
+                            <td><span class="cell-ellipsis" title="{{ student.college }}">{{ student.college }}</span></td>
+                            <td><span class="cell-ellipsis" title="{{ student.major }}">{{ student.major }}</span></td>
+                            <td><span class="cell-ellipsis" title="{{ student.qq or '-' }}">{{ student.qq or '-' }}</span></td>
+                            <td>
+                                {% if student.has_selected_tags %}
+                                <span class="badge bg-success">已选择</span>
+                                {% else %}
+                                <span class="badge bg-warning">未选择</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border rounded-pill">{{ student.points or 0 }}</span>
+                            </td>
+                            <td>
+                                <div class="action-group" role="group">
+                                    <a href="{{ url_for('admin.student_view', user_id=student.user_id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if student.is_admin %}
+                                        <form method="post" action="{{ url_for('admin.demote_admin_to_student', user_id=student.user_id) }}" class="d-inline" onsubmit="return confirm('确认取消该用户管理员身份？');" data-no-loading="true">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-secondary" title="取消管理员">
+                                                <i class="fas fa-user-minus"></i>
+                                            </button>
+                                        </form>
                                     {% else %}
-                                    <span class="badge bg-warning">未选择</span>
+                                        <form method="post" action="{{ url_for('admin.promote_student_to_admin', user_id=student.user_id) }}" class="d-inline" onsubmit="return confirm('确认将该学生设置为管理员？');" data-no-loading="true">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="设为管理员">
+                                                <i class="fas fa-user-shield"></i>
+                                            </button>
+                                        </form>
                                     {% endif %}
-                                </td>
-                                <td>
-                                    <span class="badge bg-light text-dark border rounded-pill">{{ student.points or 0 }}</span>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="students-action-wrap">
-                    <table class="table align-middle mb-0 students-action-table">
-                        <thead class="table-light">
-                            <tr>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for student in students.items %}
-                            <tr>
-                                <td>
-                                    <div class="action-group" role="group">
-                                        <a href="{{ url_for('admin.student_view', user_id=student.user_id) }}" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                        {% if student.is_admin %}
-                                            <form method="post" action="{{ url_for('admin.demote_admin_to_student', user_id=student.user_id) }}" class="d-inline" onsubmit="return confirm('确认取消该用户管理员身份？');" data-no-loading="true">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="取消管理员">
-                                                    <i class="fas fa-user-minus"></i>
-                                                </button>
-                                            </form>
-                                        {% else %}
-                                            <form method="post" action="{{ url_for('admin.promote_student_to_admin', user_id=student.user_id) }}" class="d-inline" onsubmit="return confirm('确认将该学生设置为管理员？');" data-no-loading="true">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-warning" title="设为管理员">
-                                                    <i class="fas fa-user-shield"></i>
-                                                </button>
-                                            </form>
-                                        {% endif %}
-                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="showDeleteModal('{{ student.id }}', '{{ student.real_name }}', '{{ student.student_id }}', '{{ student.user_id }}')">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="showDeleteModal('{{ student.id }}', '{{ student.real_name }}', '{{ student.student_id }}', '{{ student.user_id }}')">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
             
             <!-- 分页 -->
@@ -343,31 +284,6 @@ function showDeleteModal(studentId, studentName, studentNumber, userId) {
 
 // 添加自定义样式以优化模态框过渡效果
 document.addEventListener('DOMContentLoaded', function() {
-    const infoRows = Array.from(document.querySelectorAll('.students-info-table tbody tr'));
-    const actionRows = Array.from(document.querySelectorAll('.students-action-table tbody tr'));
-
-    if (infoRows.length && infoRows.length === actionRows.length) {
-        infoRows.forEach((infoRow, index) => {
-            const actionRow = actionRows[index];
-            if (!actionRow) return;
-
-            const activate = () => {
-                infoRow.classList.add('split-row-hover');
-                actionRow.classList.add('split-row-hover');
-            };
-
-            const deactivate = () => {
-                infoRow.classList.remove('split-row-hover');
-                actionRow.classList.remove('split-row-hover');
-            };
-
-            infoRow.addEventListener('mouseenter', activate);
-            infoRow.addEventListener('mouseleave', deactivate);
-            actionRow.addEventListener('mouseenter', activate);
-            actionRow.addEventListener('mouseleave', deactivate);
-        });
-    }
-
     const style = document.createElement('style');
     style.textContent = `
         .modal.fade .modal-dialog {
