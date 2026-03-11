@@ -619,6 +619,10 @@ def edit_profile():
         student_info = current_user.student_info
         
         if form.validate_on_submit():
+            requested_email = (request.form.get('email') or '').strip()
+            if requested_email and requested_email != (current_user.email or ''):
+                flash('邮箱已验证且不可自行修改，请联系管理员处理。', 'warning')
+
             student_info.real_name = form.real_name.data
             student_info.grade = form.grade.data
             student_info.major = form.major.data
