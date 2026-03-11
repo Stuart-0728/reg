@@ -7,6 +7,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, SelectField, ValidationError
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Regexp
 from datetime import datetime, timedelta
+from sqlalchemy import or_
 import logging
 from urllib.parse import urlparse, urljoin
 # 配置日志
@@ -75,7 +76,7 @@ class RegistrationForm(FlaskForm):
 
 # 登录表单
 class LoginForm(FlaskForm):
-    username = StringField('用户名', validators=[DataRequired(message='用户名不能为空')])
+    username = StringField('账号', validators=[DataRequired(message='账号不能为空')])
     password = PasswordField('密码', validators=[DataRequired(message='密码不能为空')])
     submit = SubmitField('登录')
 
@@ -187,15 +188,28 @@ def login():
     
     # 如果是POST请求，处理表单提交
     if form.validate_on_submit():
-        username = form.username.data
+        identifier = (form.username.data or '').strip()
         password = form.password.data
         
-        logger.info(f"尝试登录: 用户名={username}")
+        logger.info(f"尝试登录: 账号标识={identifier}")
         
         try:
-            # 查询用户
-            stmt = db.select(User).filter_by(username=username)
-            user = db.session.execute(stmt).scalar_one_or_none()
+            # 支持使用用户名、邮箱、学号、手机号登录
+            stmt = (
+                db.select(User)
+                .outerjoin(StudentInfo, StudentInfo.user_id == User.id)
+                .where(
+                    or_(
+                        User.username == identifier,
+                        User.email == identifier,
+                        StudentInfo.student_id == identifier,
+                        StudentInfo.phone == identifier
+                    )
+                )
+                .order_by(User.id.asc())
+                .limit(1)
+            )
+            user = db.session.execute(stmt).scalars().first()
             
             if user and user.verify_password(password):
                 # 检查用户是否激活
@@ -217,13 +231,13 @@ def login():
                 login_user(user, remember=True, duration=timedelta(days=30))
                 
                 # 记录登录成功日志
-                logger.info(f"登录成功: 用户名={username}, 用户ID={user.id}")
+                logger.info(f"登录成功: 账号标识={identifier}, 用户ID={user.id}")
                 
                 # 添加系统日志
                 log = SystemLog(
                     user_id=user.id,
                     action="用户登录",
-                    details=f"用户 {username} 登录成功",
+                    details=f"账号标识 {identifier} 登录成功",
                     ip_address=request.remote_addr
                 )
                 db.session.add(log)
@@ -249,8 +263,8 @@ def login():
                 return redirect(url_for('main.index'))
             else:
                 # 登录失败
-                logger.warning(f"登录失败: 用户名={username}, 原因=用户名或密码错误")
-                flash('用户名或密码错误，请重试。', 'danger')
+                logger.warning(f"登录失败: 账号标识={identifier}, 原因=账号或密码错误")
+                flash('账号或密码错误，请重试。', 'danger')
         except Exception as e:
             # 处理异常
             logger.error(f"登录过程中发生错误: {str(e)}", exc_info=True)
