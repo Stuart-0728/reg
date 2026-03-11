@@ -50,16 +50,25 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive has-sticky-action" style="overflow-x: auto; overflow-y: visible;">
-                <table class="table table-hover align-middle mb-0 table-cell-scroll table-has-sticky-action">
+                <table class="table table-hover align-middle mb-0 table-cell-scroll table-has-sticky-action activities-table">
+                    <colgroup>
+                        <col style="width: 280px;">
+                        <col style="width: 170px;">
+                        <col style="width: 170px;">
+                        <col style="width: 170px;">
+                        <col style="width: 120px;">
+                        <col style="width: 120px;">
+                        <col style="width: 110px;">
+                    </colgroup>
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 25%;">活动标题</th>
-                            <th style="width: 15%;">地点</th>
-                            <th style="width: 15%;">开始时间</th>
-                            <th style="width: 15%;">报名截止</th>
-                            <th style="width: 8%;">状态</th>
-                            <th style="width: 8%;">报名人数</th>
-                            <th style="width: 14%;" class="sticky-action-col">操作</th>
+                            <th>活动标题</th>
+                            <th>地点</th>
+                            <th>开始时间</th>
+                            <th>报名截止</th>
+                            <th>状态</th>
+                            <th>报名人数</th>
+                            <th class="sticky-action-col">操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -457,6 +466,17 @@ function updateActivityStatus(activityId, status) {
     border-spacing: 0;
 }
 
+.activities-card .activities-table {
+    table-layout: fixed;
+    width: max-content;
+    min-width: 100%;
+}
+
+.activities-card .activities-table th,
+.activities-card .activities-table td {
+    white-space: nowrap;
+}
+
 .activities-card .table-has-sticky-action .sticky-action-col {
     position: -webkit-sticky;
     position: sticky;
@@ -464,6 +484,7 @@ function updateActivityStatus(activityId, status) {
     z-index: 3;
     background: #fff;
     box-shadow: -10px 0 12px -12px rgba(15, 23, 42, 0.28);
+    min-width: 110px;
 }
 
 .activities-card .table-has-sticky-action thead .sticky-action-col {
