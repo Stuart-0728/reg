@@ -87,7 +87,7 @@
                             <div class="meta-icon"><i class="far fa-calendar-alt"></i></div>
                             <div class="meta-content">
                                 <div class="meta-label">注册时间</div>
-                                <div class="meta-value">{{ display_datetime(user.created_at, None, '%Y-%m-%d %H:%M') }}</div>
+                                <div class="meta-value">{{ created_at_display }}</div>
                             </div>
                         </li>
                         <li class="list-group-item student-meta-item">
@@ -98,7 +98,14 @@
                             </div>
                         </li>
                     </ul>
-                    <div class="d-grid mt-3">
+                    <div class="d-grid gap-2 mt-3">
+                        <button class="btn btn-outline-primary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#editStudentProfileForm" aria-expanded="false" aria-controls="editStudentProfileForm">
+                            <i class="fas fa-user-edit me-1"></i>编辑学生资料
+                        </button>
+                        <button class="btn btn-outline-danger w-100" type="button" data-bs-toggle="collapse" data-bs-target="#resetStudentPasswordForm" aria-expanded="false" aria-controls="resetStudentPasswordForm">
+                            <i class="fas fa-key me-1"></i>重置学生密码
+                        </button>
+
                         {% if user.role and user.role.name and user.role.name|lower == 'student' %}
                         <form method="post" action="{{ url_for('admin.promote_student_to_admin', user_id=user.id) }}" onsubmit="return confirm('确认将该学生设置为管理员？');" data-no-loading="true">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -118,6 +125,70 @@
                             <i class="fas fa-user-shield me-1"></i>当前已是管理员
                         </button>
                         {% endif %}
+                    </div>
+
+                    <div class="collapse mt-3" id="editStudentProfileForm">
+                        <div class="card card-body border-primary-subtle">
+                            <form method="post" action="{{ url_for('admin.edit_student_profile', user_id=user.id) }}" data-no-global-loading="true">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <label class="form-label mb-1">用户名</label>
+                                        <input class="form-control form-control-sm" name="username" value="{{ user.username or '' }}" required>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label mb-1">邮箱</label>
+                                        <input class="form-control form-control-sm" name="email" type="email" value="{{ user.email or '' }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-1">姓名</label>
+                                        <input class="form-control form-control-sm" name="real_name" value="{{ student.real_name or '' }}" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-1">学号</label>
+                                        <input class="form-control form-control-sm" name="student_id" value="{{ student.student_id or '' }}" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-1">年级</label>
+                                        <input class="form-control form-control-sm" name="grade" value="{{ student.grade or '' }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-1">学院</label>
+                                        <input class="form-control form-control-sm" name="college" value="{{ student.college or '' }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-1">专业</label>
+                                        <input class="form-control form-control-sm" name="major" value="{{ student.major or '' }}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-1">手机号</label>
+                                        <input class="form-control form-control-sm" name="phone" value="{{ student.phone or '' }}">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label mb-1">QQ</label>
+                                        <input class="form-control form-control-sm" name="qq" value="{{ student.qq or '' }}">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm mt-3 w-100">保存资料</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="collapse mt-3" id="resetStudentPasswordForm">
+                        <div class="card card-body border-danger-subtle">
+                            <form method="post" action="{{ url_for('admin.reset_student_password', user_id=user.id) }}" data-no-global-loading="true">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="mb-2">
+                                    <label class="form-label mb-1">新密码</label>
+                                    <input type="password" class="form-control form-control-sm" name="new_password" minlength="6" required>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label mb-1">确认新密码</label>
+                                    <input type="password" class="form-control form-control-sm" name="confirm_password" minlength="6" required>
+                                </div>
+                                <button type="submit" class="btn btn-danger btn-sm w-100" onclick="return confirm('确认重置该学生密码？');">确认重置密码</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>

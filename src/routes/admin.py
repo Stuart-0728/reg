@@ -18,6 +18,7 @@ import tempfile  # 添加tempfile导入
 import zipfile  # 添加zipfile导入
 import pytz
 import requests
+from werkzeug.security import generate_password_hash
 from flask import (
     Blueprint, render_template, redirect, url_for, flash, request, current_app, 
     send_from_directory, send_file, Response, make_response, jsonify
@@ -1264,11 +1265,128 @@ def student_view(user_id):
     # 获取所有标签
     tags_stmt = db.select(Tag)
     all_tags = db.session.execute(tags_stmt).scalars().all()
+
+    # 学生详情页注册时间展示：兼容历史北京时间 naive 数据，避免重复 +8h
+    created_at_display = _format_review_time_for_display(user.created_at)
     
     return render_template('admin/student_view.html', student=student, user=user, 
                            points_history=points_history, registrations=registrations,
                            selected_tag_ids=selected_tag_ids, all_tags=all_tags,
-                           display_datetime=display_datetime)
+                           display_datetime=display_datetime,
+                           created_at_display=created_at_display)
+
+@admin_bp.route('/student/<int:user_id>/edit-profile', methods=['POST'])
+@admin_required
+def edit_student_profile(user_id):
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(url_for('admin.student_view', user_id=user_id))
+
+    user = db.get_or_404(User, user_id)
+    student = db.session.execute(db.select(StudentInfo).filter_by(user_id=user_id)).scalar_one_or_none()
+    if not student:
+        flash('未找到该学生资料', 'warning')
+        return redirect(url_for('admin.students'))
+
+    try:
+        username = (request.form.get('username') or '').strip()
+        email = (request.form.get('email') or '').strip()
+        real_name = (request.form.get('real_name') or '').strip()
+        student_id = (request.form.get('student_id') or '').strip()
+        grade = (request.form.get('grade') or '').strip()
+        college = (request.form.get('college') or '').strip()
+        major = (request.form.get('major') or '').strip()
+        phone = (request.form.get('phone') or '').strip()
+        qq = (request.form.get('qq') or '').strip()
+
+        if not username:
+            flash('用户名不能为空', 'warning')
+            return redirect(url_for('admin.student_view', user_id=user_id))
+        if not real_name:
+            flash('姓名不能为空', 'warning')
+            return redirect(url_for('admin.student_view', user_id=user_id))
+        if not student_id:
+            flash('学号不能为空', 'warning')
+            return redirect(url_for('admin.student_view', user_id=user_id))
+
+        username_exists = db.session.execute(
+            db.select(User).filter(User.username == username, User.id != user.id)
+        ).scalar_one_or_none()
+        if username_exists:
+            flash('用户名已存在，请换一个', 'warning')
+            return redirect(url_for('admin.student_view', user_id=user_id))
+
+        if email:
+            email_exists = db.session.execute(
+                db.select(User).filter(User.email == email, User.id != user.id)
+            ).scalar_one_or_none()
+            if email_exists:
+                flash('邮箱已被占用，请更换', 'warning')
+                return redirect(url_for('admin.student_view', user_id=user_id))
+
+        student_id_exists = db.session.execute(
+            db.select(StudentInfo).filter(StudentInfo.student_id == student_id, StudentInfo.user_id != user.id)
+        ).scalar_one_or_none()
+        if student_id_exists:
+            flash('学号已存在，请检查后重试', 'warning')
+            return redirect(url_for('admin.student_view', user_id=user_id))
+
+        user.username = username
+        user.email = email or None
+
+        student.real_name = real_name
+        student.student_id = student_id
+        student.grade = grade
+        student.college = college
+        student.major = major
+        student.phone = phone
+        student.qq = qq
+
+        db.session.commit()
+        log_action('edit_student_profile', f'管理员编辑学生资料: user_id={user.id}, student_id={student.student_id}')
+        flash('学生资料已更新', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"编辑学生资料失败 user_id={user_id}: {e}", exc_info=True)
+        flash('更新学生资料时出错', 'danger')
+
+    return redirect(url_for('admin.student_view', user_id=user_id))
+
+@admin_bp.route('/student/<int:user_id>/reset-password', methods=['POST'])
+@admin_required
+def reset_student_password(user_id):
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(url_for('admin.student_view', user_id=user_id))
+
+    user = db.get_or_404(User, user_id)
+
+    new_password = (request.form.get('new_password') or '').strip()
+    confirm_password = (request.form.get('confirm_password') or '').strip()
+
+    if len(new_password) < 6:
+        flash('新密码至少 6 位', 'warning')
+        return redirect(url_for('admin.student_view', user_id=user_id))
+
+    if new_password != confirm_password:
+        flash('两次输入的新密码不一致', 'warning')
+        return redirect(url_for('admin.student_view', user_id=user_id))
+
+    try:
+        user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
+        db.session.commit()
+        log_action('reset_student_password', f'管理员重置用户密码: user_id={user.id}, username={user.username}')
+        flash(f'已重置 {user.username} 的密码', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"重置学生密码失败 user_id={user_id}: {e}", exc_info=True)
+        flash('重置密码时出错', 'danger')
+
+    return redirect(url_for('admin.student_view', user_id=user_id))
 
 @admin_bp.route('/student/<int:id>/update-tags', methods=['POST'])
 @admin_required
