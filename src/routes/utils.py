@@ -596,9 +596,9 @@ def ai_chat_clear():
     session_id = request.args.get('session_id')
     if not session_id:
         return jsonify({
-            'success': False,
-            'message': '缺少会话ID参数'
-        }), 400
+            'success': True,
+            'message': '未提供会话ID，跳过清除'
+        })
     
     try:
         # 删除历史记录
@@ -630,11 +630,11 @@ def utils_ai_chat_clear():
     logger.info(f"收到清除单个会话历史请求: 用户ID={current_user.id}, 会话ID={session_id}, Headers={dict(request.headers)}")
     
     if not session_id:
-        logger.warning(f"用户 {current_user.id} 尝试清除历史记录但未提供会话ID")
+        logger.info(f"用户 {current_user.id} 清除历史未提供会话ID，按空操作处理")
         return jsonify({
-            'success': False,
-            'message': '缺少会话ID参数'
-        }), 400
+            'success': True,
+            'message': '未提供会话ID，跳过清除'
+        })
     
     try:
         # 查询该会话是否属于当前用户

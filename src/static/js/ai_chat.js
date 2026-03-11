@@ -64,8 +64,7 @@ class AIChatSession {
         this.sessionId = this.getOrCreateSessionId();
         this.messages = [];
         this.isOpen = false;
-        // 初始化时从后端加载历史记录
-        this.loadMessagesFromServer();
+        // 历史记录加载在UI初始化阶段按登录态执行，避免未登录时额外请求
     }
 
     // 获取或创建会话ID
