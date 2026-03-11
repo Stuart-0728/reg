@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from src import db
@@ -281,10 +281,20 @@ def logout():
     session.clear()
 
     response = redirect(url_for('main.index'))
+    # 显式删除认证cookie（双保险）
+    response.delete_cookie(current_app.config.get('SESSION_COOKIE_NAME', 'session'), path='/')
+    response.delete_cookie('remember_token', path='/')
+
     # 清理AI聊天相关cookie，避免切换账号后残留历史上下文
     response.delete_cookie('cqnu_ai_chat_session_id', path='/')
     response.delete_cookie('cqnu_ai_chat_messages', path='/')
     response.delete_cookie('cqnu_ai_chat_chat_open', path='/')
+
+    # 防止浏览器/代理缓存登出前页面
+    response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['Clear-Site-Data'] = '"cache"'
 
     flash('您已成功登出！', 'success')
     return response

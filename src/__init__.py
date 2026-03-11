@@ -117,13 +117,37 @@ def create_app(config_name=None):
 
     @app.after_request
     def add_no_store_headers(response):
-        """防止登出后浏览器从缓存回显上一账号页面"""
+        """防止登出后浏览器/CDN缓存回显上一账号页面或接口数据。"""
         try:
+            path = (request.path or '').lower()
             content_type = (response.headers.get('Content-Type') or '').lower()
-            if current_user.is_authenticated and 'text/html' in content_type:
-                response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+
+            # 动态业务路由一律禁用缓存，避免跨账号缓存污染
+            is_dynamic_route = (
+                not path.startswith('/static/') and (
+                    path.startswith('/auth')
+                    or path.startswith('/admin')
+                    or path.startswith('/student')
+                    or path.startswith('/utils')
+                    or path == '/'
+                )
+            )
+
+            if is_dynamic_route or 'text/html' in content_type:
+                response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0'
                 response.headers['Pragma'] = 'no-cache'
                 response.headers['Expires'] = '0'
+
+                # 告诉CDN/代理：响应与Cookie相关，不能复用给其他会话
+                vary_value = response.headers.get('Vary', '')
+                vary_tokens = [v.strip() for v in vary_value.split(',') if v.strip()]
+                for token in ['Cookie', 'Authorization']:
+                    if token not in vary_tokens:
+                        vary_tokens.append(token)
+                response.headers['Vary'] = ', '.join(vary_tokens)
+
+            if current_user.is_authenticated and 'text/html' in content_type:
+                response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
         except Exception:
             pass
         return response
