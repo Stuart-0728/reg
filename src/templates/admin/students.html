@@ -8,6 +8,7 @@
         overflow-x: auto !important;
         overflow-y: visible !important;
         -webkit-overflow-scrolling: touch;
+        position: relative;
     }
 
     .students-table-wrap::-webkit-scrollbar {
@@ -15,6 +16,8 @@
     }
 
     .students-table {
+        border-collapse: separate;
+        border-spacing: 0;
         table-layout: fixed;
         width: max-content;
         min-width: 100%;
@@ -40,6 +43,8 @@
     .students-table .action-group .btn {
         flex: 0 0 auto;
         padding: 0.2rem 0.4rem;
+        width: auto !important;
+        margin: 0 !important;
     }
 
     .students-table th,
@@ -60,6 +65,7 @@
     }
 
     .students-table .action-col {
+        position: -webkit-sticky;
         position: sticky;
         right: 0;
         z-index: 3;
@@ -84,7 +90,7 @@
         min-width: 56px;
     }
 
-    @media (max-width: 767.98px) {
+    @media (max-width: 991.98px) {
         .student-actions-desktop {
             display: none;
         }
@@ -97,6 +103,10 @@
         .students-table tbody .action-col {
             width: 92px !important;
             min-width: 92px;
+        }
+
+        .students-table .action-col {
+            box-shadow: -8px 0 10px -10px rgba(15, 23, 42, 0.28);
         }
     }
 </style>
