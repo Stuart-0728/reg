@@ -294,12 +294,13 @@ def register_blueprints(app):
     
     # 创建API蓝图 - 用于处理/api请求
     from flask import Blueprint
-    from .routes.utils import ai_chat
+    from .routes.utils import ai_chat, ai_chat_legacy_post
     
     api_bp = Blueprint('api', __name__, url_prefix='/api')
     
     # 将AI聊天路由添加到API蓝图
     api_bp.route('/ai_chat', methods=['GET'])(ai_chat)
+    api_bp.route('/ai/chat', methods=['POST'])(ai_chat_legacy_post)
     
     # 注册蓝图
     app.register_blueprint(main_bp)

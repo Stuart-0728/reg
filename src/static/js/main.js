@@ -1,5 +1,13 @@
 // 主要JavaScript功能
 document.addEventListener('DOMContentLoaded', function() {
+    // 退出登录：强制带时间戳跳转，避免缓存/下拉交互导致首击未生效
+    document.querySelectorAll('a[href*="/auth/logout"]').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            window.location.replace('/auth/logout?t=' + Date.now());
+        });
+    });
+
     // 初始化Bootstrap提示工具
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
