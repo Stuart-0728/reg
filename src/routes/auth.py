@@ -43,8 +43,9 @@ def _verify_reset_password_token(token, max_age=7200):
         return None, '重置链接无效，请联系管理员重新发起重置。'
 
     uid = data.get('uid')
+    password_fingerprint = str(data.get('ph') or '')
     try:
-        return int(uid), None
+        return {'uid': int(uid), 'ph': password_fingerprint}, None
     except Exception:
         return None, '重置链接无效，请联系管理员重新发起重置。'
 
@@ -378,14 +379,20 @@ def reset_password_with_token(token):
         ])
         submit = SubmitField('确认重置密码')
 
-    user_id, error = _verify_reset_password_token(token)
+    token_data, error = _verify_reset_password_token(token)
     if error:
         flash(error, 'danger')
         return redirect(url_for('auth.login'))
 
+    user_id = token_data['uid']
     user = db.session.get(User, user_id)
     if not user or not user.active:
         flash('账号不存在或已被禁用，请联系管理员。', 'danger')
+        return redirect(url_for('auth.login'))
+
+    current_fingerprint = (user.password_hash or '')[-24:]
+    if token_data.get('ph') != current_fingerprint:
+        flash('该重置链接已失效或已被使用，请联系管理员重新发起重置。', 'danger')
         return redirect(url_for('auth.login'))
 
     form = ResetPasswordForm()

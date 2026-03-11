@@ -1369,8 +1369,13 @@ def reset_student_password(user_id):
 
     try:
         serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        password_fingerprint = (user.password_hash or '')[-24:]
         token = serializer.dumps(
-            {'uid': int(user.id), 'purpose': 'password-reset'},
+            {
+                'uid': int(user.id),
+                'purpose': 'password-reset',
+                'ph': password_fingerprint
+            },
             salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:password-reset"
         )
         reset_link = url_for('auth.reset_password_with_token', token=token, _external=True)
