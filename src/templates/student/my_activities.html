@@ -33,7 +33,7 @@
                                 <h5 class="mb-1">{{ activity.title if activity else '未知活动' }}</h5>
                                 <small>
                                     {% if registration.status == 'registered' %}
-                                        <span class="badge bg-transparent">已报名</span>
+                                        <span class="badge bg-primary">已报名</span>
                                     {% elif registration.status == 'attended' %}
                                         <span class="badge bg-success">已参加</span>
                                     {% elif registration.status == 'cancelled' %}
