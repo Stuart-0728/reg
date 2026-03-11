@@ -6,7 +6,7 @@
 <style>
     .students-table-wrap {
         overflow-x: auto !important;
-        overflow-y: hidden !important;
+        overflow-y: visible !important;
         -webkit-overflow-scrolling: touch;
     }
 
@@ -57,6 +57,47 @@
         text-align: center;
         vertical-align: middle;
         white-space: nowrap;
+    }
+
+    .students-table .action-col {
+        position: sticky;
+        right: 0;
+        z-index: 3;
+        background: #fff;
+        box-shadow: -10px 0 12px -12px rgba(15, 23, 42, 0.25);
+    }
+
+    .students-table thead .action-col {
+        z-index: 4;
+        background: #f8f9fa;
+    }
+
+    .student-actions-desktop {
+        display: inline-flex;
+    }
+
+    .student-actions-mobile {
+        display: none;
+    }
+
+    .student-mobile-action-btn {
+        min-width: 56px;
+    }
+
+    @media (max-width: 767.98px) {
+        .student-actions-desktop {
+            display: none;
+        }
+
+        .student-actions-mobile {
+            display: inline-flex;
+        }
+
+        .students-table thead .action-col,
+        .students-table tbody .action-col {
+            width: 92px !important;
+            min-width: 92px;
+        }
     }
 </style>
 {% endblock %}
@@ -123,7 +164,7 @@
                             <th>QQ</th>
                             <th>标签状态</th>
                             <th>积分</th>
-                            <th>操作</th>
+                            <th class="action-col">操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -146,8 +187,8 @@
                             <td>
                                 <span class="badge bg-light text-dark border rounded-pill">{{ student.points or 0 }}</span>
                             </td>
-                            <td>
-                                <div class="action-group" role="group">
+                            <td class="action-col">
+                                <div class="action-group student-actions-desktop" role="group">
                                     <a href="{{ url_for('admin.student_view', user_id=student.user_id) }}" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-eye"></i>
                                     </a>
@@ -168,6 +209,19 @@
                                     {% endif %}
                                     <button type="button" class="btn btn-sm btn-outline-danger" onclick="showDeleteModal('{{ student.id }}', '{{ student.real_name }}', '{{ student.student_id }}', '{{ student.user_id }}')">
                                         <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                                <div class="student-actions-mobile" role="group">
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-primary student-mobile-action-btn"
+                                        data-student-id="{{ student.id }}"
+                                        data-student-name="{{ student.real_name|e }}"
+                                        data-student-number="{{ student.student_id|e }}"
+                                        data-user-id="{{ student.user_id }}"
+                                        data-is-admin="{{ 1 if student.is_admin else 0 }}"
+                                        onclick="showStudentActionsModal(this)">
+                                        操作
                                     </button>
                                 </div>
                             </td>
@@ -250,6 +304,33 @@
     </div>
 </div>
 
+<!-- 移动端操作模态框 -->
+<div class="modal fade" id="studentActionsModal" tabindex="-1" aria-labelledby="studentActionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold" id="studentActionsModalLabel">学生操作</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3" id="studentActionsSummary"></p>
+                <div class="d-grid gap-2">
+                    <a id="studentActionViewLink" href="#" class="btn btn-outline-primary" data-no-loading="true">
+                        <i class="fas fa-eye me-2"></i>查看详情
+                    </a>
+                    <form id="studentActionRoleForm" method="post" data-no-loading="true">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" id="studentActionRoleBtn" class="btn btn-outline-warning w-100"></button>
+                    </form>
+                    <button type="button" id="studentActionDeleteBtn" class="btn btn-outline-danger">
+                        <i class="fas fa-trash-alt me-2"></i>删除学生
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // 显示删除模态框
 function showDeleteModal(studentId, studentName, studentNumber, userId) {
@@ -280,6 +361,51 @@ function showDeleteModal(studentId, studentName, studentNumber, userId) {
     });
     
     modal.show();
+}
+
+function showStudentActionsModal(triggerButton) {
+    const studentId = triggerButton.dataset.studentId;
+    const studentName = triggerButton.dataset.studentName;
+    const studentNumber = triggerButton.dataset.studentNumber;
+    const userId = triggerButton.dataset.userId;
+    const isAdmin = triggerButton.dataset.isAdmin === '1';
+
+    const summary = document.getElementById('studentActionsSummary');
+    summary.textContent = `${studentName}（学号：${studentNumber}）`;
+
+    const viewLink = document.getElementById('studentActionViewLink');
+    viewLink.href = "{{ url_for('admin.student_view', user_id=0) }}".replace('0', userId);
+
+    const roleForm = document.getElementById('studentActionRoleForm');
+    const roleBtn = document.getElementById('studentActionRoleBtn');
+    if (isAdmin) {
+        roleForm.action = "{{ url_for('admin.demote_admin_to_student', user_id=0) }}".replace('0', userId);
+        roleBtn.className = 'btn btn-outline-secondary w-100';
+        roleBtn.innerHTML = '<i class="fas fa-user-minus me-2"></i>取消管理员';
+        roleForm.onsubmit = function() {
+            return confirm('确认取消该用户管理员身份？');
+        };
+    } else {
+        roleForm.action = "{{ url_for('admin.promote_student_to_admin', user_id=0) }}".replace('0', userId);
+        roleBtn.className = 'btn btn-outline-warning w-100';
+        roleBtn.innerHTML = '<i class="fas fa-user-shield me-2"></i>设为管理员';
+        roleForm.onsubmit = function() {
+            return confirm('确认将该学生设置为管理员？');
+        };
+    }
+
+    const deleteBtn = document.getElementById('studentActionDeleteBtn');
+    deleteBtn.onclick = function() {
+        const modalElement = document.getElementById('studentActionsModal');
+        const actionsModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        actionsModal.hide();
+        setTimeout(() => {
+            showDeleteModal(studentId, studentName, studentNumber, userId);
+        }, 180);
+    };
+
+    const actionsModal = new bootstrap.Modal(document.getElementById('studentActionsModal'));
+    actionsModal.show();
 }
 
 // 添加自定义样式以优化模态框过渡效果

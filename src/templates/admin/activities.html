@@ -336,14 +336,60 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 提升当前打开下拉菜单所在行层级，避免被其他行遮挡
     document.querySelectorAll('.admin-activities-page .dropdown').forEach(dropdown => {
+        const menu = dropdown.querySelector('.dropdown-menu');
+        const toggle = dropdown.querySelector('[data-bs-toggle="dropdown"]');
+
+        const applyMobileMenuPosition = () => {
+            if (!menu || !toggle) return;
+            if (window.innerWidth > 991.98) return;
+
+            const rect = toggle.getBoundingClientRect();
+            const menuWidth = Math.min(320, window.innerWidth - 16);
+            menu.style.position = 'fixed';
+            menu.style.minWidth = `${menuWidth}px`;
+            menu.style.left = `${Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth))}px`;
+
+            const expectedTop = rect.bottom + 8;
+            const maxTop = window.innerHeight - menu.offsetHeight - 8;
+            menu.style.top = `${Math.max(8, Math.min(expectedTop, maxTop))}px`;
+        };
+
         dropdown.addEventListener('show.bs.dropdown', function() {
             const row = this.closest('tr');
             if (row) row.classList.add('dropdown-row-open');
+
+            if (window.innerWidth <= 991.98 && menu) {
+                const marker = document.createComment('mobile-dropdown-anchor');
+                menu.__mobileAnchor = marker;
+                dropdown.insertBefore(marker, menu);
+                document.body.appendChild(menu);
+                menu.classList.add('mobile-dropdown-portal');
+            }
         });
+
+        dropdown.addEventListener('shown.bs.dropdown', function() {
+            applyMobileMenuPosition();
+        });
+
         dropdown.addEventListener('hide.bs.dropdown', function() {
             const row = this.closest('tr');
             if (row) row.classList.remove('dropdown-row-open');
+
+            if (menu && menu.classList.contains('mobile-dropdown-portal')) {
+                menu.classList.remove('mobile-dropdown-portal');
+                menu.removeAttribute('style');
+                const marker = menu.__mobileAnchor;
+                if (marker && marker.parentNode) {
+                    marker.parentNode.replaceChild(menu, marker);
+                } else {
+                    dropdown.appendChild(menu);
+                }
+                menu.__mobileAnchor = null;
+            }
         });
+
+        window.addEventListener('resize', applyMobileMenuPosition);
+        window.addEventListener('scroll', applyMobileMenuPosition, true);
     });
     
     // 添加键盘导航支持
@@ -412,6 +458,10 @@ function updateActivityStatus(activityId, status) {
 
 .activities-card .dropdown-menu {
     z-index: 2200;
+}
+
+.activities-card .dropdown-menu.mobile-dropdown-portal {
+    z-index: 2600;
 }
 
 .activities-card tbody tr {
