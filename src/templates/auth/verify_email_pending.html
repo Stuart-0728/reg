@@ -20,11 +20,20 @@
 
                     <form method="post" action="{{ url_for('auth.resend_verification') }}" class="text-start">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <label class="form-label">未收到邮件？重新发送</label>
+                        {% if user %}
+                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                        <label class="form-label">未收到邮件？重新发送到以下邮箱</label>
                         <div class="input-group">
-                            <input type="text" class="form-control" name="identifier" placeholder="输入用户名或邮箱" value="{{ user.email if user and user.email else '' }}" required>
+                            <input type="text" class="form-control" value="{{ user.email or '未设置邮箱' }}" readonly>
                             <button class="btn btn-outline-primary" type="submit">重新发送</button>
                         </div>
+                        {% else %}
+                        <label class="form-label">未收到邮件？重新发送</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="identifier" placeholder="输入用户名或邮箱" required>
+                            <button class="btn btn-outline-primary" type="submit">重新发送</button>
+                        </div>
+                        {% endif %}
                         <small class="text-muted">建议先检查垃圾邮件箱。</small>
                     </form>
 

@@ -68,6 +68,9 @@ def _send_html_email(subject, recipient, html_body):
     mail_use_tls = bool(current_app.config.get('MAIL_USE_TLS', False))
     mail_use_ssl = bool(current_app.config.get('MAIL_USE_SSL', False))
     subject_prefix = current_app.config.get('MAIL_SUBJECT_PREFIX', '')
+    # 兼容服务器环境变量中文乱码（如 [????]），回退到固定前缀
+    if not subject_prefix or ('?' in str(subject_prefix) and '重庆师范大学智能社团+' not in str(subject_prefix)):
+        subject_prefix = '[重庆师范大学智能社团+]'
 
     sender = current_app.config.get('MAIL_DEFAULT_SENDER') or mail_username
     if isinstance(sender, (list, tuple)):
@@ -77,7 +80,7 @@ def _send_html_email(subject, recipient, html_body):
         raise RuntimeError('邮件配置不完整，请检查 MAIL_SERVER / MAIL_USERNAME / MAIL_DEFAULT_SENDER')
 
     message = MIMEMultipart('alternative')
-    message['Subject'] = str(Header(f"{subject_prefix}{subject}", 'utf-8'))
+    message['Subject'] = Header(f"{subject_prefix}{subject}", 'utf-8').encode()
     message['From'] = sender
     message['To'] = recipient
     message.attach(MIMEText(html_body, 'html', 'utf-8'))
@@ -586,13 +589,17 @@ def verify_email(token):
 
 @auth_bp.route('/resend-verification', methods=['POST'])
 def resend_verification():
+    user_id = request.form.get('user_id', type=int)
+    user = db.session.get(User, user_id) if user_id else None
+
     identifier = (request.form.get('identifier') or '').strip()
-    if not identifier:
+    if not user and not identifier:
         flash('请输入用户名或邮箱后再重发验证邮件。', 'warning')
         return redirect(url_for('auth.login'))
 
-    stmt = db.select(User).where(or_(User.username == identifier, User.email == identifier)).limit(1)
-    user = db.session.execute(stmt).scalars().first()
+    if not user:
+        stmt = db.select(User).where(or_(User.username == identifier, User.email == identifier)).limit(1)
+        user = db.session.execute(stmt).scalars().first()
     if not user:
         flash('未找到对应账号，请检查后重试。', 'warning')
         return redirect(url_for('auth.login'))
