@@ -459,6 +459,7 @@ function updateActivityStatus(activityId, status) {
 .activities-card .table-responsive {
     position: relative;
     z-index: 1;
+    max-width: 100%;
 }
 
 .activities-card .table-has-sticky-action {
@@ -519,10 +520,24 @@ function updateActivityStatus(activityId, status) {
 @media (max-width: 991.98px) {
     .admin-activities-page {
         padding-bottom: 6rem !important;
+        overflow-x: hidden;
     }
 
     .activities-card {
         margin-bottom: 3.5rem !important;
+        overflow: hidden !important;
+    }
+
+    .activities-card .card-body {
+        overflow: hidden !important;
+    }
+
+    .activities-card .table-responsive {
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        max-width: 100% !important;
+        width: 100%;
+        overscroll-behavior-x: contain;
     }
 
     .activities-card .table-has-sticky-action .sticky-action-col {
