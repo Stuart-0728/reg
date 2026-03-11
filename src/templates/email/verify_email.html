@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮箱验证</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f7fb;font-family:'Microsoft YaHei',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 10px 30px rgba(12,36,74,0.12);">
+          <tr>
+            <td style="background:linear-gradient(120deg,#1d4ed8,#0ea5e9);padding:28px 32px;color:#fff;">
+              <div style="font-size:22px;font-weight:700;">重庆师范大学智能社团+</div>
+              <div style="margin-top:8px;font-size:14px;opacity:0.95;">欢迎加入，请先完成邮箱验证</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:30px 32px 16px 32px;color:#1f2937;">
+              <p style="margin:0 0 14px 0;font-size:16px;line-height:1.8;">你好，{{ user.username }}：</p>
+              <p style="margin:0 0 16px 0;font-size:15px;line-height:1.9;color:#4b5563;">感谢注册智能社团+。为了保障账号安全，请点击下方按钮完成邮箱验证后再登录。</p>
+              <p style="margin:24px 0 20px 0;text-align:center;">
+                <a href="{{ verify_url }}" style="display:inline-block;padding:12px 30px;border-radius:999px;background:#1d4ed8;color:#fff;text-decoration:none;font-weight:700;font-size:15px;">立即验证邮箱</a>
+              </p>
+              <p style="margin:0 0 10px 0;font-size:13px;color:#6b7280;line-height:1.8;">若按钮无法点击，可复制以下链接到浏览器打开：</p>
+              <p style="margin:0 0 16px 0;padding:10px 12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;word-break:break-all;font-size:12px;color:#334155;">{{ verify_url }}</p>
+              <p style="margin:0 0 6px 0;font-size:12px;color:#6b7280;">该链接有效期 24 小时，过期后请在登录页重新发送验证邮件。</p>
+              <p style="margin:0;font-size:12px;color:#6b7280;">若非本人操作，请忽略此邮件。</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

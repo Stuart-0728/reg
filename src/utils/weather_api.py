@@ -93,7 +93,7 @@ WEATHER_ICON_MAP = {
     '未知': 'wi-na'
 }
 
-def get_weather_data(city_adcode=CHONGQING_ADCODE, extensions='base'):
+def get_weather_data(city_adcode=CHONGQING_ADCODE, extensions='base', allow_fallback=True):
     """
     获取指定城市的天气数据（使用高德开放平台API）
     
@@ -108,7 +108,7 @@ def get_weather_data(city_adcode=CHONGQING_ADCODE, extensions='base'):
         api_key = Config.AMAP_API_KEY
         if not api_key:
             logger.warning("高德API密钥未配置")
-            return None
+            return get_openweather_data('Chongqing', None) if allow_fallback else None
         
         # 高德天气API URL
         url = "https://restapi.amap.com/v3/weather/weatherInfo"
@@ -127,14 +127,14 @@ def get_weather_data(city_adcode=CHONGQING_ADCODE, extensions='base'):
         
         if data.get('status') != '1':
             logger.error(f"高德天气API返回错误: {data.get('info', '未知错误')}")
-            return None
+            return get_openweather_data('Chongqing', None) if allow_fallback else None
         
         if extensions == 'base':
             # 处理实况天气数据
             lives = data.get('lives', [])
             if not lives:
                 logger.warning("未获取到实况天气数据")
-                return None
+                return get_openweather_data('Chongqing', None) if allow_fallback else None
             
             live_data = lives[0]
             weather_info = {
@@ -159,13 +159,13 @@ def get_weather_data(city_adcode=CHONGQING_ADCODE, extensions='base'):
             forecasts = data.get('forecasts', [])
             if not forecasts:
                 logger.warning("未获取到预报天气数据")
-                return None
+                return get_openweather_data('Chongqing', None) if allow_fallback else None
             
             forecast_data = forecasts[0]
             casts = forecast_data.get('casts', [])
             if not casts:
                 logger.warning("预报数据为空")
-                return None
+                return get_openweather_data('Chongqing', None) if allow_fallback else None
             
             # 返回今天的预报数据
             today_cast = casts[0]
@@ -190,10 +190,10 @@ def get_weather_data(city_adcode=CHONGQING_ADCODE, extensions='base'):
             
     except requests.exceptions.RequestException as e:
         logger.error(f"高德天气API请求失败: {e}")
-        return None
+        return get_openweather_data('Chongqing', None) if allow_fallback else None
     except Exception as e:
         logger.error(f"获取天气数据时发生错误: {e}")
-        return None
+        return get_openweather_data('Chongqing', None) if allow_fallback else None
 
 def get_weather_icon(weather_desc):
     """
@@ -352,7 +352,7 @@ def get_weather_data_with_fallback(city_adcode=CHONGQING_ADCODE, extensions='bas
     """
     # 首先尝试高德API
     logger.info("尝试使用高德API获取天气数据...")
-    weather_data = get_weather_data(city_adcode, extensions)
+    weather_data = get_weather_data(city_adcode, extensions, allow_fallback=False)
     
     if weather_data:
         weather_data['api_source'] = 'amap'
@@ -483,7 +483,7 @@ class WeatherService:
     def get_current_weather(self):
         """获取重庆当前天气"""
         try:
-            weather_data = get_weather_data(self.city_adcode, 'base')
+            weather_data = get_weather_data_with_fallback(self.city_adcode, 'base', None)
             return weather_data
         except Exception as e:
             logger.error(f"获取天气数据时发生错误: {e}")
@@ -507,7 +507,7 @@ class WeatherService:
                 return None
             
             # 获取5天预报
-            weather_data = get_weather_data(self.city_adcode, 'all')
+            weather_data = get_weather_data_with_fallback(self.city_adcode, 'all', target_date)
             return weather_data
         except Exception as e:
             logger.error(f"获取天气预报时发生错误: {e}")

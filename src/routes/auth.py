@@ -10,6 +10,9 @@ from datetime import datetime, timedelta
 import time
 from sqlalchemy import or_
 import logging
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from urllib.parse import urlparse, urljoin
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 # 配置日志
@@ -24,6 +27,89 @@ def _build_reset_password_token(user_id):
         {'uid': int(user_id), 'purpose': 'password-reset'},
         salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:password-reset"
     )
+
+
+def _build_email_verify_token(user_id, email):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return serializer.dumps(
+        {'uid': int(user_id), 'email': str(email or ''), 'purpose': 'email-verify'},
+        salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:email-verify"
+    )
+
+
+def _verify_email_token(token, max_age=86400):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    try:
+        data = serializer.loads(
+            token,
+            max_age=max_age,
+            salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:email-verify"
+        )
+    except SignatureExpired:
+        return None, '邮箱验证链接已过期，请重新发送验证邮件。'
+    except BadSignature:
+        return None, '邮箱验证链接无效，请重新发送验证邮件。'
+
+    if not isinstance(data, dict) or data.get('purpose') != 'email-verify':
+        return None, '邮箱验证链接无效，请重新发送验证邮件。'
+
+    try:
+        return {'uid': int(data.get('uid')), 'email': str(data.get('email') or '')}, None
+    except Exception:
+        return None, '邮箱验证链接无效，请重新发送验证邮件。'
+
+
+def _send_html_email(subject, recipient, html_body):
+    mail_server = current_app.config.get('MAIL_SERVER') or current_app.config.get('MAIL_HOST')
+    mail_port = int(current_app.config.get('MAIL_PORT', 25) or 25)
+    mail_username = current_app.config.get('MAIL_USERNAME')
+    mail_password = current_app.config.get('MAIL_PASSWORD')
+    mail_use_tls = bool(current_app.config.get('MAIL_USE_TLS', False))
+    mail_use_ssl = bool(current_app.config.get('MAIL_USE_SSL', False))
+    subject_prefix = current_app.config.get('MAIL_SUBJECT_PREFIX', '')
+
+    sender = current_app.config.get('MAIL_DEFAULT_SENDER') or mail_username
+    if isinstance(sender, (list, tuple)):
+        sender = sender[1] if len(sender) > 1 else sender[0]
+
+    if not (mail_server and sender and recipient):
+        raise RuntimeError('邮件配置不完整，请检查 MAIL_SERVER / MAIL_USERNAME / MAIL_DEFAULT_SENDER')
+
+    message = MIMEMultipart('alternative')
+    message['Subject'] = f"{subject_prefix}{subject}"
+    message['From'] = sender
+    message['To'] = recipient
+    message.attach(MIMEText(html_body, 'html', 'utf-8'))
+
+    smtp = None
+    try:
+        if mail_use_ssl:
+            smtp = smtplib.SMTP_SSL(mail_server, mail_port, timeout=20)
+        else:
+            smtp = smtplib.SMTP(mail_server, mail_port, timeout=20)
+            smtp.ehlo()
+            if mail_use_tls:
+                smtp.starttls()
+                smtp.ehlo()
+
+        if mail_username and mail_password:
+            smtp.login(mail_username, mail_password)
+
+        smtp.sendmail(sender, [recipient], message.as_string())
+    finally:
+        if smtp:
+            try:
+                smtp.quit()
+            except Exception:
+                pass
+
+
+def _send_verification_email(user):
+    token = _build_email_verify_token(user.id, user.email)
+    verify_url = url_for('auth.verify_email', token=token, _external=True)
+    html_body = render_template('email/verify_email.html', user=user, verify_url=verify_url)
+    _send_html_email('邮箱验证', user.email, html_body)
+    return verify_url
 
 
 def _verify_reset_password_token(token, max_age=7200):
@@ -165,7 +251,8 @@ def register():
             username=form.username.data,
             email=form.email.data,
             password_hash=generate_password_hash(form.password.data),
-            role=student_role
+            role=student_role,
+            active=False
         )
         db.session.add(user)
         db.session.flush()  # 获取用户ID
@@ -193,11 +280,16 @@ def register():
         db.session.add(ai_preferences)
         
         db.session.commit()
-        
-        flash('注册成功，请登录！', 'success')
-        # 登录用户并重定向到标签选择页面
-        login_user(user, remember=True, duration=timedelta(days=30))
-        return redirect(url_for('auth.select_tags'))
+
+        try:
+            _send_verification_email(user)
+        except Exception as e:
+            logger.error(f"发送邮箱验证邮件失败: user_id={user.id}, error={e}", exc_info=True)
+            flash('注册成功，但验证邮件发送失败，请稍后在登录页重新发送验证邮件。', 'warning')
+            return redirect(url_for('auth.login'))
+
+        flash('注册成功！验证邮件已发送，请先完成邮箱验证再登录。', 'success')
+        return redirect(url_for('auth.verify_email_pending', user_id=user.id))
     
     return render_template('auth/register.html', form=form)
 
@@ -248,7 +340,7 @@ def login():
             if user and user.verify_password(password):
                 # 检查用户是否激活
                 if not user.active:
-                    flash('账号已被禁用，请联系管理员。', 'danger')
+                    flash('账号尚未通过邮箱验证或已被禁用。请先完成邮箱验证。', 'warning')
                     return render_template('auth/login.html', form=form)
 
                 # 登录成功后按需迁移历史密码哈希算法
@@ -445,6 +537,66 @@ def setup_admin():
         return redirect(url_for('auth.login'))
     
     return render_template('auth/admin_signup.html', form=form)
+
+
+@auth_bp.route('/verify-email-pending')
+def verify_email_pending():
+    user_id = request.args.get('user_id', type=int)
+    user = db.session.get(User, user_id) if user_id else None
+    return render_template('auth/verify_email_pending.html', user=user)
+
+
+@auth_bp.route('/verify-email/<token>')
+def verify_email(token):
+    token_data, error = _verify_email_token(token)
+    if error:
+        return render_template('auth/verify_email_failed.html', reason=error), 400
+
+    user = db.session.get(User, token_data['uid'])
+    if not user or not user.email:
+        return render_template('auth/verify_email_failed.html', reason='用户不存在或邮箱信息缺失。'), 400
+
+    if user.email != token_data['email']:
+        return render_template('auth/verify_email_failed.html', reason='验证信息不匹配，请重新发送验证邮件。'), 400
+
+    if user.active:
+        return render_template('auth/verify_email_success.html', already_verified=True, user=user)
+
+    try:
+        user.active = True
+        db.session.commit()
+        return render_template('auth/verify_email_success.html', already_verified=False, user=user)
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"邮箱验证落库失败: user_id={user.id}, error={e}", exc_info=True)
+        return render_template('auth/verify_email_failed.html', reason='系统繁忙，验证状态保存失败，请稍后重试。'), 500
+
+
+@auth_bp.route('/resend-verification', methods=['POST'])
+def resend_verification():
+    identifier = (request.form.get('identifier') or '').strip()
+    if not identifier:
+        flash('请输入用户名或邮箱后再重发验证邮件。', 'warning')
+        return redirect(url_for('auth.login'))
+
+    stmt = db.select(User).where(or_(User.username == identifier, User.email == identifier)).limit(1)
+    user = db.session.execute(stmt).scalars().first()
+    if not user:
+        flash('未找到对应账号，请检查后重试。', 'warning')
+        return redirect(url_for('auth.login'))
+
+    if user.active:
+        flash('该账号已完成邮箱验证，无需重复发送。', 'info')
+        return redirect(url_for('auth.login'))
+
+    try:
+        _send_verification_email(user)
+        flash('验证邮件已重新发送，请查收邮箱。', 'success')
+    except Exception as e:
+        logger.error(f"重发邮箱验证邮件失败: user_id={user.id}, error={e}", exc_info=True)
+        flash('重发失败，请稍后再试。', 'danger')
+
+    return redirect(url_for('auth.verify_email_pending', user_id=user.id))
 
 @auth_bp.route('/select-tags', methods=['GET', 'POST'])
 @login_required

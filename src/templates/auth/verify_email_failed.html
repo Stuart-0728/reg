@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}邮箱验证失败 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4 p-md-5 text-center">
+                    <div class="mb-3"><i class="fas fa-triangle-exclamation text-warning" style="font-size:3rem;"></i></div>
+                    <h3 class="fw-bold mb-2">邮箱验证失败</h3>
+                    <p class="text-muted mb-2">{{ reason or '验证链接不可用，请重新获取。' }}</p>
+                    <p class="text-muted mb-4">你可以在登录页输入用户名或邮箱重新发送验证邮件。</p>
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-primary px-4">返回登录</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
