@@ -2,8 +2,81 @@
 
 {% block title %}标签管理 - 重庆师范大学智能社团+{% endblock %}
 
+{% block styles %}
+<style>
+.tags-page {
+    overflow-x: clip;
+}
+
+.tags-page .table-responsive {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    width: 100%;
+    overscroll-behavior-x: contain;
+}
+
+.tags-page .tags-table {
+    table-layout: fixed;
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.tags-page .tags-table th,
+.tags-page .tags-table td {
+    white-space: nowrap;
+}
+
+.tags-page .tags-table .sticky-action-col {
+    position: -webkit-sticky;
+    position: sticky;
+    right: 0;
+    z-index: 3;
+    background: #fff;
+    box-shadow: -10px 0 12px -12px rgba(15, 23, 42, 0.28);
+    min-width: 116px;
+}
+
+.tags-page .tags-table thead .sticky-action-col {
+    z-index: 4;
+    background: #f8f9fa;
+}
+
+.tags-page .tag-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
+}
+
+.tags-page .tag-actions .btn {
+    width: auto !important;
+    margin: 0 !important;
+}
+
+@media (max-width: 991.98px) {
+    .tags-page {
+        overflow-x: hidden;
+    }
+
+    .tags-page .card,
+    .tags-page .card-body {
+        overflow: hidden;
+    }
+
+    .tags-page .tags-table .sticky-action-col {
+        min-width: 96px;
+        width: 96px;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-4 tags-page">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
@@ -57,15 +130,22 @@
                 </div>
                 <div class="card-body">
                     {% if tags %}
-                        <div class="table-responsive">
-                            <table class="table table-hover table-cell-scroll">
+                        <div class="table-responsive has-sticky-action">
+                            <table class="table table-hover table-cell-scroll table-has-sticky-action tags-table">
+                                <colgroup>
+                                    <col style="width: 180px;">
+                                    <col style="width: 140px;">
+                                    <col style="width: 120px;">
+                                    <col style="width: 180px;">
+                                    <col style="width: 116px;">
+                                </colgroup>
                                 <thead>
                                     <tr>
                                         <th>标签名称</th>
                                         <th>颜色</th>
                                         <th>使用次数</th>
                                         <th>创建时间</th>
-                                        <th>操作</th>
+                                        <th class="sticky-action-col">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -80,8 +160,8 @@
                                         <td>{{ tag.color }}</td>
                                         <td>{{ tag.activities.count() if tag.activities else 0 }}</td>
                                         <td>{{ display_datetime(tag.created_at) }}</td>
-                                        <td>
-                                            <div class="btn-group btn-group-sm" role="group">
+                                        <td class="sticky-action-col">
+                                            <div class="tag-actions" role="group">
                                                 <button type="button" class="btn btn-outline-primary" 
                                                         onclick="editTag('{{ tag.id }}', '{{ tag.name }}', '{{ tag.color }}')">
                                                     <i class="fas fa-edit"></i>
