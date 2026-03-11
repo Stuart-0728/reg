@@ -590,6 +590,7 @@ def utils_ai_chat_history():
 
 @utils_bp.route('/ai_chat/clear', methods=['POST'])
 @login_required
+@csrf.exempt
 def ai_chat_clear():
     """清除指定会话的AI聊天历史记录"""
     session_id = request.args.get('session_id')
@@ -622,6 +623,7 @@ def ai_chat_clear():
 # 添加utils前缀路由
 @utils_bp.route('/utils/ai_chat/clear', methods=['POST'])
 @login_required
+@csrf.exempt
 def utils_ai_chat_clear():
     """清除指定会话的AI聊天历史记录 - 带utils前缀的版本"""
     session_id = request.args.get('session_id')
@@ -671,6 +673,7 @@ def utils_ai_chat_clear():
 
 @utils_bp.route('/ai_chat/clear_history', methods=['POST'])
 @login_required
+@csrf.exempt
 def ai_chat_clear_history():
     """清除用户所有AI聊天历史记录"""
     try:
@@ -706,6 +709,7 @@ def ai_chat_clear_history():
 # 添加utils前缀路由
 @utils_bp.route('/utils/ai_chat/clear_history', methods=['POST'])
 @login_required
+@csrf.exempt
 def utils_ai_chat_clear_history():
     """清除用户所有AI聊天历史记录 - 带utils前缀的版本"""
     try:

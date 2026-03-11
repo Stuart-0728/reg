@@ -95,9 +95,12 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('pageshow', function(event) {
         // 当页面从浏览器缓存中加载时（例如使用后退按钮）
         if (event.persisted) {
-            console.log('页面从缓存加载，重置按钮状态');
-            resetAllButtonStates();
+            console.log('页面从BFCache恢复，强制刷新以同步登录状态');
+            window.location.reload();
+            return;
         }
+
+        resetAllButtonStates();
     });
     
     // 监听popstate事件（浏览器前进/后退按钮）
