@@ -114,6 +114,19 @@ def create_app(config_name=None):
         # 将时区存储在会话中，方便在模板和视图中使用
         session['timezone'] = timezone_name
         g.timezone = pytz.timezone(timezone_name)
+
+    @app.after_request
+    def add_no_store_headers(response):
+        """防止登出后浏览器从缓存回显上一账号页面"""
+        try:
+            content_type = (response.headers.get('Content-Type') or '').lower()
+            if current_user.is_authenticated and 'text/html' in content_type:
+                response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+                response.headers['Pragma'] = 'no-cache'
+                response.headers['Expires'] = '0'
+        except Exception:
+            pass
+        return response
     
     # 注册Shell上下文
     @app.shell_context_processor

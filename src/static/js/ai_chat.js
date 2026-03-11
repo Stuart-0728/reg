@@ -80,32 +80,27 @@ class AIChatSession {
 
     // 获取CSRF令牌
     getCsrfToken() {
-        // 从cookie中获取CSRF令牌
-        const cookies = document.cookie.split(';');
-        // 首先检查Flask-WTF默认的_csrf_token
-        for (let cookie of cookies) {
-            const [name, value] = cookie.trim().split('=');
-            if (name === '_csrf_token') {
-                return decodeURIComponent(value);
-            }
-        }
-        // 再检查其他可能的名称
-        for (let cookie of cookies) {
-            const [name, value] = cookie.trim().split('=');
-            if (name === 'csrf_token') {
-                return decodeURIComponent(value);
-            }
-        }
-        // 如果没有找到，则尝试从meta标签获取
+        // 优先从当前页面DOM读取，避免使用到旧cookie中的过期token
         const metaToken = document.querySelector('meta[name="csrf-token"]');
         if (metaToken) {
             return metaToken.getAttribute('content');
         }
-        // 最后尝试从页面中的隐藏输入字段获取
+
+        // 尝试从页面中的隐藏输入字段获取
         const csrfInput = document.querySelector('input[name="csrf_token"]');
         if (csrfInput) {
             return csrfInput.value;
         }
+
+        // 兜底：从cookie中获取CSRF令牌
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === '_csrf_token' || name === 'csrf_token') {
+                return decodeURIComponent(value || '');
+            }
+        }
+
         // 如果仍然没有找到，返回空字符串
         return '';
     }
@@ -170,9 +165,11 @@ class AIChatSession {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
+                    'X-CSRFToken': csrfToken,
+                    'X-CSRF-Token': csrfToken
             },
             body: JSON.stringify({
+                    csrf_token: csrfToken,
                 session_id: this.sessionId
             }),
             credentials: 'same-origin' // 确保包含Cookie
@@ -847,9 +844,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
+                    'X-CSRFToken': csrfToken,
+                    'X-CSRF-Token': csrfToken
                 },
                 body: JSON.stringify({
+                    csrf_token: csrfToken,
                     session_id: chatSession.sessionId
                 }),
                 credentials: 'same-origin' // 确保包含Cookie

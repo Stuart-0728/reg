@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 main_bp = Blueprint('main', __name__)
 
+
+@main_bp.route('/favicon.ico')
+def favicon():
+    """避免浏览器请求favicon时持续产生404日志。"""
+    return ('', 204)
+
 # 测试加载动画路由
 @main_bp.route('/test-loading')
 def test_loading():

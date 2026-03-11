@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from src import db
@@ -278,8 +278,16 @@ def login():
 def logout():
     """用户登出"""
     logout_user()
+    session.clear()
+
+    response = redirect(url_for('main.index'))
+    # 清理AI聊天相关cookie，避免切换账号后残留历史上下文
+    response.delete_cookie('cqnu_ai_chat_session_id', path='/')
+    response.delete_cookie('cqnu_ai_chat_messages', path='/')
+    response.delete_cookie('cqnu_ai_chat_chat_open', path='/')
+
     flash('您已成功登出！', 'success')
-    return redirect(url_for('main.index'))
+    return response
 
 @auth_bp.route('/profile')
 @login_required
