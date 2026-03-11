@@ -57,6 +57,11 @@
                         <div class="d-grid gap-2 mt-4">
                             {{ form.submit(class="btn btn-primary btn-lg login-btn", data_loading_text="正在登录...") }}
                         </div>
+                        <div class="text-center mt-3">
+                            <button type="button" class="btn btn-link text-decoration-none p-0" data-bs-toggle="modal" data-bs-target="#forgotPasswordModal">
+                                忘记密码？
+                            </button>
+                        </div>
                     </form>
                     
                     <div class="text-center mt-4">
@@ -69,6 +74,29 @@
                 <a href="{{ url_for('main.index') }}" class="text-decoration-none text-muted">
                     <i class="fas fa-arrow-left me-1"></i> 返回首页
                 </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-labelledby="forgotPasswordModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="forgotPasswordModalLabel">忘记密码处理说明</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">请联系管理员邮箱：</p>
+                <p class="fw-bold text-primary mb-3">2023051101095@stu.cqnu.edu.cn</p>
+                <p class="mb-2">邮件中请提供以下信息，便于核验并发起密码重置：</p>
+                <ul class="mb-0">
+                    <li>用户名 / 手机号 / 邮箱（至少提供一项）</li>
+                    <li>能证明账号归属的相关证据（如学号、姓名、注册信息截图等）</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">我知道了</button>
             </div>
         </div>
     </div>

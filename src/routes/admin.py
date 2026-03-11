@@ -18,7 +18,7 @@ import tempfile  # 添加tempfile导入
 import zipfile  # 添加zipfile导入
 import pytz
 import requests
-from werkzeug.security import generate_password_hash
+from itsdangerous import URLSafeTimedSerializer
 from flask import (
     Blueprint, render_template, redirect, url_for, flash, request, current_app, 
     send_from_directory, send_file, Response, make_response, jsonify
@@ -1268,12 +1268,14 @@ def student_view(user_id):
 
     # 学生详情页注册时间展示：兼容历史北京时间 naive 数据，避免重复 +8h
     created_at_display = _format_review_time_for_display(user.created_at)
+    reset_link = (request.args.get('reset_link') or '').strip()
     
     return render_template('admin/student_view.html', student=student, user=user, 
                            points_history=points_history, registrations=registrations,
                            selected_tag_ids=selected_tag_ids, all_tags=all_tags,
                            display_datetime=display_datetime,
-                           created_at_display=created_at_display)
+                           created_at_display=created_at_display,
+                           reset_link=reset_link)
 
 @admin_bp.route('/student/<int:user_id>/edit-profile', methods=['POST'])
 @admin_required
@@ -1365,24 +1367,18 @@ def reset_student_password(user_id):
 
     user = db.get_or_404(User, user_id)
 
-    new_password = (request.form.get('new_password') or '').strip()
-    confirm_password = (request.form.get('confirm_password') or '').strip()
-
-    if len(new_password) < 6:
-        flash('新密码至少 6 位', 'warning')
-        return redirect(url_for('admin.student_view', user_id=user_id))
-
-    if new_password != confirm_password:
-        flash('两次输入的新密码不一致', 'warning')
-        return redirect(url_for('admin.student_view', user_id=user_id))
-
     try:
-        user.password_hash = generate_password_hash(new_password, method='pbkdf2:sha256')
-        db.session.commit()
-        log_action('reset_student_password', f'管理员重置用户密码: user_id={user.id}, username={user.username}')
-        flash(f'已重置 {user.username} 的密码', 'success')
+        serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        token = serializer.dumps(
+            {'uid': int(user.id), 'purpose': 'password-reset'},
+            salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:password-reset"
+        )
+        reset_link = url_for('auth.reset_password_with_token', token=token, _external=True)
+
+        log_action('reset_student_password', f'管理员发起用户密码重置: user_id={user.id}, username={user.username}')
+        flash(f'已为 {user.username} 生成重置链接（2小时有效），请发给学生自行设置新密码。', 'success')
+        return redirect(url_for('admin.student_view', user_id=user_id, reset_link=reset_link))
     except Exception as e:
-        db.session.rollback()
         logger.error(f"重置学生密码失败 user_id={user_id}: {e}", exc_info=True)
         flash('重置密码时出错', 'danger')
 

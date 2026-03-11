@@ -11,10 +11,42 @@ import time
 from sqlalchemy import or_
 import logging
 from urllib.parse import urlparse, urljoin
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 # 配置日志
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _build_reset_password_token(user_id):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return serializer.dumps(
+        {'uid': int(user_id), 'purpose': 'password-reset'},
+        salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:password-reset"
+    )
+
+
+def _verify_reset_password_token(token, max_age=7200):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    try:
+        data = serializer.loads(
+            token,
+            max_age=max_age,
+            salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:password-reset"
+        )
+    except SignatureExpired:
+        return None, '重置链接已过期，请联系管理员重新发起重置。'
+    except BadSignature:
+        return None, '重置链接无效，请联系管理员重新发起重置。'
+
+    if not isinstance(data, dict) or data.get('purpose') != 'password-reset':
+        return None, '重置链接无效，请联系管理员重新发起重置。'
+
+    uid = data.get('uid')
+    try:
+        return int(uid), None
+    except Exception:
+        return None, '重置链接无效，请联系管理员重新发起重置。'
 
 def _is_safe_next_url(target):
     if not target:
@@ -331,6 +363,44 @@ def change_password():
             flash('当前密码错误！', 'danger')
     
     return render_template('auth/change_password.html', form=form)
+
+
+@auth_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password_with_token(token):
+    class ResetPasswordForm(FlaskForm):
+        new_password = PasswordField('新密码', validators=[
+            DataRequired(message='新密码不能为空'),
+            Length(min=6, message='密码长度不能少于6个字符')
+        ])
+        confirm_password = PasswordField('确认新密码', validators=[
+            DataRequired(message='确认密码不能为空'),
+            EqualTo('new_password', message='两次输入的密码不一致')
+        ])
+        submit = SubmitField('确认重置密码')
+
+    user_id, error = _verify_reset_password_token(token)
+    if error:
+        flash(error, 'danger')
+        return redirect(url_for('auth.login'))
+
+    user = db.session.get(User, user_id)
+    if not user or not user.active:
+        flash('账号不存在或已被禁用，请联系管理员。', 'danger')
+        return redirect(url_for('auth.login'))
+
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        try:
+            user.password_hash = generate_password_hash(form.new_password.data, method='pbkdf2:sha256')
+            db.session.commit()
+            flash('密码已重置，请使用新密码登录。', 'success')
+            return redirect(url_for('auth.login'))
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"通过重置链接设置新密码失败: user_id={user.id}, error={e}", exc_info=True)
+            flash('重置密码失败，请稍后重试。', 'danger')
+
+    return render_template('auth/reset_password_by_token.html', form=form, user=user)
 
 @auth_bp.route('/setup-admin', methods=['GET', 'POST'])
 def setup_admin():
