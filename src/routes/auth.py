@@ -380,6 +380,17 @@ def login():
                 if next_page and '/utils/ai_chat/history' in next_page:
                     logger.warning(f"阻止重定向到AI聊天历史: {next_page}")
                     next_page = url_for('main.index')
+
+                # 学生首次登录（尚未选择标签）强制进入标签选择页
+                try:
+                    if user.role and (user.role.name or '').strip().lower() == 'student':
+                        student_info = db.session.execute(
+                            db.select(StudentInfo).filter_by(user_id=user.id)
+                        ).scalar_one_or_none()
+                        if student_info and not getattr(student_info, 'has_selected_tags', False):
+                            return redirect(url_for('auth.select_tags'))
+                except Exception as e:
+                    logger.warning(f"检查标签选择状态失败，继续常规登录跳转: {e}")
                 
                 # 如果有next参数，则重定向到next页面
                 if next_page and next_page != 'None' and next_page != url_for('auth.login') and _is_safe_next_url(next_page):
