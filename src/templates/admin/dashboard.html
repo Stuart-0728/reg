@@ -175,14 +175,14 @@
                     <a href="{{ url_for('admin.activities') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">查看全部</a>
                 </div>
                 <div class="card-body px-4 pt-2">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle table-cell-scroll">
+                    <div class="table-responsive dashboard-activities-wrap">
+                        <table class="table table-hover align-middle table-cell-scroll dashboard-activities-table">
                             <thead class="text-muted small">
                                 <tr>
                                     <th class="ps-0 border-0">活动标题</th>
                                     <th class="border-0">状态</th>
                                     <th class="border-0">时间</th>
-                                    <th class="text-end pe-0 border-0">操作</th>
+                                    <th class="text-center border-0 dashboard-action-col">操作</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -213,8 +213,8 @@
                                     <td>
                                         <span class="small text-muted">{{ display_datetime(activity.created_at) }}</span>
                                     </td>
-                                    <td class="text-end pe-0">
-                                        <a href="{{ url_for('admin.activity_view', id=activity.id) }}" class="btn btn-sm btn-light rounded-circle" data-bs-toggle="tooltip" title="查看"><i class="fas fa-eye text-primary"></i></a>
+                                    <td class="text-center dashboard-action-col">
+                                        <a href="{{ url_for('admin.activity_view', id=activity.id) }}" class="btn btn-sm btn-light dashboard-activity-action-btn" data-bs-toggle="tooltip" title="查看"><i class="fas fa-eye text-primary"></i></a>
                                     </td>
                                 </tr>
                                 {% else %}
@@ -287,6 +287,50 @@
 .dashboard-location {
     display: block;
     text-align: left;
+}
+
+.dashboard-activities-wrap {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    max-width: 100%;
+    width: 100%;
+}
+
+.dashboard-activities-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 680px;
+}
+
+.dashboard-activities-table .dashboard-action-col {
+    width: 92px;
+    min-width: 92px;
+    max-width: 92px;
+    text-align: center;
+}
+
+.dashboard-activity-action-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 36px !important;
+    height: 36px;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    border-radius: 999px !important;
+}
+
+@media (max-width: 767.98px) {
+    .dashboard-activities-table .dashboard-action-col {
+        width: 84px;
+        min-width: 84px;
+        max-width: 84px;
+    }
+
+    .dashboard-activity-action-btn {
+        width: 34px !important;
+        height: 34px;
+    }
 }
 </style>
 {% endblock %}
