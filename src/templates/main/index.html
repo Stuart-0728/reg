@@ -54,12 +54,32 @@
     <!-- 协会介绍 -->
     <div class="row mb-4 g-4">
         <div class="col-md-8">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h3 class="card-title">关于智能社团+</h3>
-                    <p class="card-text">重庆师范大学智能社团+是一个致力于提升师范生专业素养和教学能力的学生组织。我们通过组织各类教育教学相关活动，帮助师范生提高教学技能，增强教育实践能力，为未来成为优秀教师奠定基础。</p>
-                    <p class="card-text">协会定期举办教学技能培训、教育实践活动、学术讲座、教学比赛等多种形式的活动，为师范生提供展示自我、锻炼能力的平台。</p>
-                    <a href="{{ url_for('main.about') }}" class="btn btn-outline-primary">了解更多</a>
+            <div class="card h-100 border-0 shadow-sm about-home-card">
+                <div class="card-body p-4 p-lg-5">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="rounded-circle p-3 me-3" style="background: rgba(37, 99, 235, 0.1);">
+                            <i class="fas fa-circle-info text-primary"></i>
+                        </div>
+                        <h3 class="card-title mb-0 fw-bold">关于智能社团+</h3>
+                    </div>
+                    <p class="card-text text-muted mb-4">智能社团+是面向大学社团的全流程一站式活动管理平台，以数智驱动教育实践，提升组织效率与学习体验。</p>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <div class="about-mini-item h-100">
+                                <div class="about-mini-title"><i class="fas fa-graduation-cap text-primary me-2"></i>提升专业能力</div>
+                                <div class="small text-muted">围绕教学技能、教育实践与竞赛训练构建成长闭环。</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="about-mini-item h-100">
+                                <div class="about-mini-title"><i class="fas fa-users text-info me-2"></i>促进协作交流</div>
+                                <div class="small text-muted">连接跨专业同学与教师资源，形成共学共创社区。</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <a href="{{ url_for('main.about') }}" class="btn btn-outline-primary px-4 rounded-pill">了解更多</a>
                 </div>
             </div>
         </div>
@@ -97,6 +117,24 @@
             </div>
         </div>
     </div>
+
+    <style>
+    .about-home-card {
+        border-radius: 16px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }
+    .about-mini-item {
+        border: 1px solid #e5edff;
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: #fff;
+    }
+    .about-mini-title {
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 6px;
+    }
+    </style>
 
     
 

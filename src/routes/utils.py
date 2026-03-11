@@ -896,9 +896,26 @@ def random_string(length=6):
 @utils_bp.route('/check_login_status')
 def check_login_status():
     """返回用户登录状态的API端点"""
+    role_name = ''
+    redirect_url = '/auth/login'
+    if current_user.is_authenticated:
+        try:
+            role_name = (getattr(getattr(current_user, 'role', None), 'name', '') or '').strip().lower()
+        except Exception:
+            role_name = ''
+
+        if role_name == 'admin':
+            redirect_url = '/admin/dashboard'
+        elif role_name == 'student':
+            redirect_url = '/student/dashboard'
+        else:
+            redirect_url = '/'
+
     return jsonify({
         'is_logged_in': current_user.is_authenticated,
-        'user_id': current_user.id if current_user.is_authenticated else None
+        'user_id': current_user.id if current_user.is_authenticated else None,
+        'role': role_name,
+        'redirect_url': redirect_url
     })
 
 @utils_bp.route('/debug/user_info')

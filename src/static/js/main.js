@@ -1,5 +1,8 @@
 // 主要JavaScript功能
 document.addEventListener('DOMContentLoaded', function() {
+    // 先和服务端核对一次登录态，修复移动端偶发的缓存错位显示
+    syncLoginStateFromServer();
+
     // 退出登录：强制带时间戳跳转，避免缓存/下拉交互导致首击未生效
     document.querySelectorAll('a[href*="/auth/logout"]').forEach(link => {
         link.addEventListener('click', function(e) {
@@ -7,6 +10,9 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.replace('/auth/logout?t=' + Date.now());
         });
     });
+
+    // 若用户已登录但页面仍显示“登录”入口，点击时兜底跳转到对应面板
+    setupSmartLoginLink();
 
     // 初始化Bootstrap提示工具
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
@@ -183,6 +189,60 @@ function enableTableCellScroll() {
             }
 
             cell.appendChild(wrapper);
+        });
+    });
+}
+
+async function syncLoginStateFromServer() {
+    try {
+        const body = document.body;
+        if (!body) return;
+
+        const pageLoggedIn = body.dataset.userLoggedIn === 'true';
+        const response = await fetch('/utils/check_login_status', {
+            credentials: 'include',
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache'
+            }
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const serverLoggedIn = !!data.is_logged_in;
+        if (pageLoggedIn === serverLoggedIn) {
+            sessionStorage.removeItem('login_state_reload_once');
+            return;
+        }
+
+        // 防止极端情况下重复刷新
+        if (sessionStorage.getItem('login_state_reload_once') === '1') return;
+        sessionStorage.setItem('login_state_reload_once', '1');
+        window.location.reload();
+    } catch (e) {
+        console.warn('登录态同步检查失败:', e);
+    }
+}
+
+function setupSmartLoginLink() {
+    document.querySelectorAll('a[href="/auth/login"]').forEach(link => {
+        link.addEventListener('click', async function(e) {
+            try {
+                const resp = await fetch('/utils/check_login_status', {
+                    credentials: 'include',
+                    cache: 'no-store'
+                });
+                if (!resp.ok) return;
+                const data = await resp.json();
+
+                if (data && data.is_logged_in) {
+                    e.preventDefault();
+                    window.location.href = data.redirect_url || '/';
+                }
+            } catch (err) {
+                console.warn('登录入口状态检查失败:', err);
+            }
         });
     });
 }
