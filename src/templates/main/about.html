@@ -2,204 +2,388 @@
 
 {% block title %}关于我们 - 重庆师范大学智能社团+{% endblock %}
 
+{% block styles %}
+<style>
+    .about-shell {
+        padding: 1rem 0 2.5rem;
+    }
+
+    .about-hero {
+        position: relative;
+        overflow: hidden;
+        border-radius: 1.5rem;
+        padding: 2.5rem 2rem;
+        background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+        color: #fff;
+        box-shadow: 0 16px 36px rgba(67, 97, 238, 0.25);
+    }
+
+    .about-hero::before,
+    .about-hero::after {
+        content: '';
+        position: absolute;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.18);
+    }
+
+    .about-hero::before {
+        width: 220px;
+        height: 220px;
+        right: -60px;
+        top: -60px;
+    }
+
+    .about-hero::after {
+        width: 170px;
+        height: 170px;
+        left: -50px;
+        bottom: -70px;
+    }
+
+    .about-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 999px;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.86rem;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.2);
+        margin-right: 0.45rem;
+        margin-bottom: 0.55rem;
+    }
+
+    .feature-panel {
+        background: #fff;
+        border-radius: 1rem;
+        padding: 1.1rem;
+        border: 1px solid rgba(67, 97, 238, 0.12);
+        transition: transform 0.28s ease, box-shadow 0.28s ease;
+        height: 100%;
+    }
+
+    .feature-panel:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 14px 28px rgba(67, 97, 238, 0.15);
+    }
+
+    .role-filter .btn {
+        border-radius: 999px;
+        padding: 0.45rem 1rem;
+    }
+
+    .solution-card {
+        border: 1px solid rgba(67, 97, 238, 0.1);
+        border-radius: 1rem;
+        background: #fff;
+        padding: 1rem;
+        height: 100%;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .solution-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .flow-step {
+        border: 1px solid rgba(67, 97, 238, 0.14);
+        border-radius: 0.95rem;
+        background: #fff;
+        padding: 0.9rem;
+        cursor: pointer;
+        transition: all 0.25s ease;
+    }
+
+    .flow-step.active {
+        border-color: var(--primary-color);
+        box-shadow: 0 10px 18px rgba(67, 97, 238, 0.16);
+        background: rgba(67, 97, 238, 0.06);
+    }
+
+    .flow-detail {
+        border: 1px solid rgba(67, 97, 238, 0.14);
+        border-radius: 1rem;
+        background: #fff;
+        padding: 1.25rem;
+        min-height: 200px;
+    }
+
+    .metric-card {
+        border-radius: 1rem;
+        background: #fff;
+        border: 1px solid rgba(67, 97, 238, 0.1);
+        padding: 1rem;
+        text-align: center;
+        height: 100%;
+    }
+
+    .metric-num {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--primary-color);
+        line-height: 1.2;
+    }
+
+    .cta-card {
+        border-radius: 1.25rem;
+        padding: 2rem;
+        background: linear-gradient(135deg, rgba(67, 97, 238, 0.1), rgba(72, 149, 239, 0.16));
+        border: 1px solid rgba(67, 97, 238, 0.14);
+    }
+
+    @media (max-width: 768px) {
+        .about-hero {
+            padding: 2rem 1.2rem;
+        }
+
+        .metric-num {
+            font-size: 1.75rem;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container py-5">
-    <div class="row">
-        <div class="col-lg-10 mx-auto">
-            <div class="card shadow-sm rounded-3 border-0 mb-5">
-                <div class="card-body p-md-5 p-4">
-                    <h2 class="text-center mb-4 fw-bold">关于智能社团+</h2>
-                    
-                    <div class="mb-5">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="bg-transparent bg-opacity-10 rounded-circle p-3 me-3">
-                                <i class="fas fa-info-circle text-primary"></i>
-                            </div>
-                            <h4 class="mb-0 fw-semibold">平台简介</h4>
-                        </div>
-                        <div class="ps-md-5">
-                            <p class="text-muted">智能社团+是面向大学社团所开发的全流程一站式活动举办管理系统</p>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-5">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="bg-success bg-opacity-10 rounded-circle p-3 me-3">
-                                <i class="fas fa-bullseye text-success"></i>
-                            </div>
-                            <h4 class="mb-0 fw-semibold">平台宗旨</h4>
-                        </div>
-                        <div class="ps-md-5">
-                        <ul class="list-unstyled">
-                            <li class="mb-4">
-                                <div class="d-flex">
-                                    <div class="me-3">
-                                        <div class="bg-transparent bg-opacity-10 rounded-circle p-3">
-                                            <i class="fas fa-graduation-cap text-primary"></i>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h5 class="fw-semibold">提升工作效率</h5>
-                                        <p class="text-muted mb-0">通过全面的服务</p>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="mb-4">
-                                <div class="d-flex">
-                                    <div class="me-3">
-                                        <div class="bg-info bg-opacity-10 rounded-circle p-3">
-                                            <i class="fas fa-users text-info"></i>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h5 class="fw-semibold">促进交流合作</h5>
-                                        <p class="text-muted mb-0">搭建跨专业、跨年级的交流平台，促进师范生之间的经验分享和合作学习，形成良好的学习共同体。</p>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="mb-4">
-                                <div class="d-flex">
-                                    <div class="me-3">
-                                        <div class="bg-warning bg-opacity-10 rounded-circle p-3">
-                                            <i class="fas fa-lightbulb text-warning"></i>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h5 class="fw-semibold">创新教育理念</h5>
-                                        <p class="text-muted mb-0">关注教育前沿，引入创新教育理念和方法，培养创新精神和实践能力的教育工作者</p>
-                                    </div>
-                                </div>
-                            </li>
-                            <li>
-                                <div class="d-flex">
-                                    <div class="me-3">
-                                        <div class="bg-danger bg-opacity-10 rounded-circle p-3">
-                                            <i class="fas fa-handshake text-danger"></i>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h5 class="fw-semibold">服务教育实践</h5>
-                                        <p class="text-muted mb-0">组织教育实践活动，为师范生提供实际教学经验，增强社会责任感和教育使命感。</p>
-                                    </div>
-                                </div>
-                            </li>
-                        </ul>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-5">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="bg-info bg-opacity-10 rounded-circle p-3 me-3">
-                                <i class="fas fa-calendar-alt text-info"></i>
-                            </div>
-                            <h4 class="mb-0 fw-semibold">主要活动</h4>
-                        </div>
-                        <div class="ps-md-5">
-                        <div class="row">
-                            <div class="col-md-6 mb-4">
-                                    <div class="card h-100 border-0 shadow-sm rounded-3 hover-shadow">
-                                        <div class="card-body p-4">
-                                            <div class="d-flex align-items-center mb-3">
-                                                <div class="bg-transparent bg-opacity-10 rounded p-3 me-3">
-                                                    <i class="fas fa-chalkboard-teacher text-primary"></i>
-                                                </div>
-                                                <h5 class="card-title mb-0 fw-semibold">教学技能培训</h5>
-                                            </div>
-                                            <p class="card-text text-muted">定期举办教学设计、多媒体教学、课堂管理、教学评价等专题培训，邀请教育专家和优秀教师进行指导。</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6 mb-4">
-                                    <div class="card h-100 border-0 shadow-sm rounded-3 hover-shadow">
-                                        <div class="card-body p-4">
-                                            <div class="d-flex align-items-center mb-3">
-                                                <div class="bg-success bg-opacity-10 rounded p-3 me-3">
-                                                    <i class="fas fa-trophy text-success"></i>
-                                                </div>
-                                                <h5 class="card-title mb-0 fw-semibold">教学技能大赛</h5>
-                                            </div>
-                                            <p class="card-text text-muted">每学期举办教学技能大赛，包括说课、试讲、教具制作等环节，为师范生提供展示和竞争的平台。</p>
-                            </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6 mb-4">
-                                    <div class="card h-100 border-0 shadow-sm rounded-3 hover-shadow">
-                                        <div class="card-body p-4">
-                                            <div class="d-flex align-items-center mb-3">
-                                                <div class="bg-warning bg-opacity-10 rounded p-3 me-3">
-                                                    <i class="fas fa-comment-dots text-warning"></i>
-                                                </div>
-                                                <h5 class="card-title mb-0 fw-semibold">教育实习经验分享</h5>
-                                            </div>
-                                            <p class="card-text text-muted">组织教育实习经验分享会，邀请实习优秀的高年级学生分享实习经验和心得，帮助低年级学生做好准备。</p>
-                            </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6 mb-4">
-                                    <div class="card h-100 border-0 shadow-sm rounded-3 hover-shadow">
-                                        <div class="card-body p-4">
-                                            <div class="d-flex align-items-center mb-3">
-                                                <div class="bg-danger bg-opacity-10 rounded p-3 me-3">
-                                                    <i class="fas fa-book-reader text-danger"></i>
-                                                </div>
-                                                <h5 class="card-title mb-0 fw-semibold">教育学术讲座</h5>
-                                            </div>
-                                            <p class="card-text text-muted">邀请教育领域专家学者开展学术讲座，介绍教育前沿理论和实践，拓展师范生的教育视野。</p>
-                            </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="bg-warning bg-opacity-10 rounded-circle p-3 me-3">
-                                <i class="fas fa-envelope text-warning"></i>
-                            </div>
-                            <h4 class="mb-0 fw-semibold">联系我们</h4>
-                        </div>
-                        <div class="ps-md-5">
-                            <p class="text-muted">如果您对智能社团+有任何疑问或建议，或者希望加入我们，请通过以下方式联系我们：</p>
-                            <div class="card border-0 bg-light rounded-3 p-4 mt-3">
-                                <ul class="list-unstyled mb-0">
-                                    <li class="mb-3 d-flex align-items-center">
-                                        <div class="bg-transparent bg-opacity-10 rounded-circle p-3 me-3">
-                                            <i class="fas fa-map-marker-alt text-primary"></i>
-                                        </div>
-                                        <span>地址：重庆市沙坪坝区大学城中路37号 重庆师范大学</span>
-                                    </li>
-                                    <li class="mb-3 d-flex align-items-center">
-                                        <div class="bg-success bg-opacity-10 rounded-circle p-3 me-3">
-                                            <i class="fas fa-phone text-success"></i>
-                                        </div>
-                                        <span>电话：023-65362779</span>
-                                    </li>
-                                    <li class="d-flex align-items-center">
-                                        <div class="bg-info bg-opacity-10 rounded-circle p-3 me-3">
-                                            <i class="fas fa-comments text-info"></i>
-                                        </div>
-                                        <span>QQ群号：995213034</span>
-                                    </li>
-                        </ul>
-                            </div>
-                        </div>
+<div class="container about-shell">
+    <section class="about-hero mb-4" data-aos="fade-up">
+        <div class="row align-items-center position-relative" style="z-index: 1;">
+            <div class="col-lg-8">
+                <span class="badge rounded-pill text-bg-light text-primary mb-3">关于我们 · 智能社团+</span>
+                <h1 class="display-5 fw-bold mb-3">一站式社团解决方案，让每一场活动都可计划、可执行、可追踪</h1>
+                <p class="mb-4 fs-5">我们聚焦“社团全生命周期管理”，把招新、活动、签到、积分、通知、复盘整合在一个系统里，帮助社团从经验驱动走向数据驱动。</p>
+                <div>
+                    <span class="about-chip"><i class="fas fa-calendar-check"></i> 活动管理</span>
+                    <span class="about-chip"><i class="fas fa-user-check"></i> 智能签到</span>
+                    <span class="about-chip"><i class="fas fa-coins"></i> 积分体系</span>
+                    <span class="about-chip"><i class="fas fa-robot"></i> AI 助手</span>
+                </div>
+            </div>
+            <div class="col-lg-4 mt-4 mt-lg-0">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="fw-bold mb-3 text-dark">平台定位</h5>
+                        <p class="text-muted mb-2">面向高校社团的数字化中台，统一流程、权限与数据视图。</p>
+                        <hr>
+                        <div class="small text-muted">从“发通知 + 手工统计”升级为“流程自动化 + 数据化运营”。</div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-</div>
+    </section>
 
-<style>
-    .hover-shadow {
-        transition: all 0.3s ease;
-    }
-    .hover-shadow:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
-    }
-</style>
+    <section class="mb-4" data-aos="fade-up">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h3 class="mb-0 fw-bold">角色视角：同一平台，不同价值</h3>
+            <div class="role-filter btn-group" role="group" aria-label="角色筛选">
+                <button type="button" class="btn btn-primary about-role-btn active" data-role="all">全部</button>
+                <button type="button" class="btn btn-outline-primary about-role-btn" data-role="admin">管理员</button>
+                <button type="button" class="btn btn-outline-primary about-role-btn" data-role="student">成员/学生</button>
+                <button type="button" class="btn btn-outline-primary about-role-btn" data-role="teacher">指导老师</button>
+            </div>
+        </div>
+
+        <div class="row g-3" id="solutionGrid">
+            <div class="col-md-6 col-lg-4 about-role-card" data-role="admin all">
+                <div class="solution-card">
+                    <h6 class="fw-bold"><i class="fas fa-layer-group text-primary me-2"></i>活动全流程编排</h6>
+                    <p class="mb-0 text-muted">从发布、报名审核到签到与总结，统一在一个后台闭环完成。</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 about-role-card" data-role="admin all">
+                <div class="solution-card">
+                    <h6 class="fw-bold"><i class="fas fa-chart-line text-primary me-2"></i>运营看板与统计</h6>
+                    <p class="mb-0 text-muted">实时掌握参与率、活跃度、积分分布，支持活动复盘与决策优化。</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 about-role-card" data-role="student all">
+                <div class="solution-card">
+                    <h6 class="fw-bold"><i class="fas fa-mobile-screen-button text-primary me-2"></i>成员自助服务</h6>
+                    <p class="mb-0 text-muted">报名、请假、签到、积分查询一站完成，体验简洁直观。</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 about-role-card" data-role="student all">
+                <div class="solution-card">
+                    <h6 class="fw-bold"><i class="fas fa-bell text-primary me-2"></i>消息与提醒</h6>
+                    <p class="mb-0 text-muted">活动变更、审核结果、签到提醒自动触达，减少错过与沟通成本。</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 about-role-card" data-role="teacher all">
+                <div class="solution-card">
+                    <h6 class="fw-bold"><i class="fas fa-user-shield text-primary me-2"></i>规范化监管</h6>
+                    <p class="mb-0 text-muted">对活动进度、参与情况、成果记录形成统一可追溯档案。</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 about-role-card" data-role="teacher all">
+                <div class="solution-card">
+                    <h6 class="fw-bold"><i class="fas fa-wand-magic-sparkles text-primary me-2"></i>AI 辅助问答</h6>
+                    <p class="mb-0 text-muted">提供社团制度、流程说明与常见问题解答，提升服务效率。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-4" data-aos="fade-up">
+        <h3 class="fw-bold mb-3">社团运营闭环：点击查看每一步</h3>
+        <div class="row g-3">
+            <div class="col-lg-4">
+                <div class="d-grid gap-2" id="flowSteps">
+                    <div class="flow-step active" data-step="1" data-title="活动策划与发布" data-desc="在统一后台配置时间、地点、人数、规则与审核方式，快速发布并同步到成员端。" data-points="规则模板复用；多角色审批；公告联动">
+                        <div class="fw-bold">01. 策划发布</div>
+                        <div class="small text-muted">标准化配置与快速上线</div>
+                    </div>
+                    <div class="flow-step" data-step="2" data-title="报名与审核" data-desc="成员在线提交报名信息，管理员按条件审核并自动通知结果，过程透明高效。" data-points="报名状态追踪；自动消息提醒；名单一键导出">
+                        <div class="fw-bold">02. 报名审核</div>
+                        <div class="small text-muted">减少重复沟通与人工表格</div>
+                    </div>
+                    <div class="flow-step" data-step="3" data-title="签到与过程管理" data-desc="活动现场通过系统进行签到与异常标记，实时掌握到场与缺勤数据。" data-points="签到状态实时更新；异常记录留痕；时间统一管理">
+                        <div class="fw-bold">03. 现场执行</div>
+                        <div class="small text-muted">从混乱签到到实时可见</div>
+                    </div>
+                    <div class="flow-step" data-step="4" data-title="积分与复盘优化" data-desc="基于活动记录自动生成积分变化，沉淀运营数据，支撑下一次活动优化。" data-points="积分规则自动化；历史可追踪；数据驱动改进">
+                        <div class="fw-bold">04. 复盘沉淀</div>
+                        <div class="small text-muted">形成长期可持续运营机制</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="flow-detail" id="flowDetail">
+                    <div class="text-primary fw-semibold mb-2" id="flowStepIndex">STEP 01</div>
+                    <h4 class="fw-bold mb-3" id="flowTitle">活动策划与发布</h4>
+                    <p class="text-muted" id="flowDesc">在统一后台配置时间、地点、人数、规则与审核方式，快速发布并同步到成员端。</p>
+                    <div class="row g-2 mt-2" id="flowPoints">
+                        <div class="col-md-4"><div class="feature-panel py-3 text-center">规则模板复用</div></div>
+                        <div class="col-md-4"><div class="feature-panel py-3 text-center">多角色审批</div></div>
+                        <div class="col-md-4"><div class="feature-panel py-3 text-center">公告联动</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-4" data-aos="fade-up">
+        <h3 class="fw-bold mb-3">价值结果</h3>
+        <div class="row g-3">
+            <div class="col-md-6 col-lg-3">
+                <div class="metric-card">
+                    <div class="metric-num" data-target="90">0</div>
+                    <div class="text-muted">流程线上化覆盖率</div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="metric-card">
+                    <div class="metric-num" data-target="60">0</div>
+                    <div class="text-muted">管理沟通成本降低</div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="metric-card">
+                    <div class="metric-num" data-target="95">0</div>
+                    <div class="text-muted">成员反馈可追踪率</div>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-3">
+                <div class="metric-card">
+                    <div class="metric-num" data-target="100">0</div>
+                    <div class="text-muted">活动数据留档完整度</div>
+                </div>
+            </div>
+        </div>
+        <p class="text-muted small mt-2 mb-0">* 以上为平台目标效果，用于展示一站式社团解决方案带来的运营提升方向。</p>
+    </section>
+
+    <section class="cta-card" data-aos="fade-up">
+        <div class="row align-items-center g-3">
+            <div class="col-lg-8">
+                <h3 class="fw-bold mb-2">让社团运营从“人盯流程”升级为“系统驱动流程”</h3>
+                <p class="text-muted mb-0">智能社团+致力于为高校社团提供稳定、清晰、可持续的数字化运营能力，持续迭代更实用的管理工具与AI服务。</p>
+            </div>
+            <div class="col-lg-4 text-lg-end">
+                <a href="{{ url_for('main.activities') }}" class="btn btn-primary me-2"><i class="fas fa-calendar-days"></i> 浏览活动</a>
+                {% if not current_user.is_authenticated %}
+                <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary"><i class="fas fa-user-plus"></i> 立即加入</a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const roleButtons = document.querySelectorAll('.about-role-btn');
+        const roleCards = document.querySelectorAll('.about-role-card');
+
+        roleButtons.forEach(button => {
+            button.addEventListener('click', function () {
+                roleButtons.forEach(btn => {
+                    btn.classList.remove('active', 'btn-primary');
+                    btn.classList.add('btn-outline-primary');
+                });
+                this.classList.add('active', 'btn-primary');
+                this.classList.remove('btn-outline-primary');
+
+                const role = this.dataset.role;
+                roleCards.forEach(card => {
+                    const cardRoles = card.dataset.role.split(' ');
+                    const visible = role === 'all' || cardRoles.includes(role);
+                    card.style.display = visible ? '' : 'none';
+                });
+            });
+        });
+
+        const flowSteps = document.querySelectorAll('.flow-step');
+        const flowStepIndex = document.getElementById('flowStepIndex');
+        const flowTitle = document.getElementById('flowTitle');
+        const flowDesc = document.getElementById('flowDesc');
+        const flowPoints = document.getElementById('flowPoints');
+
+        flowSteps.forEach(step => {
+            step.addEventListener('click', function () {
+                flowSteps.forEach(item => item.classList.remove('active'));
+                this.classList.add('active');
+
+                flowStepIndex.textContent = 'STEP 0' + this.dataset.step;
+                flowTitle.textContent = this.dataset.title;
+                flowDesc.textContent = this.dataset.desc;
+
+                const points = (this.dataset.points || '').split('；').filter(Boolean);
+                flowPoints.innerHTML = points.map(point => `
+                    <div class="col-md-4">
+                        <div class="feature-panel py-3 text-center">${point}</div>
+                    </div>
+                `).join('');
+            });
+        });
+
+        const counters = document.querySelectorAll('.metric-num');
+        const animateCounter = (el) => {
+            const target = parseInt(el.dataset.target || '0', 10);
+            let current = 0;
+            const step = Math.max(1, Math.floor(target / 30));
+            const timer = setInterval(() => {
+                current += step;
+                if (current >= target) {
+                    current = target;
+                    clearInterval(timer);
+                }
+                el.textContent = current + '%';
+            }, 20);
+        };
+
+        const observer = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    animateCounter(entry.target);
+                    obs.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.5 });
+
+        counters.forEach(counter => observer.observe(counter));
+    });
+</script>
 {% endblock %}
 
 
