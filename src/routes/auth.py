@@ -8,7 +8,7 @@ from wtforms import StringField, PasswordField, SubmitField, SelectField, Valida
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Regexp
 from datetime import datetime, timedelta
 import time
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -20,6 +20,49 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
+_last_unverified_cleanup_at = None
+
+
+def _cleanup_unverified_accounts(max_age_days=7, min_interval_minutes=60):
+    """定期清理未验证邮箱且超过期限的账号。"""
+    global _last_unverified_cleanup_at
+
+    now = datetime.utcnow()
+    if _last_unverified_cleanup_at and (now - _last_unverified_cleanup_at) < timedelta(minutes=min_interval_minutes):
+        return 0
+
+    _last_unverified_cleanup_at = now
+    cutoff = now - timedelta(days=max_age_days)
+
+    try:
+        # 只清理未激活、从未登录、创建超过7天的学生账号，避免误删被管理员禁用的历史账号
+        stmt = (
+            db.select(User)
+            .join(Role, User.role_id == Role.id, isouter=True)
+            .where(
+                User.active.is_(False),
+                User.last_login.is_(None),
+                User.created_at < cutoff,
+                or_(Role.id.is_(None), func.lower(Role.name) == 'student')
+            )
+            .limit(200)
+        )
+        expired_users = db.session.execute(stmt).scalars().all()
+        if not expired_users:
+            return 0
+
+        for user in expired_users:
+            db.session.execute(db.text("UPDATE system_logs SET user_id = NULL WHERE user_id = :uid"), {'uid': user.id})
+            db.session.execute(db.text("UPDATE announcements SET created_by = NULL WHERE created_by = :uid"), {'uid': user.id})
+            db.session.delete(user)
+
+        db.session.commit()
+        logger.info(f"自动清理未验证账号完成，删除数量: {len(expired_users)}")
+        return len(expired_users)
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"自动清理未验证账号失败: {e}", exc_info=True)
+        return 0
 
 
 def _build_reset_password_token(user_id):
@@ -237,6 +280,8 @@ class SetupAdminForm(FlaskForm):
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
+    _cleanup_unverified_accounts(max_age_days=7)
+
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
     
@@ -300,6 +345,8 @@ def register():
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     """用户登录"""
+    _cleanup_unverified_accounts(max_age_days=7)
+
     # 如果用户已登录，直接重定向到主页
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
@@ -344,8 +391,8 @@ def login():
             if user and user.verify_password(password):
                 # 检查用户是否激活
                 if not user.active:
-                    flash('账号尚未通过邮箱验证或已被禁用。请先完成邮箱验证。', 'warning')
-                    return render_template('auth/login.html', form=form)
+                    flash('账号尚未通过邮箱验证，请先完成邮箱验证。', 'warning')
+                    return redirect(url_for('auth.verify_email_pending', user_id=user.id))
 
                 # 登录成功后按需迁移历史密码哈希算法
                 if hasattr(user, 'needs_password_rehash') and user.needs_password_rehash():
