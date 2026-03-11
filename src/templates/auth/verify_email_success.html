@@ -6,7 +6,7 @@
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-lg-6 col-md-8">
-            <div class="card border-0 shadow-sm">
+            <div class="card border-0 shadow-sm success-card">
                 <div class="card-body p-4 p-md-5 text-center">
                     <div class="mb-3"><i class="fas fa-circle-check text-success" style="font-size:3rem;"></i></div>
                     <h3 class="fw-bold mb-2">{% if already_verified %}邮箱已验证{% else %}邮箱验证成功{% endif %}</h3>
@@ -17,4 +17,10 @@
         </div>
     </div>
 </div>
+<style>
+.success-card {
+    border-radius: 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #f7fff9 100%);
+}
+</style>
 {% endblock %}

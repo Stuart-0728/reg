@@ -6,11 +6,17 @@
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-lg-6 col-md-8">
-            <div class="card border-0 shadow-sm">
+            <div class="card border-0 shadow-sm pending-card">
                 <div class="card-body p-4 p-md-5 text-center">
                     <div class="mb-3"><i class="fas fa-envelope-open-text text-primary" style="font-size:3rem;"></i></div>
                     <h3 class="fw-bold mb-2">验证邮件已发送</h3>
                     <p class="text-muted mb-4">我们已向{% if user and user.email %} {{ user.email }} {% else %}你的注册邮箱{% endif %}发送验证链接，请查收后完成激活。</p>
+
+                    <div class="steps text-start small mb-4">
+                        <div><span class="badge rounded-pill bg-primary-subtle text-primary me-2">1</span> 打开邮箱并找到“邮箱验证”邮件</div>
+                        <div class="mt-1"><span class="badge rounded-pill bg-primary-subtle text-primary me-2">2</span> 点击“立即验证邮箱”按钮</div>
+                        <div class="mt-1"><span class="badge rounded-pill bg-primary-subtle text-primary me-2">3</span> 验证成功后返回登录</div>
+                    </div>
 
                     <form method="post" action="{{ url_for('auth.resend_verification') }}" class="text-start">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -30,4 +36,16 @@
         </div>
     </div>
 </div>
+<style>
+.pending-card {
+    border-radius: 14px;
+    overflow: hidden;
+}
+.steps {
+    background: linear-gradient(145deg, #f8fbff, #f3f7ff);
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+</style>
 {% endblock %}

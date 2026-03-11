@@ -13,6 +13,14 @@
                 <div class="card-body">
                     <form method="post">
                         {{ form.hidden_tag() }}
+
+                        <div class="alert alert-light border d-flex align-items-start gap-2" role="alert">
+                            <i class="fas fa-shield-alt text-primary mt-1"></i>
+                            <div>
+                                <div class="fw-semibold">邮箱已锁定</div>
+                                <div class="small text-muted">当前登录邮箱：{{ current_user.email or '未设置' }}。为保障账号安全，邮箱验证后不支持用户自行修改，如需更换请联系管理员处理。</div>
+                            </div>
+                        </div>
                         
                         <div class="mb-3">
                             {{ form.real_name.label(class="form-label") }}

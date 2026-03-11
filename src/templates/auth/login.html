@@ -92,6 +92,16 @@
                     <li>用户名 / 手机号 / 邮箱（至少提供一项）</li>
                     <li>能证明账号归属的相关证据（如学号、姓名、注册信息截图等）</li>
                 </ul>
+
+                <hr class="my-3">
+                <p class="mb-2 fw-semibold">还未完成邮箱验证？可在此重发验证邮件：</p>
+                <form method="post" action="{{ url_for('auth.resend_verification') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control" name="identifier" placeholder="输入用户名或邮箱" required>
+                        <button class="btn btn-outline-primary" type="submit">重发</button>
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" data-bs-dismiss="modal">我知道了</button>
