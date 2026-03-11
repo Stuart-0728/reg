@@ -6,10 +6,9 @@ from src.models import User, Role, StudentInfo, Tag, AIUserPreferences, SystemLo
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, SelectField, ValidationError
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Regexp
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from urllib.parse import urlparse, urljoin
-
 # 配置日志
 logger = logging.getLogger(__name__)
 
@@ -162,7 +161,7 @@ def register():
         
         flash('注册成功，请登录！', 'success')
         # 登录用户并重定向到标签选择页面
-        login_user(user)
+        login_user(user, remember=True, duration=timedelta(days=30))
         return redirect(url_for('auth.select_tags'))
     
     return render_template('auth/register.html', form=form)
@@ -215,7 +214,7 @@ def login():
                         logger.error(f"密码哈希迁移失败: {e}", exc_info=True)
                 
                 # 登录成功
-                login_user(user)
+                login_user(user, remember=True, duration=timedelta(days=30))
                 
                 # 记录登录成功日志
                 logger.info(f"登录成功: 用户名={username}, 用户ID={user.id}")

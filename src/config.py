@@ -96,7 +96,7 @@ class Config:
     # 基础配置
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-cqnu-association'
     SECURITY_PASSWORD_SALT = os.environ.get('SECURITY_PASSWORD_SALT') or 'cqnu-association-salt'
-    PERMANENT_SESSION_LIFETIME = timedelta(days=7)  # 会话持续7天
+    PERMANENT_SESSION_LIFETIME = timedelta(days=30)  # 会话持续30天
     
     # 日志配置
     LOG_PATH = LOG_PATH
@@ -173,6 +173,14 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SECURE = False  # 在开发环境中设为False，生产环境应为True
     SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_REFRESH_EACH_REQUEST = True
+
+    # Flask-Login Remember Me（关闭浏览器后仍可保留登录状态）
+    REMEMBER_COOKIE_DURATION = timedelta(days=30)
+    REMEMBER_COOKIE_REFRESH_EACH_REQUEST = True
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SECURE = False  # 在开发环境中设为False，生产环境应为True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
     
     # Flask-Cache配置
     CACHE_TYPE = 'SimpleCache'
@@ -235,6 +243,7 @@ class ProductionConfig(Config):
     DEBUG = False
     TESTING = False
     SESSION_COOKIE_SECURE = True
+    REMEMBER_COOKIE_SECURE = True
     
     @classmethod
     def init_app(cls, app):

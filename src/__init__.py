@@ -109,6 +109,7 @@ def create_app(config_name=None):
     @app.before_request
     def before_request():
         """在请求处理前设置时区"""
+        session.permanent = True
         timezone_name = app.config.get('TIMEZONE_NAME', 'Asia/Shanghai')
         # 将时区存储在会话中，方便在模板和视图中使用
         session['timezone'] = timezone_name
