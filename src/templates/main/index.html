@@ -52,34 +52,94 @@
 
 
     <!-- 协会介绍 -->
+    <style>
+    .about-portal-card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 24px;
+        background: linear-gradient(135deg, rgba(10, 10, 12, 0.96), rgba(18, 20, 28, 0.96));
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+        color: #fff;
+    }
+    .about-portal-card::before,
+    .about-portal-card::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(36px);
+        opacity: 0.45;
+        pointer-events: none;
+    }
+    .about-portal-card::before {
+        width: 240px;
+        height: 240px;
+        background: rgba(59, 130, 246, 0.55);
+        top: -100px;
+        left: -80px;
+    }
+    .about-portal-card::after {
+        width: 220px;
+        height: 220px;
+        background: rgba(139, 92, 246, 0.5);
+        right: -90px;
+        bottom: -110px;
+    }
+    .about-portal-body {
+        position: relative;
+        z-index: 1;
+        padding: 2rem;
+    }
+    .about-portal-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.85rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        color: #cbd5e1;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(30, 41, 59, 0.45);
+    }
+    .about-portal-title {
+        margin-top: 0.9rem;
+        margin-bottom: 1rem;
+        font-weight: 800;
+        letter-spacing: 0.2px;
+        background: linear-gradient(135deg, #ffffff, #c7d2fe);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .about-portal-text {
+        color: #cbd5e1;
+        line-height: 1.8;
+        margin-bottom: 0.9rem;
+    }
+    .about-portal-cta {
+        margin-top: 0.4rem;
+        border: 1px solid rgba(96, 165, 250, 0.45);
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.95), rgba(124, 58, 237, 0.95));
+        color: #fff;
+        border-radius: 999px;
+        padding: 0.55rem 1.1rem;
+        font-weight: 600;
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .about-portal-cta:hover {
+        color: #fff;
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(59, 130, 246, 0.28);
+    }
+    </style>
     <div class="row mb-4 g-4">
         <div class="col-md-8">
-            <div class="card h-100 border-0 shadow-sm about-home-card">
-                <div class="card-body p-4 p-lg-5">
-                    <div class="d-flex align-items-center mb-3">
-                        <div class="rounded-circle p-3 me-3" style="background: rgba(37, 99, 235, 0.1);">
-                            <i class="fas fa-circle-info text-primary"></i>
-                        </div>
-                        <h3 class="card-title mb-0 fw-bold">关于智能社团+</h3>
-                    </div>
-                    <p class="card-text text-muted mb-4">智能社团+是面向大学社团的全流程一站式活动管理平台，以数智驱动教育实践，提升组织效率与学习体验。</p>
-
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <div class="about-mini-item h-100">
-                                <div class="about-mini-title"><i class="fas fa-graduation-cap text-primary me-2"></i>提升专业能力</div>
-                                <div class="small text-muted">围绕教学技能、教育实践与竞赛训练构建成长闭环。</div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="about-mini-item h-100">
-                                <div class="about-mini-title"><i class="fas fa-users text-info me-2"></i>促进协作交流</div>
-                                <div class="small text-muted">连接跨专业同学与教师资源，形成共学共创社区。</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <a href="{{ url_for('main.about') }}" class="btn btn-outline-primary px-4 rounded-pill">了解更多</a>
+            <div class="about-portal-card h-100">
+                <div class="about-portal-body">
+                    <span class="about-portal-chip"><i class="fas fa-sparkles"></i> 智能社团+ About</span>
+                    <h3 class="about-portal-title">关于智能社团+</h3>
+                    <p class="about-portal-text">不仅是活动系统，更是连接校园生活与热爱的全链路中枢。通过大模型助手把招新筛选、兴趣匹配与社团协同治理整合为一站式体验。</p>
+                    <p class="about-portal-text">点击进入关于页，查看 REG 理念、AI 对话式匹配、管理端能力与完整平台价值主张。</p>
+                    <a href="{{ url_for('main.about') }}" class="btn about-portal-cta">立即了解</a>
                 </div>
             </div>
         </div>

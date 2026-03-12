@@ -1,389 +1,785 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}关于我们 - 重庆师范大学智能社团+{% endblock %}
-
-{% block styles %}
-<style>
-    .about-shell {
-        padding: 1rem 0 2.5rem;
-    }
-
-    .about-hero {
-        position: relative;
-        overflow: hidden;
-        border-radius: 1.5rem;
-        padding: 2.5rem 2rem;
-        background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
-        color: #fff;
-        box-shadow: 0 16px 36px rgba(67, 97, 238, 0.25);
-    }
-
-    .about-hero::before,
-    .about-hero::after {
-        content: '';
-        position: absolute;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.18);
-    }
-
-    .about-hero::before {
-        width: 220px;
-        height: 220px;
-        right: -60px;
-        top: -60px;
-    }
-
-    .about-hero::after {
-        width: 170px;
-        height: 170px;
-        left: -50px;
-        bottom: -70px;
-    }
-
-    .about-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        border-radius: 999px;
-        padding: 0.45rem 0.9rem;
-        font-size: 0.86rem;
-        font-weight: 600;
-        background: rgba(255, 255, 255, 0.2);
-        margin-right: 0.45rem;
-        margin-bottom: 0.55rem;
-    }
-
-    .feature-panel {
-        background: #fff;
-        border-radius: 1rem;
-        padding: 1.1rem;
-        border: 1px solid rgba(67, 97, 238, 0.12);
-        transition: transform 0.28s ease, box-shadow 0.28s ease;
-        height: 100%;
-    }
-
-    .feature-panel:hover {
-        transform: translateY(-6px);
-        box-shadow: 0 14px 28px rgba(67, 97, 238, 0.15);
-    }
-
-    .role-filter .btn {
-        border-radius: 999px;
-        padding: 0.45rem 1rem;
-    }
-
-    .solution-card {
-        border: 1px solid rgba(67, 97, 238, 0.1);
-        border-radius: 1rem;
-        background: #fff;
-        padding: 1rem;
-        height: 100%;
-        transition: transform 0.25s ease, box-shadow 0.25s ease;
-    }
-
-    .solution-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 12px 20px rgba(0, 0, 0, 0.08);
-    }
-
-    .flow-step {
-        border: 1px solid rgba(67, 97, 238, 0.14);
-        border-radius: 0.95rem;
-        background: #fff;
-        padding: 0.9rem;
-        cursor: pointer;
-        transition: all 0.25s ease;
-    }
-
-    .flow-step.active {
-        border-color: var(--primary-color);
-        box-shadow: 0 10px 18px rgba(67, 97, 238, 0.16);
-        background: rgba(67, 97, 238, 0.06);
-    }
-
-    .flow-detail {
-        border: 1px solid rgba(67, 97, 238, 0.14);
-        border-radius: 1rem;
-        background: #fff;
-        padding: 1.25rem;
-        min-height: 200px;
-    }
-
-    .metric-card {
-        border-radius: 1rem;
-        background: #fff;
-        border: 1px solid rgba(67, 97, 238, 0.1);
-        padding: 1rem;
-        text-align: center;
-        height: 100%;
-    }
-
-    .metric-num {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--primary-color);
-        line-height: 1.2;
-    }
-
-    .cta-card {
-        border-radius: 1.25rem;
-        padding: 2rem;
-        background: linear-gradient(135deg, rgba(67, 97, 238, 0.1), rgba(72, 149, 239, 0.16));
-        border: 1px solid rgba(67, 97, 238, 0.14);
-    }
-
-    @media (max-width: 768px) {
-        .about-hero {
-            padding: 2rem 1.2rem;
-        }
-
-        .metric-num {
-            font-size: 1.75rem;
-        }
-    }
-</style>
-{% endblock %}
+{% block title %}关于平台 - 智能社团+ (Reg){% endblock %}
 
 {% block content %}
-<div class="container about-shell">
-    <section class="about-hero mb-4" data-aos="fade-up">
-        <div class="row align-items-center position-relative" style="z-index: 1;">
-            <div class="col-lg-8">
-                <span class="badge rounded-pill text-bg-light text-primary mb-3">关于我们 · 智能社团+</span>
-                <h1 class="display-5 fw-bold mb-3">一站式社团解决方案，让每一场活动都可计划、可执行、可追踪</h1>
-                <p class="mb-4 fs-5">我们聚焦“社团全生命周期管理”，把招新、活动、签到、积分、通知、复盘整合在一个系统里，帮助社团从经验驱动走向数据驱动。</p>
-                <div>
-                    <span class="about-chip"><i class="fas fa-calendar-check"></i> 活动管理</span>
-                    <span class="about-chip"><i class="fas fa-user-check"></i> 智能签到</span>
-                    <span class="about-chip"><i class="fas fa-coins"></i> 积分体系</span>
-                    <span class="about-chip"><i class="fas fa-robot"></i> AI 助手</span>
-                </div>
-            </div>
-            <div class="col-lg-4 mt-4 mt-lg-0">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <h5 class="fw-bold mb-3 text-dark">平台定位</h5>
-                        <p class="text-muted mb-2">面向高校社团的数字化中台，统一流程、权限与数据视图。</p>
-                        <hr>
-                        <div class="small text-muted">从“发通知 + 手工统计”升级为“流程自动化 + 数据化运营”。</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+<style>
+/* 新一代现代 UI 与滚动吸附 (Scroll Snapping) 设计 */
+:root {
+    --bg-color: #050505;
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --accent-1: #3b82f6;
+    --accent-2: #8b5cf6;
+    --accent-3: #ec4899;
+    --card-bg: rgba(255, 255, 255, 0.03);
+    --card-border: rgba(255, 255, 255, 0.08);
+}
 
-    <section class="mb-4" data-aos="fade-up">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-            <h3 class="mb-0 fw-bold">角色视角：同一平台，不同价值</h3>
-            <div class="role-filter btn-group" role="group" aria-label="角色筛选">
-                <button type="button" class="btn btn-primary about-role-btn active" data-role="all">全部</button>
-                <button type="button" class="btn btn-outline-primary about-role-btn" data-role="admin">管理员</button>
-                <button type="button" class="btn btn-outline-primary about-role-btn" data-role="student">成员/学生</button>
-                <button type="button" class="btn btn-outline-primary about-role-btn" data-role="teacher">指导老师</button>
-            </div>
-        </div>
+/* 平滑滚动设置 */
+html {
+    scroll-behavior: smooth;
+}
 
-        <div class="row g-3" id="solutionGrid">
-            <div class="col-md-6 col-lg-4 about-role-card" data-role="admin all">
-                <div class="solution-card">
-                    <h6 class="fw-bold"><i class="fas fa-layer-group text-primary me-2"></i>活动全流程编排</h6>
-                    <p class="mb-0 text-muted">从发布、报名审核到签到与总结，统一在一个后台闭环完成。</p>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-4 about-role-card" data-role="admin all">
-                <div class="solution-card">
-                    <h6 class="fw-bold"><i class="fas fa-chart-line text-primary me-2"></i>运营看板与统计</h6>
-                    <p class="mb-0 text-muted">实时掌握参与率、活跃度、积分分布，支持活动复盘与决策优化。</p>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-4 about-role-card" data-role="student all">
-                <div class="solution-card">
-                    <h6 class="fw-bold"><i class="fas fa-mobile-screen-button text-primary me-2"></i>成员自助服务</h6>
-                    <p class="mb-0 text-muted">报名、请假、签到、积分查询一站完成，体验简洁直观。</p>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-4 about-role-card" data-role="student all">
-                <div class="solution-card">
-                    <h6 class="fw-bold"><i class="fas fa-bell text-primary me-2"></i>消息与提醒</h6>
-                    <p class="mb-0 text-muted">活动变更、审核结果、签到提醒自动触达，减少错过与沟通成本。</p>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-4 about-role-card" data-role="teacher all">
-                <div class="solution-card">
-                    <h6 class="fw-bold"><i class="fas fa-user-shield text-primary me-2"></i>规范化监管</h6>
-                    <p class="mb-0 text-muted">对活动进度、参与情况、成果记录形成统一可追溯档案。</p>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-4 about-role-card" data-role="teacher all">
-                <div class="solution-card">
-                    <h6 class="fw-bold"><i class="fas fa-wand-magic-sparkles text-primary me-2"></i>AI 辅助问答</h6>
-                    <p class="mb-0 text-muted">提供社团制度、流程说明与常见问题解答，提升服务效率。</p>
-                </div>
-            </div>
-        </div>
-    </section>
+/* 覆盖原生滚动条样式以提升整体质感 */
+::-webkit-scrollbar {
+    width: 6px;
+}
+::-webkit-scrollbar-track {
+    background: var(--bg-color); 
+}
+::-webkit-scrollbar-thumb {
+    background: var(--card-border); 
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46; 
+}
 
-    <section class="mb-4" data-aos="fade-up">
-        <h3 class="fw-bold mb-3">社团运营闭环：点击查看每一步</h3>
-        <div class="row g-3">
-            <div class="col-lg-4">
-                <div class="d-grid gap-2" id="flowSteps">
-                    <div class="flow-step active" data-step="1" data-title="活动策划与发布" data-desc="在统一后台配置时间、地点、人数、规则与审核方式，快速发布并同步到成员端。" data-points="规则模板复用；多角色审批；公告联动">
-                        <div class="fw-bold">01. 策划发布</div>
-                        <div class="small text-muted">标准化配置与快速上线</div>
-                    </div>
-                    <div class="flow-step" data-step="2" data-title="报名与审核" data-desc="成员在线提交报名信息，管理员按条件审核并自动通知结果，过程透明高效。" data-points="报名状态追踪；自动消息提醒；名单一键导出">
-                        <div class="fw-bold">02. 报名审核</div>
-                        <div class="small text-muted">减少重复沟通与人工表格</div>
-                    </div>
-                    <div class="flow-step" data-step="3" data-title="签到与过程管理" data-desc="活动现场通过系统进行签到与异常标记，实时掌握到场与缺勤数据。" data-points="签到状态实时更新；异常记录留痕；时间统一管理">
-                        <div class="fw-bold">03. 现场执行</div>
-                        <div class="small text-muted">从混乱签到到实时可见</div>
-                    </div>
-                    <div class="flow-step" data-step="4" data-title="积分与复盘优化" data-desc="基于活动记录自动生成积分变化，沉淀运营数据，支撑下一次活动优化。" data-points="积分规则自动化；历史可追踪；数据驱动改进">
-                        <div class="fw-bold">04. 复盘沉淀</div>
-                        <div class="small text-muted">形成长期可持续运营机制</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-8">
-                <div class="flow-detail" id="flowDetail">
-                    <div class="text-primary fw-semibold mb-2" id="flowStepIndex">STEP 01</div>
-                    <h4 class="fw-bold mb-3" id="flowTitle">活动策划与发布</h4>
-                    <p class="text-muted" id="flowDesc">在统一后台配置时间、地点、人数、规则与审核方式，快速发布并同步到成员端。</p>
-                    <div class="row g-2 mt-2" id="flowPoints">
-                        <div class="col-md-4"><div class="feature-panel py-3 text-center">规则模板复用</div></div>
-                        <div class="col-md-4"><div class="feature-panel py-3 text-center">多角色审批</div></div>
-                        <div class="col-md-4"><div class="feature-panel py-3 text-center">公告联动</div></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+body {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, sans-serif;
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+    cursor: none;
+}
 
-    <section class="mb-4" data-aos="fade-up">
-        <h3 class="fw-bold mb-3">价值结果</h3>
-        <div class="row g-3">
-            <div class="col-md-6 col-lg-3">
-                <div class="metric-card">
-                    <div class="metric-num" data-target="90">0</div>
-                    <div class="text-muted">流程线上化覆盖率</div>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-3">
-                <div class="metric-card">
-                    <div class="metric-num" data-target="60">0</div>
-                    <div class="text-muted">管理沟通成本降低</div>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-3">
-                <div class="metric-card">
-                    <div class="metric-num" data-target="95">0</div>
-                    <div class="text-muted">成员反馈可追踪率</div>
-                </div>
-            </div>
-            <div class="col-md-6 col-lg-3">
-                <div class="metric-card">
-                    <div class="metric-num" data-target="100">0</div>
-                    <div class="text-muted">活动数据留档完整度</div>
-                </div>
-            </div>
-        </div>
-        <p class="text-muted small mt-2 mb-0">* 以上为平台目标效果，用于展示一站式社团解决方案带来的运营提升方向。</p>
-    </section>
+/* 全屏段落容器 */
+.snap-section {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    padding: 4rem 1rem;
+    box-sizing: border-box;
+    z-index: 2;
+}
 
-    <section class="cta-card" data-aos="fade-up">
-        <div class="row align-items-center g-3">
-            <div class="col-lg-8">
-                <h3 class="fw-bold mb-2">让社团运营从“人盯流程”升级为“系统驱动流程”</h3>
-                <p class="text-muted mb-0">智能社团+致力于为高校社团提供稳定、清晰、可持续的数字化运营能力，持续迭代更实用的管理工具与AI服务。</p>
-            </div>
-            <div class="col-lg-4 text-lg-end">
-                <a href="{{ url_for('main.activities') }}" class="btn btn-primary me-2"><i class="fas fa-calendar-days"></i> 浏览活动</a>
-                {% if not current_user.is_authenticated %}
-                <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary"><i class="fas fa-user-plus"></i> 立即加入</a>
-                {% endif %}
-            </div>
-        </div>
-    </section>
+/* 修复首屏占据过高导致底部提示被遮挡（导航栏偏移）的问题 */
+#section-hero {
+    min-height: calc(100vh - 80px);
+    padding-top: 1rem;
+}
+
+/* 最后一屏取消强制高度，允许正常滚动到页脚 */
+#section-ai {
+    min-height: auto; 
+    padding-bottom: 8rem; /* 给最后的按钮留空间 */
+}
+
+/* 动态流体背景 */
+.gradient-bg {
+    position: fixed;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: 0;
+    overflow: hidden;
+    background: #000;
+}
+.g-blob {
+    position: absolute;
+    filter: blur(80px);
+    opacity: 0.6;
+    animation: drift 20s infinite alternate cubic-bezier(0.5, 0, 0.5, 1);
+}
+.g-blob-1 { background: var(--accent-1); width: 40vw; height: 40vw; top: -10%; left: -10%; }
+.g-blob-2 { background: var(--accent-2); width: 50vw; height: 50vw; bottom: -20%; right: -10%; animation-delay: -5s; }
+.g-blob-3 { background: var(--accent-3); width: 30vw; height: 30vw; top: 40%; left: 40%; animation-delay: -10s; }
+
+@keyframes drift {
+    0% { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(10vw, 15vh) scale(1.2); }
+}
+
+/* 自定义光标 */
+.custom-cursor {
+    position: fixed;
+    top: 0; left: 0;
+    width: 20px; height: 20px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: width 0.3s, height 0.3s, background-color 0.3s;
+    mix-blend-mode: difference;
+}
+.custom-cursor.hover {
+    width: 60px; height: 60px;
+    background-color: rgba(255,255,255,0.2);
+    border: none;
+    backdrop-filter: blur(2px);
+}
+
+/* 段落公共标题 */
+.section-title {
+    font-size: clamp(2rem, 4vw, 2.5rem);
+    font-weight: 700;
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 3.5rem;
+    background: linear-gradient(to right, #cffaf5, #a5f3fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.section-title.accent-variant {
+    background: linear-gradient(to right, var(--accent-1), var(--accent-3));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* ==== 第一屏：首屏内容 ==== */
+.hero {
+    text-align: center;
+    max-width: 800px;
+}
+
+.hero h1 {
+    font-size: clamp(3rem, 7vw, 6rem);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1.2;
+    margin-bottom: 1.5rem;
+    background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.7) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero p {
+    font-size: clamp(1.1rem, 1.5vw, 1.3rem);
+    color: var(--text-secondary);
+    line-height: 1.8;
+    margin-bottom: 3rem;
+}
+
+.domain-tag {
+    display: inline-block;
+    padding: 0.5rem 1.5rem;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 50px;
+    font-size: 0.95rem;
+    margin-bottom: 1.5rem;
+    backdrop-filter: blur(4px);
+}
+
+.scroll-indicator {
+    position: absolute;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    transition: opacity 0.5s;
+}
+.scroll-indicator span {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    letter-spacing: 2px;
+}
+.scroll-indicator .mouse {
+    width: 24px; height: 38px;
+    border: 2px solid var(--text-secondary);
+    border-radius: 12px;
+    position: relative;
+}
+.scroll-indicator .wheel {
+    width: 4px; height: 8px;
+    background: var(--text-secondary);
+    border-radius: 2px;
+    position: absolute;
+    top: 6px; left: 50%;
+    transform: translateX(-50%);
+    animation: scrollWheel 2s infinite ease-in-out;
+}
+@keyframes scrollWheel {
+    0% { transform: translate(-50%, 0); opacity: 1; }
+    100% { transform: translate(-50%, 15px); opacity: 0; }
+}
+
+/* ==== 第二屏：REG 手风琴 ==== */
+.reg-container {
+    width: 100%;
+    max-width: 1200px;
+}
+
+.reg-accordion {
+    display: flex;
+    gap: 1.5rem;
+    height: 480px; /* 增加了一点高度提升气势 */
+    width: 100%;
+}
+
+.reg-panel {
+    flex: 1;
+    position: relative;
+    border-radius: 30px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(12px);
+    overflow: hidden;
+    transition: flex 0.6s cubic-bezier(0.25, 1, 0.5, 1), background 0.4s, border-color 0.4s, transform 0.4s;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 2.5rem;
+    cursor: pointer;
+}
+
+.reg-panel:hover {
+    flex: 3; /* 大幅弹开占比 */
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.02);
+}
+
+.reg-letter {
+    position: absolute;
+    top: -20px;
+    right: 20px;
+    font-size: clamp(10rem, 15vw, 18rem);
+    font-weight: 900;
+    color: rgba(255, 255, 255, 0.02);
+    line-height: 1;
+    transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1), color 0.6s;
+    user-select: none;
+    pointer-events: none;
+}
+
+.reg-panel:hover .reg-letter {
+    transform: scale(1.05) translateX(-20px);
+    color: rgba(255, 255, 255, 0.06);
+}
+
+.reg-title {
+    font-size: clamp(1.5rem, 2.5vw, 2.2rem);
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    white-space: nowrap;
+    transition: transform 0.4s;
+    z-index: 2;
+}
+
+.reg-panel:hover .reg-title {
+    transform: translateY(-8px);
+}
+
+.reg-content {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(15px);
+    transition: opacity 0.4s ease, max-height 0.4s ease, transform 0.4s ease;
+    overflow: hidden;
+    z-index: 2;
+}
+
+.reg-panel:hover .reg-content {
+    opacity: 1;
+    max-height: 150px;
+    transform: translateY(0);
+    transition-delay: 0.1s;
+}
+
+.reg-desc {
+    color: var(--text-secondary);
+    line-height: 1.7;
+    font-size: 1.05rem;
+    max-width: 90%;
+    margin: 0;
+}
+.reg-desc b {
+    color: #e2e8f0;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 8px;
+    font-size: 1.15rem;
+}
+
+/* ==== 第三屏：3D 玻璃特色卡片 ==== */
+.features-container {
+    width: 100%;
+    max-width: 1400px;
+}
+.cards-container {
+    display: flex;
+    gap: 2.5rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.feature-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(12px);
+    border-radius: 24px;
+    padding: 3rem 2.5rem;
+    width: 350px;
+    position: relative;
+    overflow: hidden;
+    transform-style: preserve-3d;
+}
+
+.feature-card::before {
+    content: "";
+    position: absolute;
+    background: radial-gradient(800px circle at var(--mouse-x) var(--mouse-y), rgba(255,255,255,0.08), transparent 40%);
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+.feature-card:hover::before { opacity: 1; }
+
+.feature-card > * {
+    transform: translateZ(30px);
+    position: relative;
+    z-index: 2;
+}
+
+.feature-card .icon {
+    font-size: 3rem;
+    margin-bottom: 1.5rem;
+    display: inline-block;
+    filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
+}
+
+.feature-card h3 {
+    font-size: 1.6rem;
+    margin-bottom: 1.2rem;
+    color: #fff;
+    font-weight: 700;
+}
+
+.feature-card p {
+    color: var(--text-secondary);
+    line-height: 1.7;
+    font-size: 1.05rem;
+}
+
+/* ==== 第四屏：AI 对话与极简数据 ==== */
+.ai-stats-container {
+    width: 100%;
+    max-width: 950px;
+    display: flex;
+    flex-direction: column;
+    gap: 4rem;
+}
+
+.chat-mockup {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid var(--card-border);
+    border-radius: 24px;
+    padding: 2rem;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    transform: translateZ(0); /* 提升渲染层级 */
+}
+
+.chat-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--card-border);
+}
+.chat-dot { width: 12px; height: 12px; border-radius: 50%; }
+.dot-red { background: #ef4444; }
+.dot-yellow { background: #eab308; }
+.dot-green { background: #22c55e; }
+
+.chat-bubble {
+    padding: 1.2rem 1.5rem;
+    border-radius: 18px;
+    margin-bottom: 1.5rem;
+    max-width: 85%;
+    line-height: 1.6;
+    position: relative;
+    font-size: 1.05rem;
+}
+
+.chat-user {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+}
+
+.chat-ai {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15));
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    color: #e2e8f0;
+    margin-right: auto;
+    border-bottom-left-radius: 4px;
+}
+
+.typing-cursor {
+    display: inline-block;
+    width: 3px;
+    height: 1.2em;
+    background-color: var(--accent-1);
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+    margin-left: 4px;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.stats-grid {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    padding-top: 3rem;
+    border-top: 1px solid var(--card-border);
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-num {
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 0.5rem;
+}
+.stat-num span {
+    font-size: 2rem;
+    color: var(--accent-1);
+}
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+}
+
+.cta-container {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    margin-top: 2rem;
+}
+
+.btn-primary, .btn-secondary {
+    padding: 1rem 2.5rem;
+    border-radius: 50px;
+    font-size: 1.15rem;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: center;
+    transition: background 0.3s, transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+    cursor: none;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
+}
+.btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    border: 1px solid var(--card-border);
+}
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-3px);
+}
+
+/* 响应式调整 */
+@media (max-width: 992px) {
+    .reg-accordion {
+        flex-direction: column;
+        height: auto;
+    }
+    .reg-panel {
+        padding: 1.5rem;
+    }
+    .reg-panel .reg-letter { font-size: 6rem; top: 0; right: 10px; }
+    .snap-section { padding: 6rem 1rem; }
+}
+
+/* 仅利用 opacity 防闪烁，完全解除 CSS 与 GSAP 的空间计算对抗 */
+.gs-reveal, .gs-from-top, .gs-from-bottom {
+    opacity: 0;
+}
+</style>
+
+<!-- 引入库 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.0/vanilla-tilt.min.js"></script>
+
+<!-- 动态背景永远置于底层保持流动 -->
+<div class="gradient-bg">
+    <div class="g-blob g-blob-1"></div>
+    <div class="g-blob g-blob-2"></div>
+    <div class="g-blob g-blob-3"></div>
 </div>
-{% endblock %}
 
-{% block scripts %}
+<div class="custom-cursor" id="customCursor"></div>
+
+<!-- 第一屏：焦点首屏 -->
+<section class="snap-section" id="section-hero">
+    <div class="hero">
+        <div class="domain-tag gs-from-top">创造高校社团新生态</div>
+        <h1 class="gs-from-bottom" style="transition-delay: 0.1s;">智能社团+</h1>
+        <p class="gs-from-bottom" style="transition-delay: 0.2s;">
+            不仅是一个活动系统，更是连接校园生活与热爱的全链路中枢。深度融合大模型语言助手，将招新筛选、兴趣匹配与社团协同治理化繁为简，带来前所未有的「一站式」流畅体验。
+        </p>
+    </div>
+    <div class="scroll-indicator" id="scrollIndicator">
+        <div class="mouse"><div class="wheel"></div></div>
+        <span>向下探索</span>
+    </div>
+</section>
+
+<!-- 第二屏：REG 手风琴重构 -->
+<section class="snap-section" id="section-reg">
+    <div class="reg-container">
+        <h2 class="section-title gs-reveal">重新定义连接基因</h2>
+        <div class="reg-accordion">
+            <div class="reg-panel interactive-hover gs-reveal">
+                <div class="reg-letter">R</div>
+                <div class="reg-title" style="color: var(--accent-1);">Register</div>
+                <div class="reg-content">
+                    <p class="reg-desc"><b>无感流转的极速体验</b><br>打破传统纸质审核与繁杂表单，全新的异步架构重塑所有的报名链路。让每一次热爱都能以最快的速度得到回应。</p>
+                </div>
+            </div>
+            <div class="reg-panel interactive-hover gs-reveal" style="transition-delay: 0.15s;">
+                <div class="reg-letter">E</div>
+                <div class="reg-title" style="color: var(--accent-2);">Empower</div>
+                <div class="reg-content">
+                    <p class="reg-desc"><b>AI 赋能双向奔赴</b><br>让报名从单向选择升维为双向匹配。基于兴趣图谱的大模型对话，只为挖掘并点亮你身上尚未被发现的光芒。</p>
+                </div>
+            </div>
+            <div class="reg-panel interactive-hover gs-reveal" style="transition-delay: 0.3s;">
+                <div class="reg-letter">G</div>
+                <div class="reg-title" style="color: var(--accent-3);">Generate</div>
+                <div class="reg-content">
+                    <p class="reg-desc"><b>全域互联生态新生</b><br>在统一的数据视图屏下，无论是群发通知、可视化面试还是履历沉淀，我们为社团构筑起一个强劲的管理底座。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 第三屏：特色功能 3D 卡片 -->
+<section class="snap-section" id="section-features">
+    <div class="features-container">
+        <h2 class="section-title accent-variant gs-reveal">重构社团运行法则</h2>
+        <div class="cards-container">
+            <div class="feature-card gs-reveal interactive-hover" data-tilt data-tilt-max="12" data-tilt-speed="400" data-tilt-perspective="1000">
+                <span class="icon">🧠</span>
+                <h3>大模型兴趣指引</h3>
+                <p>打破枯燥冗长的社团简介。通过智能自然语言对话，系统将迅速解析你的特长与偏好，为你精准描绘画像并推送最契合的去处。</p>
+            </div>
+            <div class="feature-card gs-reveal interactive-hover" data-tilt data-tilt-max="12" data-tilt-speed="400" data-tilt-perspective="1000" style="transition-delay: 0.1s;">
+                <span class="icon">🔄</span>
+                <h3>一站式沙盘管理</h3>
+                <p>为社长量身打造的管理端。从发起招新、在线面审录取到多端群发通知一应俱全。彻底将散落于接聊群内的 Excel 表格扫进历史。</p>
+            </div>
+            <div class="feature-card gs-reveal interactive-hover" data-tilt data-tilt-max="12" data-tilt-speed="400" data-tilt-perspective="1000" style="transition-delay: 0.2s;">
+                <span class="icon">⚡️</span>
+                <h3>零延迟多端自适应</h3>
+                <p>采用极简克制的前端哲学与异步并发处理架构。热门社团百人同抢也可拥有毫秒级的瞬时响应，无论手机还是电脑都尽享丝滑。</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 第四屏：AI展示与核心数据 -->
+<section class="snap-section" id="section-ai">
+    <div class="ai-stats-container">
+        <div>
+            <h2 class="section-title gs-reveal" style="font-size: 2rem; margin-bottom: 2rem;">像聊天一样，寻找归属</h2>
+            <div class="chat-mockup interactive-hover gs-reveal">
+                <div class="chat-header">
+                    <div class="chat-dot dot-red"></div>
+                    <div class="chat-dot dot-yellow"></div>
+                    <div class="chat-dot dot-green"></div>
+                    <span style="margin-left: 10px; color: var(--text-secondary); font-size: 0.9rem;">智能助手 Reg AI</span>
+                </div>
+                <div class="chat-bubble chat-user gs-reveal">
+                    你好，我平时喜欢摄影，偶尔也写写短篇小说或者是代码，有比较适合我的社团吗？
+                </div>
+                <div class="chat-bubble chat-ai gs-reveal" id="aiResponseBox" style="min-height: 120px; transition-delay: 0.3s;" data-raw="根据你的特长，我为你匹配了以下高优选择：<br><br>• <strong>光影视觉社</strong>：他们正在招募风光摄影及后期干事，这周五有线下扫街局。<br>• <strong>浪潮文学社</strong>：他们的《回音》杂志特约撰稿人岗位非常适合你。<br>• <strong>极客工坊 (Hackers)</strong>：在这里你可以遇到很多有着全栈开发热情的同好！<br><br>需要我帮你一键生成简历并向这三个社团投递意向吗？">
+                    <!-- Typed text goes here -->
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 2rem; width: 100%;">
+            <div class="stats-grid">
+                <div class="stat-item gs-reveal">
+                    <div class="stat-num">AI<span>+</span></div>
+                    <div class="stat-label">深度语义对话匹配</div>
+                </div>
+                <div class="stat-item gs-reveal" style="transition-delay: 0.15s;">
+                    <div class="stat-num">100<span>%</span></div>
+                    <div class="stat-label">招新链路全域线上化</div>
+                </div>
+                <div class="stat-item gs-reveal" style="transition-delay: 0.3s;">
+                    <div class="stat-num">0<span>ms</span></div>
+                    <div class="stat-label">毫秒级无感交互体验</div>
+                </div>
+            </div>
+
+            <!-- 行动呼唤按钮 -->
+            <div class="cta-container gs-reveal" style="transition-delay: 0.4s;">
+                <a href="{{ url_for('auth.register') }}" class="btn-primary interactive-hover">立即注册</a>
+                <a href="mailto:2023051101095@stu.cqnu.edu.cn?subject=%E6%88%90%E4%B8%BA%E7%A4%BE%E9%95%BF%E7%94%B3%E8%AF%B7&body=%E7%A4%BE%E5%9B%A2%E5%90%8D%E7%A7%B0%EF%BC%9A%0D%0A%E7%AE%A1%E7%90%86%E5%91%98%E8%81%94%E7%B3%BB%E6%96%B9%E5%BC%8F%EF%BC%9A%0D%0A%E6%94%AF%E6%92%91%E6%9D%90%E6%96%99%EF%BC%9A" class="btn-secondary interactive-hover">申请成为社长</a>
+            </div>
+        </div>
+    </div>
+</section>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const roleButtons = document.querySelectorAll('.about-role-btn');
-        const roleCards = document.querySelectorAll('.about-role-card');
+document.addEventListener("DOMContentLoaded", () => {
+    // 隐藏/显示 滚轮提示
+    const indicator = document.getElementById("scrollIndicator");
+    window.addEventListener("scroll", () => {
+        if (window.scrollY > 50) {
+            indicator.style.opacity = '0';
+        } else {
+            indicator.style.opacity = '1';
+        }
+    }, { passive: true });
 
-        roleButtons.forEach(button => {
-            button.addEventListener('click', function () {
-                roleButtons.forEach(btn => {
-                    btn.classList.remove('active', 'btn-primary');
-                    btn.classList.add('btn-outline-primary');
-                });
-                this.classList.add('active', 'btn-primary');
-                this.classList.remove('btn-outline-primary');
-
-                const role = this.dataset.role;
-                roleCards.forEach(card => {
-                    const cardRoles = card.dataset.role.split(' ');
-                    const visible = role === 'all' || cardRoles.includes(role);
-                    card.style.display = visible ? '' : 'none';
-                });
-            });
+    // 自定义光标逻辑
+    const cursor = document.getElementById("customCursor");
+    const interactives = document.querySelectorAll("a, button, .interactive-hover, .reg-panel");
+    
+    if (window.matchMedia("(pointer: fine)").matches) {
+        document.addEventListener("mousemove", (e) => {
+            cursor.style.left = e.clientX + "px";
+            cursor.style.top = e.clientY + "px";
         });
-
-        const flowSteps = document.querySelectorAll('.flow-step');
-        const flowStepIndex = document.getElementById('flowStepIndex');
-        const flowTitle = document.getElementById('flowTitle');
-        const flowDesc = document.getElementById('flowDesc');
-        const flowPoints = document.getElementById('flowPoints');
-
-        flowSteps.forEach(step => {
-            step.addEventListener('click', function () {
-                flowSteps.forEach(item => item.classList.remove('active'));
-                this.classList.add('active');
-
-                flowStepIndex.textContent = 'STEP 0' + this.dataset.step;
-                flowTitle.textContent = this.dataset.title;
-                flowDesc.textContent = this.dataset.desc;
-
-                const points = (this.dataset.points || '').split('；').filter(Boolean);
-                flowPoints.innerHTML = points.map(point => `
-                    <div class="col-md-4">
-                        <div class="feature-panel py-3 text-center">${point}</div>
-                    </div>
-                `).join('');
-            });
+        
+        interactives.forEach(el => {
+            el.addEventListener("mouseenter", () => cursor.classList.add("hover"));
+            el.addEventListener("mouseleave", () => cursor.classList.remove("hover"));
         });
+    } else {
+        cursor.style.display = 'none'; 
+    }
 
-        const counters = document.querySelectorAll('.metric-num');
-        const animateCounter = (el) => {
-            const target = parseInt(el.dataset.target || '0', 10);
-            let current = 0;
-            const step = Math.max(1, Math.floor(target / 30));
-            const timer = setInterval(() => {
-                current += step;
-                if (current >= target) {
-                    current = target;
-                    clearInterval(timer);
+    // AI Typewriter effect
+    const typeWriterHTML = (element, htmlStr, speed) => {
+        let i = 0;
+        let text = '';
+        
+        const type = () => {
+            if (i < htmlStr.length) {
+                if (htmlStr.substring(i, i + 1) === '<') {
+                    let tagEnd = htmlStr.indexOf('>', i);
+                    if (tagEnd !== -1) {
+                        text += htmlStr.substring(i, tagEnd + 1);
+                        i = tagEnd + 1;
+                    } else {
+                        text += htmlStr.charAt(i);
+                        i++;
+                    }
+                } else {
+                    text += htmlStr.charAt(i);
+                    i++;
                 }
-                el.textContent = current + '%';
-            }, 20);
+                
+                element.innerHTML = text + '<span class="typing-cursor"></span>';
+                // 再次加速避免滞后感
+                setTimeout(type, speed);
+            } else {
+                element.innerHTML = text + '<span class="typing-cursor" style="animation: none; opacity: 1;"></span>';
+            }
         };
+        setTimeout(type, 100);
+    };
 
-        const observer = new IntersectionObserver((entries, obs) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    animateCounter(entry.target);
-                    obs.unobserve(entry.target);
-                }
-            });
-        }, { threshold: 0.5 });
+    const aiBox = document.getElementById("aiResponseBox");
 
-        counters.forEach(counter => observer.observe(counter));
+    // 卡片鼠标光晕效果
+    document.querySelectorAll(".feature-card").forEach(card => {
+        card.addEventListener("mousemove", (e) => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            card.style.setProperty("--mouse-x", `${x}px`);
+            card.style.setProperty("--mouse-y", `${y}px`);
+        });
     });
+
+    // === 核心动画系统：彻底解决 CSS Transition 与 GSAP 引擎的性能打架现象 ===
+    // 提取我们在HTML上写的 delay，并完全关闭浏览器原生 transition 以免阻碍 GSAP 初始化 
+    document.querySelectorAll(".gs-reveal, .gs-from-bottom, .gs-from-top").forEach((elem) => {
+        if (elem.style.transitionDelay) {
+            elem.dataset.delay = parseFloat(elem.style.transitionDelay); // 转移到 dataset
+            elem.style.transitionDelay = ""; 
+        }
+        elem.style.transition = "none"; // 进场前暂时关闭元素的 CSS Transition，完全杜绝卡顿！
+    });
+
+    // 首屏入场动画统筹
+    let fromTopEl = document.querySelector(".gs-from-top");
+    if(fromTopEl) {
+        gsap.fromTo(fromTopEl, 
+            { opacity: 0, y: -30 }, 
+            { opacity: 1, y: 0, duration: 1.2, ease: "power2.out", onComplete: () => { fromTopEl.style.transition = ""; } }
+        );
+    }
+    
+    document.querySelectorAll(".gs-from-bottom").forEach((elem) => {
+        let delay = parseFloat(elem.dataset.delay) || 0;
+        gsap.fromTo(elem, 
+            { opacity: 0, y: 40 }, 
+            { opacity: 1, y: 0, duration: 1.2, delay: delay, ease: "power2.out", onComplete: () => { elem.style.transition = ""; } }
+        );
+    });
+
+    // 滚动触发显现动画
+    gsap.registerPlugin(ScrollTrigger);
+    
+    document.querySelectorAll(".gs-reveal").forEach((elem) => {
+        let delay = parseFloat(elem.dataset.delay) || 0;
+        
+        gsap.fromTo(elem, 
+            { opacity: 0, y: 40 }, 
+            {
+                duration: 1.2, 
+                opacity: 1, 
+                y: 0, 
+                delay: delay,
+                ease: "power2.out", 
+                onComplete: () => { elem.style.transition = ""; }, // 进场完成后，还给你本来的悬浮特效！
+                scrollTrigger: {
+                    trigger: elem,
+                    start: "top 85%", // 提高触发线，让你稍微看到一点就感觉它飘上来了
+                    toggleActions: "play none none reverse",
+                    onEnter: () => {
+                        if (elem.id === "aiResponseBox" && !elem.dataset.typed) {
+                            elem.dataset.typed = "true";
+                            setTimeout(() => {
+                                // 更加激进的打字回调时间： 5ms，如瀑布倾泻
+                                typeWriterHTML(elem, elem.dataset.raw, 5);
+                            }, 300);
+                        }
+                    }
+                }
+            }
+        );
+    });
+});
 </script>
 {% endblock %}
-
-
