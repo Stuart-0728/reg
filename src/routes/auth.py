@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from src import db
@@ -485,6 +485,54 @@ def logout():
     response.headers['Clear-Site-Data'] = '"cache"'
 
     flash('您已成功登出！', 'success')
+    return response
+
+
+@auth_bp.route('/session-state')
+def session_state():
+    """返回当前会话登录态，用于前端纠正被CDN缓存污染的头部显示。"""
+    role_name = ''
+    display_name = ''
+    dashboard_url = url_for('main.index')
+
+    if current_user.is_authenticated:
+        try:
+            role_name = (current_user.role.name or '').strip().lower() if current_user.role else ''
+        except Exception:
+            role_name = ''
+
+        if role_name == 'admin':
+            dashboard_url = url_for('admin.dashboard')
+            display_name = current_user.username or '管理员'
+        else:
+            dashboard_url = url_for('student.dashboard')
+            display_name = (
+                current_user.student_info.real_name
+                if getattr(current_user, 'student_info', None) and getattr(current_user.student_info, 'real_name', None)
+                else (current_user.username or '用户')
+            )
+
+    response = jsonify({
+        'success': True,
+        'authenticated': bool(current_user.is_authenticated),
+        'role': role_name,
+        'display_name': display_name,
+        'urls': {
+            'login': url_for('auth.login'),
+            'register': url_for('auth.register'),
+            'logout': url_for('auth.logout'),
+            'change_password': url_for('auth.change_password'),
+            'dashboard': dashboard_url,
+            'profile': url_for('student.profile') if role_name == 'student' else dashboard_url,
+            'messages': url_for('admin.messages') if role_name == 'admin' else '',
+        }
+    })
+
+    response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['Surrogate-Control'] = 'no-store'
+    response.headers['Vary'] = 'Cookie, Authorization'
     return response
 
 @auth_bp.route('/profile')

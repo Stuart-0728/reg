@@ -767,9 +767,9 @@
                             <i class="fas fa-search"></i>
                         </button>
                     </form>
-                    <ul class="navbar-nav">
+                    <ul class="navbar-nav" id="authNavRight">
                         {% if current_user.is_authenticated %}
-                            <li class="nav-item dropdown">
+                            <li class="nav-item dropdown" id="auth-nav-logged-in">
                                 <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
                                     <i class="fas fa-user-circle me-1"></i>
                                     {% if current_user.role.name|lower == 'student' and current_user.student_info %}
@@ -791,10 +791,10 @@
                                 </ul>
                             </li>
                         {% else %}
-                            <li class="nav-item">
+                            <li class="nav-item" id="auth-nav-logged-out-login">
                                 <a class="nav-link" href="{{ url_for('auth.login') }}">登录</a>
                             </li>
-                            <li class="nav-item">
+                            <li class="nav-item" id="auth-nav-logged-out-register">
                                 <a class="nav-link" href="{{ url_for('auth.register') }}">注册</a>
                             </li>
                         {% endif %}
@@ -844,7 +844,7 @@
             <div class="row g-4">
                 <div class="col-lg-5 col-md-12">
                     <h5 class="footer-title">重庆师范大学智能社团+</h5>
-                    <p class="footer-desc">致力于提升师范生专业素养与教学能力，打造校园智能化实践与科普交流平台。</p>
+                    <p class="footer-desc">致力于提升社团运行效率，打造校园智能化实践交流平台。</p>
                 </div>
                 <div class="col-lg-3 col-md-6">
                     <h5 class="footer-title">快速链接</h5>
@@ -898,6 +898,74 @@
     <script src="{{ url_for('static', filename='js/main.js', v='20260311d') }}"></script>
     <!-- AI Chat JS -->
     <script src="{{ url_for('static', filename='js/ai_chat.js', v='20260311d') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function () {
+            const authNav = document.getElementById('authNavRight');
+            if (!authNav) return;
+
+            const bodyEl = document.body;
+            const hintedAuth = (bodyEl.dataset.userLoggedIn || '').toLowerCase() === 'true';
+
+            try {
+                const resp = await fetch(`{{ url_for('auth.session_state') }}?_t=${Date.now()}`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
+                });
+                if (!resp.ok) return;
+
+                const data = await resp.json();
+                if (!data || !data.success) return;
+
+                if (!!data.authenticated === hintedAuth) {
+                    return;
+                }
+
+                if (data.authenticated) {
+                    const role = (data.role || '').toLowerCase();
+                    const displayName = data.display_name || '用户';
+                    const profileLabel = role === 'admin' ? '管理面板' : '个人资料';
+                    const profileUrl = role === 'admin' ? data.urls.dashboard : data.urls.profile;
+                    const extraItem = role === 'admin' && data.urls.messages
+                        ? `<li><a class="dropdown-item" href="${data.urls.messages}">站内信</a></li>`
+                        : '';
+
+                    authNav.innerHTML = `
+                        <li class="nav-item dropdown" id="auth-nav-logged-in">
+                            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-user-circle me-1"></i>${displayName}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="${profileUrl}">${profileLabel}</a></li>
+                                ${extraItem}
+                                <li><a class="dropdown-item" href="${data.urls.change_password}">修改密码</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="${data.urls.logout}">退出登录</a></li>
+                            </ul>
+                        </li>
+                    `;
+                } else {
+                    authNav.innerHTML = `
+                        <li class="nav-item" id="auth-nav-logged-out-login">
+                            <a class="nav-link" href="${data.urls.login}">登录</a>
+                        </li>
+                        <li class="nav-item" id="auth-nav-logged-out-register">
+                            <a class="nav-link" href="${data.urls.register}">注册</a>
+                        </li>
+                    `;
+                }
+
+                bodyEl.dataset.userLoggedIn = data.authenticated ? 'true' : 'false';
+                bodyEl.dataset.userRole = data.role || '';
+            } catch (_) {
+                // 网络异常时保留服务端渲染结果
+            }
+        });
+    </script>
     {% block scripts %}{% endblock %}
 
     <button class="ai-chat-button" id="aiChatToggleBtn">
