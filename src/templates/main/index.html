@@ -61,6 +61,7 @@
         background: linear-gradient(135deg, rgba(10, 10, 12, 0.96), rgba(18, 20, 28, 0.96));
         box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
         color: #fff;
+        transition: transform 0.32s ease, box-shadow 0.32s ease, border-color 0.32s ease;
     }
     .about-portal-card::before,
     .about-portal-card::after {
@@ -70,6 +71,7 @@
         filter: blur(36px);
         opacity: 0.45;
         pointer-events: none;
+        transition: transform 0.45s ease, opacity 0.45s ease;
     }
     .about-portal-card::before {
         width: 240px;
@@ -109,6 +111,7 @@
         background: linear-gradient(135deg, #ffffff, #c7d2fe);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        transition: transform 0.32s ease, filter 0.32s ease;
     }
     .about-portal-text {
         color: #cbd5e1;
@@ -129,6 +132,23 @@
         color: #fff;
         transform: translateY(-2px);
         box-shadow: 0 12px 24px rgba(59, 130, 246, 0.28);
+    }
+    .about-portal-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(129, 140, 248, 0.4);
+        box-shadow: 0 24px 42px rgba(0, 0, 0, 0.32);
+    }
+    .about-portal-card:hover::before {
+        transform: translate(10px, 8px) scale(1.05);
+        opacity: 0.58;
+    }
+    .about-portal-card:hover::after {
+        transform: translate(-10px, -8px) scale(1.05);
+        opacity: 0.55;
+    }
+    .about-portal-card:hover .about-portal-title {
+        transform: translateY(-1px);
+        filter: drop-shadow(0 0 12px rgba(129, 140, 248, 0.25));
     }
     </style>
     <div class="row mb-4 g-4">
@@ -202,7 +222,7 @@
     <div class="row">
         <div class="col-md-12">
             <h3 class="fw-bold text-center" style="margin-top: 3rem; margin-bottom: 2rem; color: #111827; letter-spacing: 0.5px;">活动预告</h3>
-            <div class="row row-cols-1 row-cols-md-3 g-4 mb-4 text-start">
+            <div id="home-activity-grid" class="row row-cols-1 row-cols-md-3 g-4 mb-4 text-start">
                 {% for activity in popular_activities %}
                     <div class="col">
                         <div class="card h-100 activity-card shadow-sm border border-1" style="border-radius: 12px; overflow: hidden; border-color: rgba(0,0,0,0.05) !important; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onclick="window.location.href='{{ url_for('student.activity_detail', id=activity.id) }}'">
@@ -268,4 +288,92 @@
                         
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const grid = document.getElementById('home-activity-grid');
+    if (!grid) return;
+
+    const escapeHtml = (text) => {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+
+    const renderActivities = (activities) => {
+        if (!activities || activities.length === 0) {
+            grid.innerHTML = `
+                <div class="col-12 py-5">
+                    <div class="alert alert-info border-0 shadow-sm text-center" style="border-radius: 12px;">
+                        暂无活动预告
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        grid.innerHTML = activities.map((activity) => {
+            const title = escapeHtml(activity.title);
+            const description = escapeHtml(activity.description);
+            const location = escapeHtml(activity.location);
+            const categoryName = escapeHtml(activity.category_name);
+            const startTimeText = escapeHtml(activity.start_time_text);
+            const detailUrl = escapeHtml(activity.detail_url);
+            const posterUrl = escapeHtml(activity.poster_url);
+
+            return `
+                <div class="col">
+                    <div class="card h-100 activity-card shadow-sm border border-1" style="border-radius: 12px; overflow: hidden; border-color: rgba(0,0,0,0.05) !important; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onclick="window.location.href='${detailUrl}'">
+                        <div class="position-relative w-100" style="height: 200px; background-color: #f3f4f6; border-top-left-radius: 12px; border-top-right-radius: 12px; overflow: hidden;">
+                            <img src="${posterUrl}" class="w-100 h-100" style="object-fit: cover;" alt="${title}">
+                            ${categoryName ? `<span class="badge bg-primary position-absolute top-0 start-0 m-3">${categoryName}</span>` : ''}
+                        </div>
+                        <div class="card-body bg-white py-4 px-3 d-flex flex-column">
+                            <h5 class="card-title fw-bold text-dark mb-3" style="font-size: 1.15rem; line-height: 1.4;">${title}</h5>
+                            <div class="d-flex align-items-center mb-3" style="font-size: 0.85rem;">
+                                <span class="me-3 fw-normal" style="color:#10b981;">进行中</span>
+                                <div class="d-flex align-items-center fw-normal" style="color:#111827;">
+                                    <i class="far fa-calendar me-2" style="color:#111827; font-weight: 500;"></i>
+                                    ${startTimeText}
+                                </div>
+                            </div>
+                            <p class="card-text text-secondary mt-1 mb-4" style="font-size: 0.9rem; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex-grow: 1;">
+                                ${description}
+                            </p>
+                            <div class="mt-auto" style="font-size: 0.85rem; color: #111827;">
+                                <i class="fas fa-map-marker-alt me-2" style="color:#111827;"></i> ${location}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    };
+
+    try {
+        const apiUrl = `{{ url_for('main.home_activities_api') }}?_t=${Date.now()}`;
+        const resp = await fetch(apiUrl, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data && data.success) {
+            renderActivities(data.activities || []);
+        }
+    } catch (e) {
+        console.warn('首页活动实时刷新失败，保留服务端渲染内容。', e);
+    }
+});
+</script>
 {% endblock %}

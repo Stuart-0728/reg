@@ -115,6 +115,68 @@ def index():
                               now=datetime.now(pytz.timezone('Asia/Shanghai')),
                               display_datetime=display_datetime)
 
+
+@main_bp.route('/api/home-activities')
+def home_activities_api():
+    """首页活动预告实时接口：每次加载都应获取最新活动。"""
+    try:
+        active_activities = db.session.execute(
+            db.select(Activity).filter(
+                Activity.status == 'active'
+            ).order_by(
+                Activity.created_at.desc()
+            ).limit(12)
+        ).scalars().all()
+
+        activities = []
+        for activity in active_activities:
+            poster_url = url_for('main.poster_image', activity_id=activity.id)
+
+            poster_name = (getattr(activity, 'poster_image', None) or '').strip()
+            if poster_name:
+                # 优先静态路径，便于 EdgeOne/CDN 加速与缓存
+                poster_file = os.path.join(current_app.static_folder or '', 'uploads', 'posters', poster_name)
+                if os.path.exists(poster_file):
+                    poster_url = url_for('static', filename=f'uploads/posters/{poster_name}')
+            else:
+                poster_url = url_for('static', filename='img/landscape.jpg')
+
+            # 为图片URL增加版本号，避免CDN长缓存导致更新后仍命中旧图
+            version_dt = getattr(activity, 'updated_at', None) or getattr(activity, 'created_at', None)
+            if version_dt:
+                try:
+                    poster_version = int(version_dt.timestamp())
+                except Exception:
+                    poster_version = int(time.time())
+            else:
+                poster_version = int(time.time())
+
+            poster_url = f"{poster_url}?v={poster_version}"
+
+            activities.append({
+                'id': activity.id,
+                'title': activity.title or '',
+                'description': (activity.description or ''),
+                'location': activity.location or '',
+                'start_time_text': display_datetime(activity.start_time, None, '%m月%d日 %H:%M') if activity.start_time else '',
+                'category_name': activity.category.name if getattr(activity, 'category', None) else '',
+                'detail_url': url_for('student.activity_detail', id=activity.id),
+                'poster_url': poster_url,
+            })
+
+        response = jsonify({'success': True, 'activities': activities})
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Surrogate-Control'] = 'no-store'
+        return response
+    except Exception as e:
+        logger.error(f"首页活动实时接口失败: {e}", exc_info=True)
+        response = jsonify({'success': False, 'activities': []})
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+        response.headers['Surrogate-Control'] = 'no-store'
+        return response, 500
+
 # 辅助函数：处理活动海报
 def process_activity_poster(activity, static_folder):
     """处理活动海报，确保使用最新的海报文件
