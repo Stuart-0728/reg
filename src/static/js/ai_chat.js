@@ -41,20 +41,85 @@ const ASSOCIATION_INFO = {
     disclaimer: '本助手基于人工智能技术，回答可能并非完全准确，如有疑问请联系管理员'
 };
 
-// 在文件开头添加marked库的动态加载
-function loadMarkedLibrary() {
+// Marked 库动态加载（多CDN + 超时 + 本地降级）
+function buildFallbackMarked() {
+    return {
+        parse: function (input) {
+            const text = String(input || '');
+            const escaped = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+            return escaped
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+    };
+}
+
+function loadScriptWithTimeout(src, timeoutMs = 5000) {
     return new Promise((resolve, reject) => {
-        // 检查是否已加载
-        if (window.marked) {
+        const script = document.createElement('script');
+        let done = false;
+
+        const timer = setTimeout(() => {
+            if (done) return;
+            done = true;
+            script.remove();
+            reject(new Error(`Timeout loading script: ${src}`));
+        }, timeoutMs);
+
+        script.src = src;
+        script.async = true;
+        script.onload = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve();
+        };
+        script.onerror = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            reject(new Error(`Failed loading script: ${src}`));
+        };
+
+        document.head.appendChild(script);
+    });
+}
+
+function loadMarkedLibrary() {
+    return new Promise(async (resolve) => {
+        if (window.marked && typeof window.marked.parse === 'function') {
             resolve(window.marked);
             return;
         }
-        
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
-        script.onload = () => resolve(window.marked);
-        script.onerror = () => reject(new Error('Failed to load Marked library'));
-        document.head.appendChild(script);
+
+        const sources = [
+            'https://cdn.bootcdn.net/ajax/libs/marked/12.0.2/marked.min.js',
+            'https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/marked/12.0.2/marked.min.js',
+            'https://cdn.jsdelivr.net/npm/marked/marked.min.js'
+        ];
+
+        for (const src of sources) {
+            try {
+                await loadScriptWithTimeout(src, 5000);
+                if (window.marked && typeof window.marked.parse === 'function') {
+                    resolve(window.marked);
+                    return;
+                }
+            } catch (_) {
+                // 尝试下一个源
+            }
+        }
+
+        const fallback = buildFallbackMarked();
+        window.marked = fallback;
+        resolve(fallback);
     });
 }
 
