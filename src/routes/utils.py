@@ -780,14 +780,19 @@ def utils_ai_chat_clear_history():
         logger.info(f"收到清除历史请求: 用户ID={current_user.id}, Headers={dict(request.headers)}")
         logger.info(f"CSRF Token from headers: {request.headers.get('X-CSRFToken')}")
         logger.info(f"CSRF Token from form: {request.form.get('csrf_token')}")
-        
-        # 获取请求数据 - 同时支持JSON和表单数据
-        if request.is_json:
+
+        # 获取请求数据 - 同时兼容JSON、表单、查询参数
+        data = {}
+        try:
             data = request.get_json(silent=True) or {}
-            session_id = data.get('session_id')
-        else:
-            # 从表单数据中获取
-            session_id = request.form.get('session_id')
+        except Exception as parse_error:
+            logger.warning(f"clear_history JSON解析失败，自动回退表单解析: {parse_error}")
+
+        session_id = (
+            (data.get('session_id') if isinstance(data, dict) else None)
+            or request.form.get('session_id')
+            or request.args.get('session_id')
+        )
         
         # 记录会话ID
         logger.info(f"准备清除用户 {current_user.id} 的所有聊天历史, 会话ID: {session_id}")

@@ -903,18 +903,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelector('.clear-history-btn').disabled = true;
             }
             
-            // 发送清除所有历史的请求到后端
+            // 发送清除所有历史的请求到后端（使用表单编码，避免部分代理对JSON请求体处理异常）
+            const payload = new URLSearchParams();
+            payload.set('csrf_token', csrfToken);
+            payload.set('session_id', chatSession.sessionId || '');
+
             fetch('/utils/ai_chat/clear_history', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'Accept': 'application/json',
                     'X-CSRFToken': csrfToken,
                     'X-CSRF-Token': csrfToken
                 },
-                body: JSON.stringify({
-                    csrf_token: csrfToken,
-                    session_id: chatSession.sessionId
-                }),
+                body: payload.toString(),
                 credentials: 'same-origin' // 确保包含Cookie
             })
             .then(response => {
