@@ -495,7 +495,8 @@ def ai_generate_activity_poster():
             image_url = _generate_poster_via_ark(prompt, model_name)
             image_data_url = ''
             try:
-                image_data_url = _convert_image_url_to_data_url(image_url, timeout=45)
+                # 控制总接口时长，避免代理层长时间等待触发524。
+                image_data_url = _convert_image_url_to_data_url(image_url, timeout=12)
             except Exception as convert_error:
                 logger.warning(f"AI海报外链转dataURL失败，前端将回退外链预览: {convert_error}")
 

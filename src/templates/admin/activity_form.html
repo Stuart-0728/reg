@@ -325,15 +325,32 @@
   document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = '{{ csrf_token() }}';
 
-    async function postJson(url, payload) {
-      const response = await fetch(url, {
+    async function postJson(url, payload, options = {}) {
+      const timeoutMs = Number(options.timeoutMs || 0);
+      const controller = timeoutMs > 0 ? new AbortController() : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+      let response;
+      try {
+        response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRFToken': csrfToken
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller ? controller.signal : undefined
       });
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          throw new Error('请求超时，请稍后重试');
+        }
+        throw error;
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+
       let data = {};
       try {
         data = await response.json();
@@ -341,7 +358,10 @@
         data = {};
       }
       if (!response.ok || !data.success) {
-        throw new Error(data.message || '请求失败');
+        if (response.status === 524) {
+          throw new Error('AI生成超时（524），请稍后重试');
+        }
+        throw new Error(data.message || `请求失败（${response.status}）`);
       }
       return data;
     }
@@ -382,6 +402,47 @@
     const aiRawContent = document.getElementById('aiRawContent');
     const aiPosterRequirements = document.getElementById('aiPosterRequirements');
     const aiPosterModel = document.getElementById('aiPosterModel');
+    const buttonSnapshots = new Map();
+
+    function registerButtonSnapshot(btn) {
+      if (!btn || buttonSnapshots.has(btn.id)) {
+        return;
+      }
+      buttonSnapshots.set(btn.id, btn.innerHTML);
+    }
+
+    registerButtonSnapshot(aiGenerateDescBtn);
+    registerButtonSnapshot(aiParseContentBtn);
+    registerButtonSnapshot(aiGeneratePosterBtn);
+
+    function setButtonLoading(btn, text) {
+      if (!btn) {
+        return;
+      }
+      registerButtonSnapshot(btn);
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i>${text}`;
+    }
+
+    function resetButtonState(btn) {
+      if (!btn) {
+        return;
+      }
+      btn.disabled = false;
+      const original = buttonSnapshots.get(btn.id);
+      if (original) {
+        btn.innerHTML = original;
+      }
+    }
+
+    function resetAllActionButtons() {
+      resetButtonState(aiGenerateDescBtn);
+      resetButtonState(aiParseContentBtn);
+      resetButtonState(aiGeneratePosterBtn);
+    }
+
+    // 如果页面从缓存中恢复，强制重置所有AI按钮，避免停留在“加载中”。
+    window.addEventListener('pageshow', resetAllActionButtons);
 
     async function loadPosterModels() {
       if (!aiPosterModel) {
@@ -449,9 +510,7 @@
           alert('请先输入活动标题');
           return;
         }
-        const originalText = aiGenerateDescBtn.innerHTML;
-        aiGenerateDescBtn.disabled = true;
-        aiGenerateDescBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+        setButtonLoading(aiGenerateDescBtn, '生成中...');
         try {
           const data = await postJson('{{ url_for("admin.ai_generate_activity_description") }}', { title });
           descriptionInput.value = data.description || '';
@@ -461,8 +520,7 @@
         } catch (error) {
           alert(error.message || 'AI生成失败');
         } finally {
-          aiGenerateDescBtn.disabled = false;
-          aiGenerateDescBtn.innerHTML = originalText;
+          resetButtonState(aiGenerateDescBtn);
         }
       });
     }
@@ -474,9 +532,7 @@
           alert('请先粘贴活动内容');
           return;
         }
-        const originalText = aiParseContentBtn.innerHTML;
-        aiParseContentBtn.disabled = true;
-        aiParseContentBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>解析中...';
+        setButtonLoading(aiParseContentBtn, '解析中...');
         try {
           const data = await postJson('{{ url_for("admin.ai_parse_activity_content") }}', { content });
           const parsed = data.data || {};
@@ -497,8 +553,7 @@
         } catch (error) {
           alert(error.message || 'AI解析失败');
         } finally {
-          aiParseContentBtn.disabled = false;
-          aiParseContentBtn.innerHTML = originalText;
+          resetButtonState(aiParseContentBtn);
         }
       });
     }
@@ -510,16 +565,14 @@
           alert('请先输入活动标题，再生成海报');
           return;
         }
-        const originalText = aiGeneratePosterBtn.innerHTML;
-        aiGeneratePosterBtn.disabled = true;
-        aiGeneratePosterBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+        setButtonLoading(aiGeneratePosterBtn, '生成中...');
         try {
           const data = await postJson('{{ url_for("admin.ai_generate_activity_poster") }}', {
             title,
             description: descriptionInput?.value || '',
             requirements: aiPosterRequirements?.value || '',
             model: aiPosterModel?.value || 'ark:doubao-seedream-5-0-260128'
-          });
+          }, { timeoutMs: 70000 });
 
           const imageUrl = data.image_url || '';
           const imageDataUrl = data.image_data_url || '';
@@ -559,8 +612,7 @@
         } catch (error) {
           alert(error.message || 'AI海报生成失败');
         } finally {
-          aiGeneratePosterBtn.disabled = false;
-          aiGeneratePosterBtn.innerHTML = originalText;
+          resetButtonState(aiGeneratePosterBtn);
         }
       });
     }
