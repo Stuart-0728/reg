@@ -8,6 +8,8 @@ import hashlib
 import json
 import re
 import io
+import threading
+import uuid
 from io import BytesIO  # 添加BytesIO导入
 import csv
 import qrcode
@@ -310,19 +312,165 @@ def _build_share_poster_image(activity, detail_url):
 
     return final_image
 
-def _generate_poster_via_ark(prompt, model_name):
+AI_POSTER_JOB_TTL_SECONDS = 30 * 60
+
+
+def _poster_quality_profile(quality):
+    level = (quality or 'high').strip().lower()
+    profiles = {
+        'balanced': {
+            'size': '1024x1024',
+            'guidance_scale': 3,
+            'timeout': (8, 35),
+            'label': '标准'
+        },
+        'high': {
+            'size': '2K',
+            'guidance_scale': 4,
+            'timeout': (8, 70),
+            'label': '高清'
+        },
+        'ultra': {
+            'size': '2K',
+            'guidance_scale': 5,
+            'timeout': (8, 85),
+            'label': '高细节'
+        }
+    }
+    return profiles.get(level, profiles['high']), (level if level in profiles else 'high')
+
+
+def _poster_job_dir(app):
+    base_dir = app.config.get('INSTANCE_PATH') or app.instance_path or tempfile.gettempdir()
+    job_dir = os.path.join(base_dir, 'ai_poster_jobs')
+    os.makedirs(job_dir, exist_ok=True)
+    return job_dir
+
+
+def _poster_job_path(app, job_id):
+    safe_job_id = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id or ''))
+    if not safe_job_id:
+        raise ValueError('无效任务ID')
+    return os.path.join(_poster_job_dir(app), f'{safe_job_id}.json')
+
+
+def _write_poster_job(app, job_id, payload):
+    file_path = _poster_job_path(app, job_id)
+    temp_path = f'{file_path}.tmp'
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False)
+    os.replace(temp_path, file_path)
+
+
+def _read_poster_job(app, job_id):
+    file_path = _poster_job_path(app, job_id)
+    if not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _cleanup_expired_poster_jobs(app):
+    job_dir = _poster_job_dir(app)
+    now_ts = datetime.utcnow().timestamp()
+    for filename in os.listdir(job_dir):
+        if not filename.endswith('.json'):
+            continue
+        path = os.path.join(job_dir, filename)
+        try:
+            if now_ts - os.path.getmtime(path) > AI_POSTER_JOB_TTL_SECONDS:
+                os.remove(path)
+        except Exception:
+            continue
+
+
+def _run_async_poster_job(app, job_id, payload):
+    with app.app_context():
+        try:
+            current_payload = _read_poster_job(app, job_id) or {}
+            current_payload.update({
+                'status': 'running',
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            })
+            _write_poster_job(app, job_id, current_payload)
+
+            title = (payload.get('title') or '').strip()
+            description = (payload.get('description') or '').strip()
+            requirements = (payload.get('requirements') or '').strip()
+            model_value = (payload.get('model') or 'ark:doubao-seedream-5-0-260128').strip()
+            quality = (payload.get('quality') or 'high').strip().lower()
+
+            prompt = (
+                f"高校活动海报，主题：{title}。"
+                f"活动简介：{description[:220]}。"
+                "视觉要求：现代、青春、清晰排版、主体突出、适合校园宣传。"
+            )
+            if requirements:
+                prompt += f" 额外要求：{requirements}。"
+
+            provider, _, model_name = model_value.partition(':')
+            provider = provider.strip().lower()
+            model_name = model_name.strip()
+            if provider != 'ark' or not model_name:
+                raise ValueError('暂不支持该图片模型提供商')
+
+            profile, normalized_quality = _poster_quality_profile(quality)
+            image_url = _generate_poster_via_ark(prompt, model_name, normalized_quality)
+
+            image_data_url = ''
+            try:
+                data_timeout = 18 if normalized_quality in ('high', 'ultra') else 12
+                image_data_url = _convert_image_url_to_data_url(image_url, timeout=data_timeout)
+            except Exception as convert_error:
+                logger.warning(f"异步海报任务转dataURL失败，将回退外链预览: {convert_error}")
+
+            done_payload = {
+                'job_id': job_id,
+                'status': 'success',
+                'success': True,
+                'done': True,
+                'image_url': image_url,
+                'image_data_url': image_data_url,
+                'prompt': prompt,
+                'model': model_value,
+                'model_used': model_value,
+                'quality': normalized_quality,
+                'quality_label': profile.get('label', ''),
+                'fallback': bool(not image_data_url and image_url),
+                'message': 'AI海报已生成' + ('（已本地化预览）' if image_data_url else '（外链预览）'),
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            }
+            _write_poster_job(app, job_id, done_payload)
+        except Exception as e:
+            logger.error(f"异步海报任务失败 job_id={job_id}: {e}")
+            fail_message = 'AI生图超时，请稍后重试' if isinstance(e, requests.exceptions.Timeout) else f'生成海报失败: {str(e)}'
+            _write_poster_job(app, job_id, {
+                'job_id': job_id,
+                'status': 'failed',
+                'success': False,
+                'done': True,
+                'message': fail_message,
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            })
+
+
+def _generate_poster_via_ark(prompt, model_name, quality='high'):
     api_key = os.environ.get("ARK_API_KEY") or current_app.config.get('VOLCANO_API_KEY')
     if not api_key:
         raise ValueError('未配置ARK_API_KEY，无法生成海报')
 
+    profile, normalized_quality = _poster_quality_profile(quality)
     image_api = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
     image_payload = {
         "model": model_name,
         "prompt": prompt,
         "sequential_image_generation": "disabled",
         "response_format": "url",
-        "size": "1024x1024",
-        "guidance_scale": 3,
+        "size": profile['size'],
+        "guidance_scale": profile['guidance_scale'],
         "stream": False,
         "watermark": True
     }
@@ -331,8 +479,7 @@ def _generate_poster_via_ark(prompt, model_name):
         "Authorization": f"Bearer {api_key}"
     }
 
-    # 收紧上游等待时长，优先返回可控错误，避免被代理层判定为524。
-    response = requests.post(image_api, headers=headers, json=image_payload, timeout=(8, 40))
+    response = requests.post(image_api, headers=headers, json=image_payload, timeout=profile['timeout'])
     response.raise_for_status()
     result = response.json()
     data_list = result.get('data') or []
@@ -474,6 +621,7 @@ def ai_generate_activity_poster():
         description = (payload.get('description') or '').strip()
         requirements = (payload.get('requirements') or '').strip()
         model_value = (payload.get('model') or 'ark:doubao-seedream-5-0-260128').strip()
+        quality = (payload.get('quality') or 'high').strip().lower()
 
         if not title:
             return jsonify({'success': False, 'message': '请先输入活动标题'}), 400
@@ -494,11 +642,11 @@ def ai_generate_activity_poster():
             return jsonify({'success': False, 'message': '模型参数无效'}), 400
 
         if provider == 'ark':
-            image_url = _generate_poster_via_ark(prompt, model_name)
+            image_url = _generate_poster_via_ark(prompt, model_name, quality)
             image_data_url = ''
             try:
                 # 控制总接口时长，避免代理层长时间等待触发524。
-                image_data_url = _convert_image_url_to_data_url(image_url, timeout=12)
+                image_data_url = _convert_image_url_to_data_url(image_url, timeout=18 if quality in ('high', 'ultra') else 12)
             except Exception as convert_error:
                 logger.warning(f"AI海报外链转dataURL失败，前端将回退外链预览: {convert_error}")
 
@@ -509,6 +657,7 @@ def ai_generate_activity_poster():
                 'prompt': prompt,
                 'model': model_value,
                 'model_used': model_value,
+                'quality': quality,
                 'message': 'AI海报已生成' + ('（已本地化预览）' if image_data_url else '')
             })
         else:
@@ -518,6 +667,85 @@ def ai_generate_activity_poster():
         if isinstance(e, requests.exceptions.Timeout):
             return jsonify({'success': False, 'message': 'AI生图超时，请稍后重试'}), 504
         return jsonify({'success': False, 'message': f'生成海报失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/activity/ai/generate-poster-async', methods=['POST'])
+@admin_required
+def ai_generate_activity_poster_async():
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        payload = request.get_json(silent=True) or {}
+        title = (payload.get('title') or '').strip()
+        if not title:
+            return jsonify({'success': False, 'message': '请先输入活动标题'}), 400
+
+        app = current_app._get_current_object()
+        _cleanup_expired_poster_jobs(app)
+
+        job_id = uuid.uuid4().hex
+        _write_poster_job(app, job_id, {
+            'job_id': job_id,
+            'status': 'pending',
+            'success': True,
+            'done': False,
+            'message': '任务已创建，正在排队生成',
+            'created_at': datetime.utcnow().isoformat() + 'Z',
+            'updated_at': datetime.utcnow().isoformat() + 'Z'
+        })
+
+        worker = threading.Thread(
+            target=_run_async_poster_job,
+            args=(app, job_id, payload),
+            daemon=True
+        )
+        worker.start()
+
+        return jsonify({
+            'success': True,
+            'job_id': job_id,
+            'message': '已提交海报生成任务'
+        })
+    except Exception as e:
+        logger.error(f"创建异步海报任务失败: {e}")
+        return jsonify({'success': False, 'message': f'提交任务失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/activity/ai/generate-poster-async/<job_id>', methods=['GET'])
+@admin_required
+def ai_generate_activity_poster_async_status(job_id):
+    try:
+        app = current_app._get_current_object()
+        _cleanup_expired_poster_jobs(app)
+
+        if not re.fullmatch(r'[A-Za-z0-9_-]{8,64}', str(job_id or '')):
+            return jsonify({'success': False, 'message': '任务ID无效'}), 400
+
+        data = _read_poster_job(app, job_id)
+        if not data:
+            return jsonify({'success': False, 'message': '任务不存在或已过期'}), 404
+
+        # running/pending 也返回 success=True，前端据 done 字段判断是否完成
+        if not data.get('done'):
+            return jsonify({
+                'success': True,
+                'done': False,
+                'job_id': job_id,
+                'status': data.get('status', 'pending'),
+                'message': data.get('message', '任务进行中')
+            })
+
+        if data.get('success'):
+            return jsonify(data)
+        return jsonify({
+            'success': False,
+            'done': True,
+            'job_id': job_id,
+            'status': data.get('status', 'failed'),
+            'message': data.get('message', '任务失败')
+        }), 200
+    except Exception as e:
+        logger.error(f"查询异步海报任务失败: {e}")
+        return jsonify({'success': False, 'message': f'查询任务失败: {str(e)}'}), 500
 
 @admin_bp.route('/activity/<int:id>/share-poster')
 @admin_required

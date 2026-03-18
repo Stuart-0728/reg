@@ -230,13 +230,21 @@
                     <option value="ark:doubao-seedream-4-0-250828">火山方舟 · doubao-seedream-4-0-250828（￥0.20/张）</option>
                   </select>
                 </div>
+                <div class="mb-2">
+                  <label for="aiPosterQuality" class="form-label mb-1">画质档位</label>
+                  <select class="form-select" id="aiPosterQuality">
+                    <option value="balanced">标准（更快，约1024）</option>
+                    <option value="high" selected>高清（更清晰，默认）</option>
+                    <option value="ultra">高细节（最慢）</option>
+                  </select>
+                </div>
                 <div class="input-group">
                   <input type="text" class="form-control" id="aiPosterRequirements" placeholder="如：蓝紫科技风、加入志愿服务元素、简洁留白构图">
                   <button type="button" class="btn btn-outline-primary" id="aiGeneratePosterBtn">
                     <i class="fas fa-image me-1"></i>AI生成海报
                   </button>
                 </div>
-                <small class="form-text text-muted">支持一键生成；你也可以继续手动上传海报，手动上传优先。</small>
+                <small class="form-text text-muted">已启用异步生成：高画质也不会阻塞页面。你也可以继续手动上传海报，手动上传优先。</small>
               </div>
               
               <!-- 海报预览区域 -->
@@ -402,7 +410,53 @@
     const aiRawContent = document.getElementById('aiRawContent');
     const aiPosterRequirements = document.getElementById('aiPosterRequirements');
     const aiPosterModel = document.getElementById('aiPosterModel');
+    const aiPosterQuality = document.getElementById('aiPosterQuality');
     const buttonSnapshots = new Map();
+    const posterJobStatusUrlTemplate = '{{ url_for("admin.ai_generate_activity_poster_async_status", job_id="__JOB_ID__") }}';
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function pollPosterJob(jobId, maxAttempts = 90, intervalMs = 1500) {
+      for (let i = 0; i < maxAttempts; i += 1) {
+        await sleep(intervalMs);
+        const statusUrl = posterJobStatusUrlTemplate.replace('__JOB_ID__', encodeURIComponent(jobId));
+        let response;
+        try {
+          response = await fetch(statusUrl, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+        } catch (e) {
+          continue;
+        }
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (e) {
+          data = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(data.message || `查询任务失败（${response.status}）`);
+        }
+        if (!data.done) {
+          continue;
+        }
+        if (!data.success) {
+          throw new Error(data.message || 'AI海报生成失败');
+        }
+        return data;
+      }
+      throw new Error('AI生成耗时较长，请稍后重试');
+    }
 
     function registerButtonSnapshot(btn) {
       if (!btn || buttonSnapshots.has(btn.id)) {
@@ -565,14 +619,22 @@
           alert('请先输入活动标题，再生成海报');
           return;
         }
-        setButtonLoading(aiGeneratePosterBtn, '生成中...');
+        setButtonLoading(aiGeneratePosterBtn, '提交任务...');
         try {
-          const data = await postJson('{{ url_for("admin.ai_generate_activity_poster") }}', {
+          const jobData = await postJson('{{ url_for("admin.ai_generate_activity_poster_async") }}', {
             title,
             description: descriptionInput?.value || '',
             requirements: aiPosterRequirements?.value || '',
-            model: aiPosterModel?.value || 'ark:doubao-seedream-5-0-260128'
-          }, { timeoutMs: 70000 });
+            model: aiPosterModel?.value || 'ark:doubao-seedream-5-0-260128',
+            quality: aiPosterQuality?.value || 'high'
+          }, { timeoutMs: 12000 });
+
+          if (!jobData.job_id) {
+            throw new Error('任务创建失败，请稍后重试');
+          }
+
+          setButtonLoading(aiGeneratePosterBtn, '生成中（异步）...');
+          const data = await pollPosterJob(jobData.job_id);
 
           const imageUrl = data.image_url || '';
           const imageDataUrl = data.image_data_url || '';
@@ -598,10 +660,12 @@
           }
           if (aiPosterPromptHint) {
             const modelUsedText = data.model_used ? `模型：${data.model_used}` : '';
+            const qualityText = data.quality_label ? `画质：${data.quality_label}` : '';
             const fallbackText = data.fallback ? '（已自动回退）' : '';
             const promptText = data.prompt ? `\nAI提示词：${data.prompt}` : '';
-            const hintText = (modelUsedText || data.prompt)
-              ? `${modelUsedText}${fallbackText}${promptText}`.trim()
+            const baseInfo = [modelUsedText, qualityText].filter(Boolean).join('｜');
+            const hintText = (baseInfo || data.prompt)
+              ? `${baseInfo}${fallbackText}${promptText}`.trim()
               : '';
             aiPosterPromptHint.textContent = hintText;
             aiPosterPromptHint.classList.toggle('d-none', !hintText);
