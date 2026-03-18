@@ -340,6 +340,31 @@ def _poster_quality_profile(quality):
     return profiles.get(level, profiles['high']), (level if level in profiles else 'high')
 
 
+def _extract_ark_error_message(response):
+    """尽量提取ARK返回的可读错误信息，便于前端定位参数问题。"""
+    try:
+        data = response.json()
+    except Exception:
+        data = None
+
+    if isinstance(data, dict):
+        candidates = [
+            data.get('message'),
+            data.get('msg'),
+            (data.get('error') or {}).get('message') if isinstance(data.get('error'), dict) else None,
+            (data.get('error') or {}).get('msg') if isinstance(data.get('error'), dict) else None,
+            data.get('detail')
+        ]
+        for item in candidates:
+            if isinstance(item, str) and item.strip():
+                return item.strip()
+
+    body_text = (response.text or '').strip()
+    if body_text:
+        return body_text[:500]
+    return ''
+
+
 def _poster_job_dir(app):
     base_dir = app.config.get('INSTANCE_PATH') or app.instance_path or tempfile.gettempdir()
     job_dir = os.path.join(base_dir, 'ai_poster_jobs')
@@ -464,33 +489,60 @@ def _generate_poster_via_ark(prompt, model_name, quality='high'):
 
     profile, normalized_quality = _poster_quality_profile(quality)
     image_api = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
-    image_payload = {
+    primary_payload = {
         "model": model_name,
         "prompt": prompt,
-        "sequential_image_generation": "disabled",
         "response_format": "url",
         "size": profile['size'],
         "guidance_scale": profile['guidance_scale'],
-        "stream": False,
         "watermark": True
     }
+
+    # 某些模型/权限组合不支持2K，命中400时自动回退1024继续生成。
+    payload_candidates = [primary_payload]
+    if profile['size'] != '1024x1024':
+        fallback_payload = dict(primary_payload)
+        fallback_payload['size'] = '1024x1024'
+        fallback_payload['guidance_scale'] = min(int(profile['guidance_scale']), 3)
+        payload_candidates.append(fallback_payload)
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
 
-    response = requests.post(image_api, headers=headers, json=image_payload, timeout=profile['timeout'])
-    response.raise_for_status()
-    result = response.json()
-    data_list = result.get('data') or []
-    image_url = ''
-    if data_list and isinstance(data_list[0], dict):
-        image_url = data_list[0].get('url', '')
+    last_error_message = ''
+    for index, image_payload in enumerate(payload_candidates):
+        response = requests.post(image_api, headers=headers, json=image_payload, timeout=profile['timeout'])
+        if response.ok:
+            result = response.json()
+            data_list = result.get('data') or []
+            image_url = ''
+            if data_list and isinstance(data_list[0], dict):
+                image_url = data_list[0].get('url', '')
 
-    if not image_url:
-        raise ValueError('ARK已返回，但未拿到可用图片链接')
+            if not image_url:
+                raise ValueError('ARK已返回，但未拿到可用图片链接')
+            return image_url
 
-    return image_url
+        last_error_message = _extract_ark_error_message(response)
+
+        should_try_next = (
+            response.status_code == 400 and
+            index < len(payload_candidates) - 1
+        )
+        if should_try_next:
+            logger.warning(
+                f"ARK生图参数被拒绝，尝试降级重试: status={response.status_code}, "
+                f"size={image_payload.get('size')}, msg={last_error_message}"
+            )
+            continue
+
+        response.raise_for_status()
+
+    if last_error_message:
+        raise ValueError(f'ARK请求失败: {last_error_message}')
+    raise ValueError('ARK请求失败，未返回可用错误信息')
 
 
 def _convert_image_url_to_data_url(image_url, timeout=45):
