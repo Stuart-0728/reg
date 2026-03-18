@@ -244,7 +244,7 @@
                     <i class="fas fa-image me-1"></i>AI生成海报
                   </button>
                 </div>
-                <small class="form-text text-muted">已启用异步生成：高画质也不会阻塞页面。你也可以继续手动上传海报，手动上传优先。</small>
+                <small class="form-text text-muted">你也可以继续手动上传海报，手动上传优先。</small>
               </div>
               
               <!-- 海报预览区域 -->
@@ -633,7 +633,7 @@
             throw new Error('任务创建失败，请稍后重试');
           }
 
-          setButtonLoading(aiGeneratePosterBtn, '生成中（异步）...');
+          setButtonLoading(aiGeneratePosterBtn, '生成中...');
           const data = await pollPosterJob(jobData.job_id);
 
           const imageUrl = data.image_url || '';
@@ -644,8 +644,8 @@
           }
 
           if (aiPosterUrlInput) {
-            // 优先保存data URL，避免提交时依赖外链可用性
-            aiPosterUrlInput.value = imageDataUrl || imageUrl;
+            // 避免把超大data URL放进表单导致413；提交时只传短URL。
+            aiPosterUrlInput.value = imageUrl || imageDataUrl;
           }
           if (posterPreview) {
             posterPreview.src = previewUrl;
