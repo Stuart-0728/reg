@@ -365,6 +365,60 @@ def _extract_ark_error_message(response):
     return ''
 
 
+def _ark_payload_candidates(model_name, prompt, profile):
+    """按兼容性从高到低构造参数组合，尽量避免400参数拒绝。"""
+    primary_size = profile['size']
+    primary_guidance = int(profile['guidance_scale'])
+
+    candidates = [
+        {
+            "model": model_name,
+            "prompt": prompt,
+            "response_format": "url",
+            "size": primary_size,
+            "watermark": True,
+            "guidance_scale": primary_guidance,
+        },
+        {
+            "model": model_name,
+            "prompt": prompt,
+            "response_format": "url",
+            "size": primary_size,
+            "watermark": True,
+        },
+    ]
+
+    if primary_size != '1024x1024':
+        candidates.extend([
+            {
+                "model": model_name,
+                "prompt": prompt,
+                "response_format": "url",
+                "size": "1024x1024",
+                "watermark": True,
+                "guidance_scale": min(primary_guidance, 3),
+            },
+            {
+                "model": model_name,
+                "prompt": prompt,
+                "response_format": "url",
+                "size": "1024x1024",
+                "watermark": True,
+            },
+        ])
+
+    # 去重，避免同内容重复请求
+    seen = set()
+    uniq = []
+    for item in candidates:
+        marker = json.dumps(item, sort_keys=True, ensure_ascii=False)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        uniq.append(item)
+    return uniq
+
+
 def _poster_job_dir(app):
     base_dir = app.config.get('INSTANCE_PATH') or app.instance_path or tempfile.gettempdir()
     job_dir = os.path.join(base_dir, 'ai_poster_jobs')
@@ -471,7 +525,13 @@ def _run_async_poster_job(app, job_id, payload):
             _write_poster_job(app, job_id, done_payload)
         except Exception as e:
             logger.error(f"异步海报任务失败 job_id={job_id}: {e}")
-            fail_message = 'AI生图超时，请稍后重试' if isinstance(e, requests.exceptions.Timeout) else f'生成海报失败: {str(e)}'
+            if isinstance(e, requests.exceptions.Timeout):
+                fail_message = 'AI生图超时，请稍后重试'
+            elif isinstance(e, requests.exceptions.HTTPError):
+                detail = _extract_ark_error_message(getattr(e, 'response', None)) if getattr(e, 'response', None) is not None else ''
+                fail_message = f"生成海报失败: {detail or str(e)}"
+            else:
+                fail_message = f'生成海报失败: {str(e)}'
             _write_poster_job(app, job_id, {
                 'job_id': job_id,
                 'status': 'failed',
@@ -489,22 +549,7 @@ def _generate_poster_via_ark(prompt, model_name, quality='high'):
 
     profile, normalized_quality = _poster_quality_profile(quality)
     image_api = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
-    primary_payload = {
-        "model": model_name,
-        "prompt": prompt,
-        "response_format": "url",
-        "size": profile['size'],
-        "guidance_scale": profile['guidance_scale'],
-        "watermark": True
-    }
-
-    # 某些模型/权限组合不支持2K，命中400时自动回退1024继续生成。
-    payload_candidates = [primary_payload]
-    if profile['size'] != '1024x1024':
-        fallback_payload = dict(primary_payload)
-        fallback_payload['size'] = '1024x1024'
-        fallback_payload['guidance_scale'] = min(int(profile['guidance_scale']), 3)
-        payload_candidates.append(fallback_payload)
+    payload_candidates = _ark_payload_candidates(model_name, prompt, profile)
 
     headers = {
         "Content-Type": "application/json",
@@ -528,7 +573,7 @@ def _generate_poster_via_ark(prompt, model_name, quality='high'):
         last_error_message = _extract_ark_error_message(response)
 
         should_try_next = (
-            response.status_code == 400 and
+            response.status_code in (400, 422) and
             index < len(payload_candidates) - 1
         )
         if should_try_next:
@@ -538,7 +583,9 @@ def _generate_poster_via_ark(prompt, model_name, quality='high'):
             )
             continue
 
-        response.raise_for_status()
+        status_text = f"{response.status_code}"
+        detail = f": {last_error_message}" if last_error_message else ''
+        raise ValueError(f"ARK请求失败({status_text}){detail}")
 
     if last_error_message:
         raise ValueError(f'ARK请求失败: {last_error_message}')
