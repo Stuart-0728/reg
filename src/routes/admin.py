@@ -321,7 +321,8 @@ def _generate_poster_via_ark(prompt, model_name):
         "prompt": prompt,
         "sequential_image_generation": "disabled",
         "response_format": "url",
-        "size": "2K",
+        "size": "1024x1024",
+        "guidance_scale": 3,
         "stream": False,
         "watermark": True
     }
@@ -330,7 +331,8 @@ def _generate_poster_via_ark(prompt, model_name):
         "Authorization": f"Bearer {api_key}"
     }
 
-    response = requests.post(image_api, headers=headers, json=image_payload, timeout=(8, 55))
+    # 收紧上游等待时长，优先返回可控错误，避免被代理层判定为524。
+    response = requests.post(image_api, headers=headers, json=image_payload, timeout=(8, 40))
     response.raise_for_status()
     result = response.json()
     data_list = result.get('data') or []
