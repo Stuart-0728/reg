@@ -343,6 +343,43 @@ def _generate_poster_via_ark(prompt, model_name):
 
     return image_url
 
+
+def _convert_image_url_to_data_url(image_url, timeout=45):
+    """将远程图片链接转换为data URL，避免前端预览依赖外网可达性。"""
+    if not image_url:
+        return ''
+
+    response = requests.get(image_url, timeout=timeout)
+    response.raise_for_status()
+
+    mime_type = (response.headers.get('Content-Type', 'image/png') or 'image/png').split(';')[0].strip().lower()
+    if not mime_type.startswith('image/'):
+        raise ValueError('远程图片返回的Content-Type不是图片')
+
+    raw_bytes = response.content or b''
+    if not raw_bytes:
+        raise ValueError('远程图片内容为空')
+
+    # 控制体积，避免隐藏字段过大导致提交失败
+    if len(raw_bytes) > 2 * 1024 * 1024:
+        try:
+            img = Image.open(BytesIO(raw_bytes)).convert('RGB')
+            max_width = 1920
+            if img.width > max_width:
+                ratio = max_width / float(img.width)
+                img = img.resize((max_width, int(img.height * ratio)), Image.Resampling.LANCZOS)
+
+            output = BytesIO()
+            img.save(output, format='JPEG', quality=88, optimize=True)
+            raw_bytes = output.getvalue()
+            mime_type = 'image/jpeg'
+        except Exception:
+            # 压缩失败则保持原图，后续由调用方兜底
+            pass
+
+    encoded = base64.b64encode(raw_bytes).decode('utf-8')
+    return f'data:{mime_type};base64,{encoded}'
+
 @admin_bp.route('/activity/ai/poster-models', methods=['GET'])
 @admin_required
 def ai_poster_models():
@@ -456,7 +493,21 @@ def ai_generate_activity_poster():
 
         if provider == 'ark':
             image_url = _generate_poster_via_ark(prompt, model_name)
-            return jsonify({'success': True, 'image_url': image_url, 'prompt': prompt, 'model': model_value, 'model_used': model_value})
+            image_data_url = ''
+            try:
+                image_data_url = _convert_image_url_to_data_url(image_url, timeout=45)
+            except Exception as convert_error:
+                logger.warning(f"AI海报外链转dataURL失败，前端将回退外链预览: {convert_error}")
+
+            return jsonify({
+                'success': True,
+                'image_url': image_url,
+                'image_data_url': image_data_url,
+                'prompt': prompt,
+                'model': model_value,
+                'model_used': model_value,
+                'message': 'AI海报已生成' + ('（已本地化预览）' if image_data_url else '')
+            })
         else:
             return jsonify({'success': False, 'message': '暂不支持该图片模型提供商'}), 400
     except Exception as e:

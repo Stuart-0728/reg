@@ -522,15 +522,23 @@
           });
 
           const imageUrl = data.image_url || '';
-          if (!imageUrl) {
+          const imageDataUrl = data.image_data_url || '';
+          const previewUrl = imageDataUrl || imageUrl;
+          if (!previewUrl) {
             throw new Error('未获得可用海报链接');
           }
 
           if (aiPosterUrlInput) {
-            aiPosterUrlInput.value = imageUrl;
+            // 优先保存data URL，避免提交时依赖外链可用性
+            aiPosterUrlInput.value = imageDataUrl || imageUrl;
           }
           if (posterPreview) {
-            posterPreview.src = imageUrl;
+            posterPreview.src = previewUrl;
+            posterPreview.onerror = function() {
+              if (imageUrl && posterPreview.src !== imageUrl) {
+                posterPreview.src = imageUrl;
+              }
+            };
           }
           if (posterPreviewContainer) {
             posterPreviewContainer.classList.remove('d-none');
