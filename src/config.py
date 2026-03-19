@@ -208,6 +208,7 @@ class Config:
     
     # 是否允许修改密码（调试用）
     ALLOW_PASSWORD_CHANGE = True
+    ENABLE_DEBUG_ENDPOINTS = os.environ.get('ENABLE_DEBUG_ENDPOINTS', 'false').lower() == 'true'
     
     # Flask-WTF配置
     WTF_CSRF_ENABLED = True
@@ -258,6 +259,8 @@ class ProductionConfig(Config):
     @classmethod
     def init_app(cls, app):
         Config.init_app(app)
+        if app.config.get('SECRET_KEY') == 'dev-secret-key-cqnu-association':
+            raise RuntimeError('生产环境禁止使用默认SECRET_KEY，请在环境变量中设置安全随机值。')
 
         required_env_keys = ['SECRET_KEY', 'SECURITY_PASSWORD_SALT']
         missing_keys = [key for key in required_env_keys if not os.environ.get(key)]

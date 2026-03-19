@@ -11,12 +11,37 @@ import string
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from werkzeug.exceptions import HTTPException
+from flask_wtf.csrf import validate_csrf
 from src.models import db, Activity, Tag, StudentInfo, SystemLog, Registration, AIChatHistory, AIChatSession, activity_tags, PointsHistory, User, Role, Message
 from src.utils.time_helpers import get_beijing_time, ensure_timezone_aware
 from src import csrf # Import csrf
 
 utils_bp = Blueprint('utils', __name__)
 logger = logging.getLogger(__name__)
+
+
+def _debug_endpoints_enabled():
+    return bool(current_app.debug and current_app.config.get('ENABLE_DEBUG_ENDPOINTS', False))
+
+
+def _validate_api_csrf_token():
+    """为JSON/API请求提供统一CSRF校验，兼容Header与Body。"""
+    payload = request.get_json(silent=True) or {}
+    csrf_token = (
+        request.headers.get('X-CSRFToken')
+        or request.headers.get('X-CSRF-Token')
+        or request.form.get('csrf_token')
+        or (payload.get('csrf_token') if isinstance(payload, dict) else None)
+    )
+
+    if not csrf_token:
+        return False, '缺少安全验证令牌'
+    try:
+        validate_csrf(csrf_token)
+        return True, ''
+    except Exception as e:
+        logger.warning(f"API CSRF校验失败: {e}")
+        return False, '安全验证失败，请刷新页面后重试'
 
 # 管理员权限装饰器
 def admin_required(f):
@@ -656,6 +681,10 @@ def utils_ai_chat_history():
 @csrf.exempt
 def ai_chat_clear():
     """清除指定会话的AI聊天历史记录"""
+    ok, message = _validate_api_csrf_token()
+    if not ok:
+        return jsonify({'success': False, 'message': message}), 400
+
     session_id = request.args.get('session_id')
     if not session_id:
         return jsonify({
@@ -689,6 +718,10 @@ def ai_chat_clear():
 @csrf.exempt
 def utils_ai_chat_clear():
     """清除指定会话的AI聊天历史记录 - 带utils前缀的版本"""
+    ok, message = _validate_api_csrf_token()
+    if not ok:
+        return jsonify({'success': False, 'message': message}), 400
+
     session_id = request.args.get('session_id')
     logger.info(f"收到清除单个会话历史请求: 用户ID={current_user.id}, 会话ID={session_id}, Headers={dict(request.headers)}")
     
@@ -739,6 +772,10 @@ def utils_ai_chat_clear():
 @csrf.exempt
 def ai_chat_clear_history():
     """清除用户所有AI聊天历史记录"""
+    ok, message = _validate_api_csrf_token()
+    if not ok:
+        return jsonify({'success': False, 'message': message}), 400
+
     try:
         # 删除用户的所有聊天记录
         sessions = db.session.execute(db.select(AIChatSession).filter_by(
@@ -775,6 +812,10 @@ def ai_chat_clear_history():
 @csrf.exempt
 def utils_ai_chat_clear_history():
     """清除用户所有AI聊天历史记录 - 带utils前缀的版本"""
+    ok, message = _validate_api_csrf_token()
+    if not ok:
+        return jsonify({'success': False, 'message': message}), 400
+
     try:
         # 记录请求信息以便调试
         logger.info(f"收到清除历史请求: 用户ID={current_user.id}, Headers={dict(request.headers)}")
@@ -934,7 +975,7 @@ def debug_user_info():
     """调试用户信息的API端点（不需要登录）"""
     try:
         # 仅允许在调试模式下由管理员访问
-        if not current_app.debug:
+        if not _debug_endpoints_enabled():
             abort(404)
         if (not current_user.is_authenticated or
             not getattr(current_user, 'role', None) or
@@ -982,7 +1023,7 @@ def debug_force_login(username):
     """强制登录指定用户（仅用于调试）"""
     try:
         # 仅允许在调试模式下由管理员访问
-        if not current_app.debug:
+        if not _debug_endpoints_enabled():
             abort(404)
         if (not current_user.is_authenticated or
             not getattr(current_user, 'role', None) or

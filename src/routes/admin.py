@@ -3251,28 +3251,17 @@ def checkin_modal_admin(id):
 @admin_required
 def toggle_checkin(id):
     try:
-        # 验证CSRF令牌（增加更详细的错误处理）
+        csrf_token = request.form.get('csrf_token') or request.headers.get('X-CSRFToken')
+        if not csrf_token:
+            logger.warning("toggle_checkin 缺少CSRF令牌")
+            flash('操作失败，缺少安全验证令牌', 'danger')
+            return redirect(url_for('admin.activity_view', id=id))
         try:
-            from flask_wtf.csrf import validate_csrf
-            # 尝试从表单中获取CSRF令牌
-            csrf_token = request.form.get('csrf_token')
-            if not csrf_token:
-                # 如果表单中没有CSRF令牌，尝试从请求头获取
-                csrf_token = request.headers.get('X-CSRFToken')
-            
-            if not csrf_token:
-                logger.warning("未找到CSRF令牌")
-                flash('操作失败，缺少安全验证令牌', 'danger')
-                return redirect(url_for('admin.activity_view', id=id))
-            
-            # 验证CSRF令牌
             validate_csrf(csrf_token)
         except Exception as csrf_error:
-            logger.warning(f"CSRF验证失败: {csrf_error}")
-            # 暂时允许请求继续处理，但记录错误
-            # 您可以根据需要取消下面的注释以强制执行CSRF验证
-            # flash('安全验证失败，请刷新页面重试', 'danger')
-            # return redirect(url_for('admin.activity_view', id=id))
+            logger.warning(f"toggle_checkin CSRF验证失败: {csrf_error}")
+            flash('安全验证失败，请刷新页面后重试', 'danger')
+            return redirect(url_for('admin.activity_view', id=id))
         
         activity = db.get_or_404(Activity, id)
         
@@ -3403,10 +3392,16 @@ def download_backup(filename):
         return redirect(url_for('admin.backup_system'))
 
 # 删除备份文件
-@admin_bp.route('/backup/delete/<path:filename>', methods=['GET'])
+@admin_bp.route('/backup/delete/<path:filename>', methods=['POST'])
 @admin_required
 def delete_backup(filename):
     try:
+        try:
+            validate_csrf(request.form.get('csrf_token', ''))
+        except Exception:
+            flash('请求校验失败，请刷新页面后重试', 'danger')
+            return redirect(url_for('admin.backup_system'))
+
         backup_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backups')
         
         # 安全检查：确保文件名不包含路径遍历

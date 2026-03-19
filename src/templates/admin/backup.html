@@ -133,9 +133,12 @@
                                                     <a href="{{ url_for('admin.download_backup', filename=backup.name) }}" class="btn btn-outline-primary" data-no-loading="true">
                                                         <i class="fas fa-download"></i> 下载
                                                     </a>
-                                                    <a href="{{ url_for('admin.delete_backup', filename=backup.name) }}" class="btn btn-outline-danger" onclick="return confirm('确定要删除此备份吗？此操作不可撤销！');">
-                                                        <i class="fas fa-trash-alt"></i> 删除
-                                                    </a>
+                                                    <form method="post" action="{{ url_for('admin.delete_backup', filename=backup.name) }}" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <button type="submit" class="btn btn-outline-danger" onclick="return confirm('确定要删除此备份吗？此操作不可撤销！');">
+                                                            <i class="fas fa-trash-alt"></i> 删除
+                                                        </button>
+                                                    </form>
                                                 </div>
                                             </td>
                                         </tr>
