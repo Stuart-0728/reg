@@ -703,7 +703,7 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
+                <ul class="navbar-nav me-auto" id="primaryNavMenu">
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.index') }}">首页</a>
                     </li>
@@ -901,32 +901,69 @@
     <!-- AI Chat JS -->
     <script src="{{ url_for('static', filename='js/ai_chat.js', v='20260311d') }}"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', async function () {
+        document.addEventListener('DOMContentLoaded', function () {
             const authNav = document.getElementById('authNavRight');
-            if (!authNav) return;
-
+            const primaryNav = document.getElementById('primaryNavMenu');
             const bodyEl = document.body;
-            const hintedAuth = (bodyEl.dataset.userLoggedIn || '').toLowerCase() === 'true';
+            if (!bodyEl) return;
+            let authSyncInFlight = false;
+            let lastSyncAt = 0;
 
-            try {
-                const resp = await fetch(`{{ url_for('auth.session_state') }}?_t=${Date.now()}`, {
-                    method: 'GET',
-                    cache: 'no-store',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache'
-                    }
-                });
-                if (!resp.ok) return;
+            const urls = {
+                home: '{{ url_for("main.index") }}',
+                resources: '{{ url_for("education.resources") }}',
+                about: '{{ url_for("main.about") }}',
+                adminDashboard: '{{ url_for("admin.dashboard") }}',
+                adminActivities: '{{ url_for("admin.activities") }}',
+                adminStudents: '{{ url_for("admin.students") }}',
+                adminStatistics: '{{ url_for("admin.statistics") }}',
+                adminTags: '{{ url_for("admin.manage_tags") }}',
+                adminAnnouncements: '{{ url_for("admin.announcements") }}',
+                studentDashboard: '{{ url_for("student.dashboard") }}',
+                studentActivities: '{{ url_for("student.activities") }}',
+                studentMyActivities: '{{ url_for("student.my_activities") }}',
+                studentMessages: '{{ url_for("student.messages") }}',
+                studentNotifications: '{{ url_for("student.notifications") }}',
+                studentPoints: '{{ url_for("student.points") }}',
+            };
 
-                const data = await resp.json();
-                if (!data || !data.success) return;
+            const renderPrimaryNav = (data) => {
+                if (!primaryNav) return;
 
-                if (!!data.authenticated === hintedAuth) {
-                    return;
+                const role = (data.role || '').toLowerCase();
+                const baseItems = [
+                    `<li class="nav-item"><a class="nav-link" href="${urls.home}">首页</a></li>`,
+                    `<li class="nav-item"><a class="nav-link" href="${urls.resources}">教育资源</a></li>`
+                ];
+
+                let roleItems = '';
+                if (data.authenticated && role === 'admin') {
+                    roleItems = `
+                        <li class="nav-item"><a class="nav-link" href="${urls.adminDashboard}">管理面板</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.adminActivities}">活动管理</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.adminStudents}">学生管理</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.adminStatistics}">数据统计</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.adminTags}">标签管理</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.adminAnnouncements}">公告管理</a></li>
+                    `;
+                } else if (data.authenticated) {
+                    roleItems = `
+                        <li class="nav-item"><a class="nav-link" href="${urls.studentDashboard}">我的面板</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.studentActivities}">浏览活动</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.studentMyActivities}">我的活动</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.studentMessages}">问题反馈 <span id="unread-messages-badge" class="badge bg-danger" style="display: none;"></span></a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.studentNotifications}">通知 <span class="badge bg-danger notification-badge" style="display: none;"></span></a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.studentPoints}">我的积分</a></li>
+                    `;
+                } else {
+                    roleItems = `<li class="nav-item"><a class="nav-link" href="${urls.about}">关于我们</a></li>`;
                 }
 
+                primaryNav.innerHTML = `${baseItems.join('')}${roleItems}`;
+            };
+
+            const renderAuthNav = (data) => {
+                if (!authNav) return;
                 if (data.authenticated) {
                     const role = (data.role || '').toLowerCase();
                     const displayName = data.display_name || '用户';
@@ -960,12 +997,66 @@
                         </li>
                     `;
                 }
+            };
 
+            const applyAuthState = (data) => {
+                if (!data || !data.success) return;
                 bodyEl.dataset.userLoggedIn = data.authenticated ? 'true' : 'false';
                 bodyEl.dataset.userRole = data.role || '';
-            } catch (_) {
-                // 网络异常时保留服务端渲染结果
-            }
+
+                renderPrimaryNav(data);
+                renderAuthNav(data);
+
+                window.__authSessionState = data;
+                document.dispatchEvent(new CustomEvent('auth-state-updated', { detail: data }));
+            };
+
+            const syncAuthState = async (force) => {
+                const now = Date.now();
+                if (authSyncInFlight) return;
+                if (!force && now - lastSyncAt < 1500) return;
+
+                authSyncInFlight = true;
+                try {
+                    const resp = await fetch(`{{ url_for('auth.session_state') }}?_t=${now}`, {
+                        method: 'GET',
+                        cache: 'no-store',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
+                        }
+                    });
+                    if (!resp.ok) return;
+
+                    const data = await resp.json();
+                    applyAuthState(data);
+                    lastSyncAt = Date.now();
+                } catch (_) {
+                    // 网络异常时保留服务端渲染结果
+                } finally {
+                    authSyncInFlight = false;
+                }
+            };
+
+            // 首次进入页面立即对齐会话
+            syncAuthState(true);
+
+            // 处理浏览器后退/前进缓存恢复，避免显示上一个账号导航
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) {
+                    syncAuthState(true);
+                    return;
+                }
+                syncAuthState(false);
+            });
+
+            // 标签页切回前台时兜底同步一次
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') {
+                    syncAuthState(false);
+                }
+            });
         });
     </script>
     {% block scripts %}{% endblock %}

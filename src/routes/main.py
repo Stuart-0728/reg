@@ -86,15 +86,21 @@ def index():
             f"featured={len(featured_activities)}"
         )
         
-        # 渲染模板
-        return render_template('main/index.html',
-                            featured_activities=featured_activities,
-                            latest_activities=latest_activities,
-                            upcoming_activities=upcoming_activities,
-                            popular_activities=popular_activities,
-                            public_notifications=public_notifications,
-                            now=now,
-                            display_datetime=display_datetime)
+        # 渲染模板（首页包含登录态相关导航，禁止缓存以避免跨用户残留）
+        response = make_response(render_template('main/index.html',
+                    featured_activities=featured_activities,
+                    latest_activities=latest_activities,
+                    upcoming_activities=upcoming_activities,
+                    popular_activities=popular_activities,
+                    public_notifications=public_notifications,
+                    now=now,
+                    display_datetime=display_datetime))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Surrogate-Control'] = 'no-store'
+        response.headers['Vary'] = 'Cookie, Authorization'
+        return response
     except Exception as e:
         logger.error(f"Error in index: {e}", exc_info=True)
         # 最终兜底：至少返回活动列表，避免首页活动区块完全空白
@@ -106,14 +112,20 @@ def index():
         except Exception:
             fallback_activities = []
 
-        return render_template('main/index.html', 
+        response = make_response(render_template('main/index.html', 
                               featured_activities=fallback_activities,
                               latest_activities=fallback_activities,
                               upcoming_activities=fallback_activities,
                               popular_activities=fallback_activities,
                               public_notifications=[],
                               now=datetime.now(pytz.timezone('Asia/Shanghai')),
-                              display_datetime=display_datetime)
+                      display_datetime=display_datetime))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Surrogate-Control'] = 'no-store'
+        response.headers['Vary'] = 'Cookie, Authorization'
+        return response
 
 
 @main_bp.route('/api/home-activities')

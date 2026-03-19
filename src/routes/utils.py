@@ -916,12 +916,18 @@ def check_login_status():
         else:
             redirect_url = '/'
 
-    return jsonify({
+    response = jsonify({
         'is_logged_in': current_user.is_authenticated,
         'user_id': current_user.id if current_user.is_authenticated else None,
         'role': role_name,
         'redirect_url': redirect_url
     })
+    response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['Surrogate-Control'] = 'no-store'
+    response.headers['Vary'] = 'Cookie, Authorization'
+    return response
 
 @utils_bp.route('/debug/user_info')
 def debug_user_info():

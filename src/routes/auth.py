@@ -189,6 +189,38 @@ def _is_safe_next_url(target):
     test_url = urlparse(urljoin(request.host_url, target))
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
+
+def _build_logout_response(message='您已成功登出！', category='success', logged_out=1, password_changed=0):
+    """统一构造登出响应，确保会话与认证cookie完全清理。"""
+    logout_user()
+    session.clear()
+
+    if message:
+        flash(message, category)
+
+    response = redirect(url_for(
+        'auth.login',
+        logged_out=logged_out,
+        password_changed=password_changed,
+        t=int(time.time())
+    ))
+
+    # 显式删除认证cookie（双保险）
+    response.delete_cookie(current_app.config.get('SESSION_COOKIE_NAME', 'session'), path='/')
+    response.delete_cookie('remember_token', path='/')
+
+    # 清理AI聊天相关cookie，避免切换账号后残留历史上下文
+    response.delete_cookie('cqnu_ai_chat_session_id', path='/')
+    response.delete_cookie('cqnu_ai_chat_messages', path='/')
+    response.delete_cookie('cqnu_ai_chat_chat_open', path='/')
+
+    # 防止浏览器/代理缓存登出前页面
+    response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['Clear-Site-Data'] = '"cache"'
+    return response
+
 # 注册表单
 class RegistrationForm(FlaskForm):
     username = StringField('用户名', validators=[
@@ -406,6 +438,8 @@ def login():
                 
                 # 登录成功
                 login_user(user, remember=True, duration=timedelta(days=30))
+                # 显式标记为持久会话：仅在主动登出时清除
+                session.permanent = True
                 
                 # 记录登录成功日志
                 logger.info(f"登录成功: 账号标识={identifier}, 用户ID={user.id}")
@@ -465,27 +499,7 @@ def login():
 @login_required
 def logout():
     """用户登出"""
-    logout_user()
-    session.clear()
-
-    response = redirect(url_for('auth.login', logged_out=1, t=int(time.time())))
-    # 显式删除认证cookie（双保险）
-    response.delete_cookie(current_app.config.get('SESSION_COOKIE_NAME', 'session'), path='/')
-    response.delete_cookie('remember_token', path='/')
-
-    # 清理AI聊天相关cookie，避免切换账号后残留历史上下文
-    response.delete_cookie('cqnu_ai_chat_session_id', path='/')
-    response.delete_cookie('cqnu_ai_chat_messages', path='/')
-    response.delete_cookie('cqnu_ai_chat_chat_open', path='/')
-
-    # 防止浏览器/代理缓存登出前页面
-    response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
-    response.headers['Clear-Site-Data'] = '"cache"'
-
-    flash('您已成功登出！', 'success')
-    return response
+    return _build_logout_response(message='您已成功登出！', category='success', logged_out=1)
 
 
 @auth_bp.route('/session-state')
@@ -560,8 +574,13 @@ def change_password():
         if current_user.verify_password(form.old_password.data):
             current_user.password_hash = generate_password_hash(form.new_password.data)
             db.session.commit()
-            flash('密码修改成功！', 'success')
-            return redirect(url_for('auth.profile'))
+            # 改密后强制下线，避免旧会话继续有效
+            return _build_logout_response(
+                message='密码修改成功，请重新登录。',
+                category='success',
+                logged_out=0,
+                password_changed=1
+            )
         else:
             flash('当前密码错误！', 'danger')
     

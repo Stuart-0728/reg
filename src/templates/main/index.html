@@ -38,9 +38,11 @@
                         <p class="lead text-muted mb-5 fs-4" style="line-height: 1.8;">以数智驱动教育，以创新引领未来<br>提升教育技能，培养卓越教育者</p>
                         <div class="d-flex justify-content-center gap-3 flex-wrap">
                             <a href="{{ url_for('main.activities') }}" class="btn btn-primary btn-lg shadow-sm" style="padding: 15px 40px; border-radius: 50px;"><i class="fas fa-rocket me-2"></i>探索活动</a>
-                            {% if not current_user.is_authenticated %}
-                            <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary btn-lg bg-white" style="padding: 15px 40px; border-radius: 50px;"><i class="fas fa-user-plus me-2"></i>免费注册</a>
-                            {% endif %}
+                            <span id="homeHeroAuthAction">
+                                {% if not current_user.is_authenticated %}
+                                <a href="{{ url_for('auth.register') }}" class="btn btn-outline-primary btn-lg bg-white" style="padding: 15px 40px; border-radius: 50px;"><i class="fas fa-user-plus me-2"></i>免费注册</a>
+                                {% endif %}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -167,7 +169,7 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h3 class="card-title">快速入口</h3>
-                    <div class="d-grid gap-2">
+                    <div class="d-grid gap-2" id="homeQuickEntryActions">
                         {% if current_user.is_authenticated %}
                             {% if current_user.role.name == 'Admin' %}
                                 <a href="{{ url_for('admin.dashboard') }}" class="btn btn-primary">
@@ -295,6 +297,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const grid = document.getElementById('home-activity-grid');
+    const heroAuthAction = document.getElementById('homeHeroAuthAction');
+    const quickEntryActions = document.getElementById('homeQuickEntryActions');
     if (!grid) return;
 
     const escapeHtml = (text) => {
@@ -355,6 +359,92 @@ document.addEventListener('DOMContentLoaded', async function () {
             `;
         }).join('');
     };
+
+    const authUrls = {
+        login: '{{ url_for("auth.login") }}',
+        register: '{{ url_for("auth.register") }}',
+        adminDashboard: '{{ url_for("admin.dashboard") }}',
+        adminActivities: '{{ url_for("admin.activities") }}',
+        studentDashboard: '{{ url_for("student.dashboard") }}',
+        studentActivities: '{{ url_for("student.activities") }}'
+    };
+
+    const renderHomeAuthBlocks = (state) => {
+        const authenticated = !!(state && state.authenticated);
+        const role = String((state && state.role) || '').toLowerCase();
+
+        if (heroAuthAction) {
+            heroAuthAction.innerHTML = authenticated
+                ? ''
+                : `<a href="${authUrls.register}" class="btn btn-outline-primary btn-lg bg-white" style="padding: 15px 40px; border-radius: 50px;"><i class="fas fa-user-plus me-2"></i>免费注册</a>`;
+        }
+
+        if (!quickEntryActions) return;
+
+        if (!authenticated) {
+            quickEntryActions.innerHTML = `
+                <a href="${authUrls.login}" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt me-2"></i>登录
+                </a>
+                <a href="${authUrls.register}" class="btn btn-outline-primary">
+                    <i class="fas fa-user-plus me-2"></i>注册
+                </a>
+            `;
+            return;
+        }
+
+        if (role === 'admin') {
+            quickEntryActions.innerHTML = `
+                <a href="${authUrls.adminDashboard}" class="btn btn-primary">
+                    <i class="fas fa-tachometer-alt me-2"></i>管理面板
+                </a>
+                <a href="${authUrls.adminActivities}" class="btn btn-outline-primary">
+                    <i class="fas fa-calendar-alt me-2"></i>活动管理
+                </a>
+            `;
+            return;
+        }
+
+        quickEntryActions.innerHTML = `
+            <a href="${authUrls.studentDashboard}" class="btn btn-primary">
+                <i class="fas fa-tachometer-alt me-2"></i>我的面板
+            </a>
+            <a href="${authUrls.studentActivities}" class="btn btn-outline-primary">
+                <i class="fas fa-calendar-alt me-2"></i>浏览活动
+            </a>
+        `;
+    };
+
+    const applyAuthStateToHome = (state) => {
+        if (!state || !state.success) return;
+        renderHomeAuthBlocks(state);
+    };
+
+    document.addEventListener('auth-state-updated', function (event) {
+        applyAuthStateToHome(event && event.detail);
+    });
+
+    if (window.__authSessionState) {
+        applyAuthStateToHome(window.__authSessionState);
+    } else {
+        try {
+            const authResp = await fetch(`{{ url_for('auth.session_state') }}?_t=${Date.now()}`, {
+                method: 'GET',
+                cache: 'no-store',
+                credentials: 'same-origin',
+                headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                }
+            });
+            if (authResp.ok) {
+                const authData = await authResp.json();
+                applyAuthStateToHome(authData);
+            }
+        } catch (e) {
+            console.warn('首页登录态入口同步失败，保留服务端渲染内容。', e);
+        }
+    }
 
     try {
         const apiUrl = `{{ url_for('main.home_activities_api') }}?_t=${Date.now()}`;
