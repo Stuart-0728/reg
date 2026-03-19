@@ -94,7 +94,27 @@ def create_app(config_name=None):
         @login_manager.user_loader
         def load_user(user_id):
             """加载用户信息，供Flask-Login使用"""
-            return db.session.get(User, int(user_id))
+            raw_user_id = str(user_id or '').strip()
+            if not raw_user_id:
+                return None
+
+            # 新格式: "<uid>:<password_fingerprint>"
+            if ':' not in raw_user_id:
+                # 旧格式直接失效：强制重新登录并升级到新会话格式
+                return None
+
+            uid_part, fingerprint = raw_user_id.split(':', 1)
+            if not uid_part.isdigit() or not fingerprint:
+                return None
+
+            user = db.session.get(User, int(uid_part))
+            if not user:
+                return None
+
+            current_fingerprint = str(getattr(user, 'password_hash', '') or '')[-24:]
+            if current_fingerprint != fingerprint:
+                return None
+            return user
     
     # 注册蓝图 - 在模型初始化之后
     register_blueprints(app)

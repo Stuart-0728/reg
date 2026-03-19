@@ -84,6 +84,14 @@ class User(db.Model, UserMixin):
     def needs_password_rehash(self):
         hash_value = str(self.password_hash or '')
         return hash_value.startswith('scrypt:')
+
+    def _auth_fingerprint(self):
+        """返回与密码绑定的会话指纹；改密后会变化。"""
+        return str(self.password_hash or '')[-24:]
+
+    def get_id(self):
+        """将登录身份绑定到密码指纹，实现改密后全端自动失效。"""
+        return f"{self.id}:{self._auth_fingerprint()}"
     
     def ping(self):
         """更新用户最后访问时间"""
