@@ -431,14 +431,21 @@ function updateActivityStatus(activityId, status) {
 
     fetch(url, {
         method: 'POST',
+        redirect: 'manual',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'X-CSRFToken': csrfToken,
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/plain, */*'
         },
         body: body.toString()
     })
     .then(async (resp) => {
+        // redirect: 'manual' 模式下，302 会变成 type=opaqueredirect，status=0
+        // 出现 redirect 说明后端处理了，强制刷新
+        if (resp.type === 'opaqueredirect' || (resp.status >= 300 && resp.status < 400)) {
+            return { redirect: true };
+        }
         const contentType = (resp.headers.get('content-type') || '').toLowerCase();
         if (contentType.includes('application/json')) {
             const data = await resp.json();
@@ -449,23 +456,26 @@ function updateActivityStatus(activityId, status) {
     })
     .then((result) => {
         const forceRefresh = () => {
-            // 跳转到全部活动页面，附加时间戳强制无缓存刷新，确保用户可见到最新状态
             const allUrl = "{{ url_for('admin.activities', status='all') }}" + '?_t=' + Date.now();
             window.location.href = allUrl;
         };
+
+        // 被代理/服务端重定向了（302），说明请求已处理，强制刷新
+        if (result.redirect) {
+            forceRefresh();
+            return;
+        }
 
         if (result.json) {
             if (result.data && result.data.success) {
                 forceRefresh();
                 return;
             }
-            // 恢复按钮
             document.querySelectorAll('.activity-status-btn').forEach(btn => btn.disabled = false);
             alert((result.data && result.data.message) ? result.data.message : '状态更新失败，请重试');
             return;
         }
 
-        // 兜底：后端若返回HTML（如重定向页）但请求成功，仍强制刷新，避免页面状态不同步
         if (result.ok) {
             forceRefresh();
             return;
