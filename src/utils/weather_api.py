@@ -448,7 +448,7 @@ def get_activity_weather(activity_start_time):
             if api_source == 'amap':
                 weather_data['note'] = "数据来源：高德开放平台"
             elif api_source == 'openweather':
-                weather_data['note'] = "数据来源：OpenWeather（备用）"
+                weather_data['note'] = "数据来源：OpenWeather"
             
             return weather_data
         else:
