@@ -135,10 +135,16 @@ def _current_student_society_ids():
 def _ensure_student_join_society(student_info, society_id):
     if not student_info or not society_id:
         return
+    # 学生完成初始标签/社团选择后，手动选择规则优先，不再自动并入管理社团名单
+    if getattr(student_info, 'has_selected_tags', False):
+        return
     society = db.session.get(Society, society_id)
     if not society:
         return
-    joined_ids = {s.id for s in (student_info.joined_societies or [])}
+    joined = list(student_info.joined_societies or [])
+    if joined:
+        return
+    joined_ids = {s.id for s in joined}
     if society_id not in joined_ids:
         student_info.joined_societies.append(society)
     if not getattr(student_info, 'society_id', None):
@@ -269,9 +275,6 @@ def activities():
         
         # 基本查询 - 所有活动
         query = db.select(Activity)
-        society_ids = _current_student_society_ids()
-        if society_ids:
-            query = query.filter(Activity.society_id.in_(society_ids))
 
         # 根据状态筛选，使用北京时间进行比较
         if current_status == 'active':
@@ -326,10 +329,6 @@ def activities():
 def activity_detail(id):
     try:
         activity = db.get_or_404(Activity, id)
-        society_ids = _current_student_society_ids()
-        if society_ids and activity.society_id and activity.society_id not in society_ids:
-            flash('该活动不属于您所在社团，无法查看', 'danger')
-            return redirect(url_for('student.activities'))
         now = get_localized_now()
 
         registration = db.session.execute(db.select(Registration).filter_by(user_id=current_user.id, activity_id=id)).scalar_one_or_none()

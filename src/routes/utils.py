@@ -116,6 +116,10 @@ def admin_required(f):
             g.scope_is_super_admin = is_super_admin(db_user)
             g.scope_society_id = None if g.scope_is_super_admin else admin_society_id(db_user)
 
+            # 总管理员无需选择隶属社团，直接放行
+            if g.scope_is_super_admin:
+                return f(*args, **kwargs)
+
             # 学生管理员必须绑定社团后才能进入管理功能
             if not g.scope_is_super_admin and not g.scope_society_id and _society_selection_required(request.endpoint):
                 flash('请先选择并绑定所属社团后再进入管理功能', 'warning')

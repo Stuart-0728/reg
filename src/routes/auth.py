@@ -763,12 +763,15 @@ def select_tags():
     if request.method == 'POST':
         # 获取选择的标签ID
         selected_tags = request.form.getlist('tags')
+        selected_societies = request.form.getlist('societies')
         
         if not selected_tags:
             flash('请至少选择一个标签', 'warning')
             tags_stmt = db.select(Tag)
             tags = db.session.execute(tags_stmt).scalars().all()
-            return render_template('auth/select_tags.html', tags=tags)
+            societies = db.session.execute(db.select(Society).filter_by(is_active=True).order_by(Society.name.asc())).scalars().all()
+            selected_society_ids = [int(sid) for sid in selected_societies if sid and str(sid).isdigit()]
+            return render_template('auth/select_tags.html', tags=tags, societies=societies, selected_society_ids=selected_society_ids)
         
         # 清除现有标签
         student_info.tags = []
@@ -779,6 +782,17 @@ def select_tags():
             tag = db.session.execute(tag_stmt).scalar_one_or_none()
             if tag:
                 student_info.tags.append(tag)
+
+        # 学生手动选择加入社团（可多选），该规则优先于自动并入
+        society_ids = [int(sid) for sid in selected_societies if sid and str(sid).isdigit()]
+        societies = db.session.execute(
+            db.select(Society).filter(Society.id.in_(society_ids), Society.is_active == True)
+        ).scalars().all() if society_ids else []
+        student_info.joined_societies = societies
+        if societies:
+            student_info.society_id = societies[0].id
+        else:
+            student_info.society_id = None
         
         # 标记为已选择标签
         student_info.has_selected_tags = True
@@ -790,8 +804,12 @@ def select_tags():
     # GET请求，显示标签选择页面
     tags_stmt = db.select(Tag)
     tags = db.session.execute(tags_stmt).scalars().all()
+    societies = db.session.execute(db.select(Society).filter_by(is_active=True).order_by(Society.name.asc())).scalars().all()
     
     # 获取已选择的标签
     selected_tag_ids = [tag.id for tag in student_info.tags] if student_info.tags else []
+    selected_society_ids = [s.id for s in (student_info.joined_societies or [])]
+    if student_info.society_id and student_info.society_id not in selected_society_ids:
+        selected_society_ids.append(student_info.society_id)
     
-    return render_template('auth/select_tags.html', tags=tags, selected_tag_ids=selected_tag_ids)
+    return render_template('auth/select_tags.html', tags=tags, selected_tag_ids=selected_tag_ids, societies=societies, selected_society_ids=selected_society_ids)
