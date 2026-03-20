@@ -783,6 +783,9 @@
                                         <li><a class="dropdown-item" href="{{ url_for('student.profile') }}">个人资料</a></li>
                                     {% elif current_user.role.name|lower == 'admin' %}
                                         <li><a class="dropdown-item" href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
+                                        {% if current_user.is_super_admin %}
+                                        <li><a class="dropdown-item" href="{{ url_for('admin.manage_societies') }}">社团管理</a></li>
+                                        {% endif %}
                                         <li><a class="dropdown-item" href="{{ url_for('admin.messages') }}">站内信</a></li>
                                     {% endif %}
                                     <li><a class="dropdown-item" href="{{ url_for('auth.change_password') }}">修改密码</a></li>

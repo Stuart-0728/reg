@@ -1174,6 +1174,9 @@ def dashboard():
         
         # 获取报名统计
         total_registrations_stmt = db.select(func.count()).select_from(Registration)
+        scope_id = _current_scope_society_id()
+        if scope_id:
+            total_registrations_stmt = total_registrations_stmt.join(Activity, Registration.activity_id == Activity.id).filter(Activity.society_id == scope_id)
         total_registrations = db.session.execute(total_registrations_stmt).scalar()
         
         return render_template('admin/dashboard.html',
@@ -2066,6 +2069,8 @@ def statistics():
         start_date = normalize_datetime_for_db(start_date)
         end_date = normalize_datetime_for_db(end_date)
         
+        scope_id = _current_scope_society_id()
+
         # 获取最近7天的活动数据
         daily_activities_stmt = db.select(
             func.date(Activity.created_at).label('date'),
@@ -2075,6 +2080,8 @@ def statistics():
         ).group_by(
             func.date(Activity.created_at)
         )
+        if scope_id:
+            daily_activities_stmt = daily_activities_stmt.filter(Activity.society_id == scope_id)
         daily_activities = db.session.execute(daily_activities_stmt).all()
         
         # 获取最近7天的注册数据
@@ -2083,7 +2090,10 @@ def statistics():
             func.count(Registration.id).label('count')
         ).filter(
             Registration.register_time.between(start_date, end_date)
-        ).group_by(
+        )
+        if scope_id:
+            daily_registrations_stmt = daily_registrations_stmt.join(Activity, Registration.activity_id == Activity.id).filter(Activity.society_id == scope_id)
+        daily_registrations_stmt = daily_registrations_stmt.group_by(
             func.date(Registration.register_time)
         )
         daily_registrations = db.session.execute(daily_registrations_stmt).all()
@@ -2092,9 +2102,17 @@ def statistics():
         daily_users_stmt = db.select(
             func.date(User.created_at).label('date'),
             func.count(User.id).label('count')
-        ).filter(
+        ).join(StudentInfo, StudentInfo.user_id == User.id).filter(
             User.created_at.between(start_date, end_date)
-        ).group_by(
+        )
+        if scope_id:
+            daily_users_stmt = daily_users_stmt.filter(
+                or_(
+                    StudentInfo.society_id == scope_id,
+                    StudentInfo.joined_societies.any(Society.id == scope_id)
+                )
+            )
+        daily_users_stmt = daily_users_stmt.group_by(
             func.date(User.created_at)
         )
         daily_users = db.session.execute(daily_users_stmt).all()
@@ -2133,6 +2151,8 @@ def statistics():
             Activity.type,
             func.count(Activity.id).label('count')
         ).group_by(Activity.type)
+        if scope_id:
+            activity_types_stmt = activity_types_stmt.filter(Activity.society_id == scope_id)
         activity_types = db.session.execute(activity_types_stmt).all()
         
         # 转换为前端可用的格式
@@ -2149,6 +2169,8 @@ def statistics():
             ).join(
                 Activity, Activity.id == activity_tags.c.activity_id
             ).group_by(Tag.name).order_by(desc('count')).limit(10)
+            if scope_id:
+                tag_stats_stmt = tag_stats_stmt.filter(Activity.society_id == scope_id)
             
             tag_stats = db.session.execute(tag_stats_stmt).all()
             
@@ -2178,14 +2200,22 @@ def statistics():
 @admin_required
 def api_statistics():
     try:
+        scope_id = _current_scope_society_id()
+
         # 活动状态统计
         active_count_stmt = db.select(func.count()).select_from(Activity).filter_by(status='active')
+        if scope_id:
+            active_count_stmt = active_count_stmt.filter(Activity.society_id == scope_id)
         active_count = db.session.execute(active_count_stmt).scalar()
         
         completed_count_stmt = db.select(func.count()).select_from(Activity).filter_by(status='completed')
+        if scope_id:
+            completed_count_stmt = completed_count_stmt.filter(Activity.society_id == scope_id)
         completed_count = db.session.execute(completed_count_stmt).scalar()
         
         cancelled_count_stmt = db.select(func.count()).select_from(Activity).filter_by(status='cancelled')
+        if scope_id:
+            cancelled_count_stmt = cancelled_count_stmt.filter(Activity.society_id == scope_id)
         cancelled_count = db.session.execute(cancelled_count_stmt).scalar()
         
         registration_stats = {
@@ -2197,10 +2227,19 @@ def api_statistics():
         student_role_stmt = db.select(Role.id).filter_by(name='Student')
         student_role_id = db.session.execute(student_role_stmt).scalar()
         
-        total_students_stmt = db.select(func.count()).select_from(User).filter_by(role_id=student_role_id)
+        total_students_stmt = db.select(func.count()).select_from(User).join(StudentInfo, StudentInfo.user_id == User.id).filter(User.role_id == student_role_id)
+        if scope_id:
+            total_students_stmt = total_students_stmt.filter(
+                or_(
+                    StudentInfo.society_id == scope_id,
+                    StudentInfo.joined_societies.any(Society.id == scope_id)
+                )
+            )
         total_students = db.session.execute(total_students_stmt).scalar()
         
         active_students_stmt = db.select(func.count(Registration.user_id.distinct())).select_from(Registration)
+        if scope_id:
+            active_students_stmt = active_students_stmt.join(Activity, Registration.activity_id == Activity.id).filter(Activity.society_id == scope_id)
         active_students = db.session.execute(active_students_stmt).scalar()
         
         inactive_students = total_students - active_students if total_students > active_students else 0
@@ -2232,6 +2271,8 @@ def api_statistics():
             monthly_activities_stmt = db.select(func.count()).select_from(Activity).filter(
                 Activity.created_at.between(month_start, month_end)
             )
+            if scope_id:
+                monthly_activities_stmt = monthly_activities_stmt.filter(Activity.society_id == scope_id)
             monthly_activities = db.session.execute(monthly_activities_stmt).scalar() or 0
             activities_count.append(monthly_activities)
             
@@ -2239,6 +2280,8 @@ def api_statistics():
             monthly_registrations_stmt = db.select(func.count()).select_from(Registration).filter(
                 Registration.register_time.between(month_start, month_end)
             )
+            if scope_id:
+                monthly_registrations_stmt = monthly_registrations_stmt.join(Activity, Registration.activity_id == Activity.id).filter(Activity.society_id == scope_id)
             monthly_registrations = db.session.execute(monthly_registrations_stmt).scalar() or 0
             registrations_count.append(monthly_registrations)
         
