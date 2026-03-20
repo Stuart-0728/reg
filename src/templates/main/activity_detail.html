@@ -228,7 +228,7 @@
                             <h6 class="mb-0">{{ activity.society.name if activity.society else '重庆师范大学智能社团+' }}</h6>
                             {% if activity.society and activity.society.description %}
                             <p class="text-muted mb-0 small">{{ activity.society.description }}</p>
-                            {% else %}
+                            {% elif not activity.society %}
                             <p class="text-muted mb-0 small">AI融合一站式社团管理解决方案</p>
                             {% endif %}
                         </div>
