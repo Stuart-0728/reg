@@ -50,14 +50,19 @@ def forbidden(e):
 
 @errors_bp.app_errorhandler(400)
 def bad_request(e):
-    logger.warning(f"400 错误: {request.path}")
+    logger.warning(f"400 错误: {request.path} - {str(e)}")
 
     # 如果是API请求，返回JSON
     if request.path.startswith('/api/') or request.path.startswith('/admin/api/') or request.path.startswith('/utils/'):
+        error_msg = str(e) if e else '请求参数格式不正确'
+        # 清除 werkzeug 默认的前缀，如果是 CSRFError，也是截取后面的字符串
+        if ":" in error_msg:
+            error_msg = error_msg.split(':', 1)[-1].strip()
+        
         return jsonify({
             'success': False,
             'error': '请求格式错误',
-            'message': '请求参数格式不正确'
+            'message': error_msg
         }), 400
 
     return render_template('404.html'), 400

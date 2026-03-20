@@ -818,6 +818,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'X-CSRFToken': csrfToken,
                     'X-CSRF-Token': csrfToken
                 },
+                body: JSON.stringify({ session_id: chatSession.sessionId }),
                 credentials: 'same-origin' // 确保包含Cookie
             })
             .then(response => {
@@ -911,12 +912,12 @@ document.addEventListener('DOMContentLoaded', () => {
             fetch('/utils/ai_chat/clear_history', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRFToken': csrfToken,
                     'X-CSRF-Token': csrfToken
                 },
-                body: payload.toString(),
+                body: JSON.stringify({ csrf_token: csrfToken, session_id: chatSession.sessionId || '' }),
                 credentials: 'same-origin' // 确保包含Cookie
             })
             .then(response => {

@@ -359,7 +359,7 @@ def gemini_api():
             'Authorization': f'Bearer {api_key}',
         }
         payload = {
-            'model': 'deepseek-v3-250324',
+            'model': 'ep-20260320185026-9cc4w',
             'messages': [
                 {'role': 'system', 'content': '请直接回答用户的问题，不要自称是任何角色。回答应该简洁、准确、有教育意义。'},
                 {'role': 'user', 'content': prompt},

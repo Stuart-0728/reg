@@ -285,42 +285,43 @@ def build_activity_context(activities):
     return "\n".join([f"{a.title}：{a.description[:40]}..." for a in activities])
 
 def build_site_data_context(max_activities=20):
-    """构建站内活动与标签映射上下文，供AI回答平台数据问题。"""
+    """构建站内活动与社团、标签映射的高度压缩上下文，极小化Token消耗。"""
     try:
+        from src.models import Society
+        # 1. 压缩社团数据
+        societies = db.session.execute(db.select(Society).filter_by(is_active=True)).scalars().all()
+        soc_lines = [f"{s.name}({s.code})" for s in societies]
+        
+        # 2. 获取标签热度并压缩
+        popular_tags = db.session.query(
+            Tag.name, db.func.count(activity_tags.c.activity_id).label('count')
+        ).join(activity_tags).group_by(Tag.id).order_by(db.text('count DESC')).limit(8).all()
+        pt_lines = [f"{t[0]}:{t[1]}" for t in popular_tags]
+
+        # 3. 获取最新活动并高密度压缩
         activities = db.session.execute(
             db.select(Activity).order_by(Activity.created_at.desc()).limit(max_activities)
         ).scalars().all()
 
         if not activities:
-            activity_lines = ["- 暂无活动数据"]
+            activity_lines = ["无数据"]
         else:
             activity_lines = []
-            for activity in activities:
-                tag_names = [tag.name for tag in activity.tags] if activity.tags else []
-                start_time = activity.start_time.strftime('%Y-%m-%d %H:%M') if activity.start_time else '未设置'
-                activity_lines.append(
-                    f"- {activity.title} | 状态:{activity.status} | 标签:{'、'.join(tag_names) if tag_names else '无标签'} | 开始:{start_time}"
-                )
-
-        popular_tags = db.session.query(
-            Tag.name,
-            db.func.count(activity_tags.c.activity_id).label('count')
-        ).join(activity_tags).group_by(Tag.id).order_by(db.text('count DESC')).limit(10).all()
-
-        if popular_tags:
-            tag_lines = [f"- {tag_name}: {count} 个活动关联" for tag_name, count in popular_tags]
-        else:
-            tag_lines = ["- 暂无标签关联数据"]
+            for a in activities:
+                soc_name = a.society.name if getattr(a, 'society', None) else '无'
+                st = a.start_time.strftime('%m-%d %H:%M') if a.start_time else '-'
+                et = a.end_time.strftime('%m-%d %H:%M') if a.end_time else '-'
+                tag_names = ','.join([tag.name for tag in a.tags]) if getattr(a, 'tags', None) else '无'
+                activity_lines.append(f"[{a.id}]{a.title}|{soc_name}|{tag_names}|{a.status}|{st}至{et}")
 
         return (
-            "【活动与标签映射】\n"
-            + "\n".join(activity_lines)
-            + "\n\n【标签热度】\n"
-            + "\n".join(tag_lines)
+            f"【社团库】{','.join(soc_lines)}\n"
+            f"【热标】{','.join(pt_lines)}\n"
+            f"【最新活动表(ID|名称|社团|标签|状态|起止时间)】\n" + "\n".join(activity_lines)
         )
     except Exception as e:
         logger.error(f"构建站内数据上下文失败: {e}")
-        return "【活动与标签映射】数据暂不可用"
+        return "数据暂不可用"
 
 # 独立的AI聊天API路由 - 添加到utils_bp蓝图
 @utils_bp.route('/utils/ai_chat/api', methods=['GET'])
@@ -350,7 +351,7 @@ def ai_chat():
                 'error': 'AI 服务配置错误：API 密钥未设置'
             }), 500
 
-    # 获取API端点URL - 使用火山引擎官方提供的URL
+    # 获取API端点URL - 恢复为普通对话端点
     url = current_app.config.get('VOLCANO_API_URL', "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
     logger.info(f"使用AI聊天API端点: {url}")
     
@@ -511,7 +512,7 @@ def ai_chat():
 
     # 构建API请求
     payload = {
-        "model": "deepseek-v3-250324",  # 使用官方指定的模型
+        "model": "ep-20260320185026-9cc4w",  # 用户指定的推理接入点
         "messages": messages,
         "temperature": 0.7,
         "stream": True
@@ -605,10 +606,12 @@ def ai_chat():
 
 
 @utils_bp.route('/api/ai/chat', methods=['POST'])
-@login_required
 @csrf.exempt
 def ai_chat_legacy_post():
     """兼容旧教育页面使用的 /api/ai/chat POST 接口。"""
+    if not current_user.is_authenticated:
+        return jsonify({'success': False, 'error': '未授权访问'}), 401
+
     try:
         data = request.get_json(silent=True) or {}
         prompt = (data.get('message') or data.get('prompt') or '').strip()
@@ -643,7 +646,7 @@ def ai_chat_legacy_post():
         messages.append({'role': 'user', 'content': prompt})
 
         payload = {
-            'model': 'deepseek-v3-250324',
+            'model': 'ep-20260320185026-9cc4w',
             'messages': messages,
             'temperature': 0.6,
         }
@@ -856,78 +859,6 @@ def ai_chat_clear_history():
             'message': f'清除所有历史记录失败: {str(e)}'
         }), 500
 
-# 添加utils前缀路由
-@utils_bp.route('/utils/ai_chat/clear_history', methods=['POST'])
-@login_required
-@csrf.exempt
-def utils_ai_chat_clear_history():
-    """清除用户所有AI聊天历史记录 - 带utils前缀的版本"""
-    ok, message = _validate_api_csrf_token()
-    if not ok:
-        return jsonify({'success': False, 'message': message}), 400
-
-    try:
-        # 记录请求信息以便调试
-        logger.info(f"收到清除历史请求: 用户ID={current_user.id}, Headers={dict(request.headers)}")
-        logger.info(f"CSRF Token from headers: {request.headers.get('X-CSRFToken')}")
-        logger.info(f"CSRF Token from form: {request.form.get('csrf_token')}")
-
-        # 获取请求数据 - 同时兼容JSON、表单、查询参数
-        data = {}
-        try:
-            data = request.get_json(silent=True) or {}
-        except Exception as parse_error:
-            logger.warning(f"clear_history JSON解析失败，自动回退表单解析: {parse_error}")
-
-        session_id = (
-            (data.get('session_id') if isinstance(data, dict) else None)
-            or request.form.get('session_id')
-            or request.args.get('session_id')
-        )
-        
-        # 记录会话ID
-        logger.info(f"准备清除用户 {current_user.id} 的所有聊天历史, 会话ID: {session_id}")
-
-        # 删除用户的所有聊天记录
-        sessions = db.session.execute(db.select(AIChatSession).filter_by(
-            user_id=current_user.id
-        )).scalars().all()
-        
-        if not sessions:
-            logger.info(f"用户 {current_user.id} 没有聊天会话记录")
-            return jsonify({
-                'success': True,
-                'message': '没有可清除的历史记录'
-            })
-        
-        history_count = 0
-        for session in sessions:
-            # 删除聊天历史
-            result = db.session.execute(db.delete(AIChatHistory).filter_by(
-                session_id=session.id
-            ))
-            history_count += result.rowcount
-        
-        # 也可以选择删除会话本身
-        session_result = db.session.execute(db.delete(AIChatSession).filter_by(
-            user_id=current_user.id
-        ))
-        
-        db.session.commit()
-        
-        logger.info(f"成功清除用户 {current_user.id} 的历史记录: {history_count} 条消息, {session_result.rowcount} 个会话")
-        
-        return jsonify({
-            'success': True,
-            'message': f'成功清除所有历史记录: {history_count} 条消息'
-        })
-    except Exception as e:
-        logger.error(f"清除所有AI聊天历史记录失败: {str(e)}", exc_info=True)
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'清除所有历史记录失败: {str(e)}'
-        }), 500
 
 # 添加缺失的add_points函数
 def add_points(user_id, points, reason, activity_id=None):

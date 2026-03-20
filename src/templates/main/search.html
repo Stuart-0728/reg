@@ -16,10 +16,12 @@
             <h5 class="mb-0">高级搜索</h5>
         </div>
         <div class="card-body">
-            <div class="mb-4">
-                <form method="GET" action="{{ url_for('main.search') }}" class="d-flex">
-                    <input type="text" name="q" class="form-control me-2" value="{{ query }}" placeholder="搜索活动、地点...">
-                    <button type="submit" class="btn btn-primary" data-no-loading>搜索</button>
+            <div class="mb-5">
+                <form method="GET" action="{{ url_for('main.search') }}" class="modern-search-form w-100" style="max-width: 600px; margin: 0 auto;">
+                    <input type="search" name="q" class="form-control form-control-lg shadow-sm" style="border-radius: 50px !important; padding: 0.75rem 3.5rem 0.75rem 1.5rem; border: 1px solid rgba(67, 97, 238, 0.2);" value="{{ query }}" placeholder="搜索活动、社团或地点...">
+                    <button type="submit" class="search-btn" data-no-loading title="搜索" style="color: var(--primary-color); font-size: 1.25rem; right: 20px;">
+                        <i class="fas fa-search"></i>
+                    </button>
                 </form>
             </div>
 
@@ -38,8 +40,8 @@
                                 <div class="card-body">
                                     <p class="card-text text-truncate">{{ activity.description|striptags }}</p>
                                     <p class="mb-1"><i class="bi bi-geo-alt-fill text-primary"></i> {{ activity.location }}</p>
-                                    <p class="mb-1"><i class="bi bi-calendar-event-fill text-primary"></i> {{ display_datetime(activity.start_time, None, '%Y-%m-%d %H:%M') }}</p>
-                                    <p class="mb-1"><i class="bi bi-clock-fill text-primary"></i> 报名截止: {{ display_datetime(activity.registration_deadline, None, '%Y-%m-%d %H:%M') }}</p>
+                                    <p class="mb-1"><i class="bi bi-calendar-event-fill text-primary"></i> {{ activity.start_time|format_datetime('%Y-%m-%d %H:%M') if activity.start_time else '待定' }}</p>
+                                    <p class="mb-1"><i class="bi bi-clock-fill text-primary"></i> 报名截止: {{ activity.registration_deadline|format_datetime('%Y-%m-%d %H:%M') if activity.registration_deadline else '无限制' }}</p>
                                 </div>
                                 <div class="card-footer bg-transparent">
                                     {% if current_user.is_authenticated %}

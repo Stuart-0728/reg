@@ -1,0 +1,30 @@
+2026-03-20 20:32:28,117 - src - INFO - 日志系统初始化完成
+2026-03-20 20:32:28,117 - src - INFO - 日志系统初始化完成
+2026-03-20 20:32:28,117 - src - INFO - 应用启动，配置模式: default
+2026-03-20 20:32:28,117 - src - INFO - 应用启动，配置模式: default
+2026-03-20 20:32:28,168 - src - INFO - 使用Flask原生会话系统
+2026-03-20 20:32:28,168 - src - INFO - 使用Flask原生会话系统
+2026-03-20 20:32:29,817 - src - INFO - 已为education.gemini_api路由添加CSRF豁免
+2026-03-20 20:32:29,817 - src - INFO - 已为education.gemini_api路由添加CSRF豁免
+2026-03-20 20:32:29,817 - src - INFO - 已设置数据库目录权限: /Users/luoyixin/Desktop/💻编程项目/reg/instance
+2026-03-20 20:32:29,817 - src - INFO - 已设置数据库目录权限: /Users/luoyixin/Desktop/💻编程项目/reg/instance
+2026-03-20 20:32:29,817 - src - INFO - 已设置数据库文件权限: /Users/luoyixin/Desktop/💻编程项目/reg/instance/cqnu_association.db
+2026-03-20 20:32:29,817 - src - INFO - 已设置数据库文件权限: /Users/luoyixin/Desktop/💻编程项目/reg/instance/cqnu_association.db
+2026-03-20 20:32:29,853 - src - INFO - 已补齐 users.managed_society_id 字段
+2026-03-20 20:32:29,853 - src - INFO - 已补齐 users.managed_society_id 字段
+2026-03-20 20:32:29,853 - src - INFO - 已补齐 users.is_super_admin 字段
+2026-03-20 20:32:29,853 - src - INFO - 已补齐 users.is_super_admin 字段
+2026-03-20 20:32:29,854 - src - INFO - 已补齐 student_info.society_id 字段
+2026-03-20 20:32:29,854 - src - INFO - 已补齐 student_info.society_id 字段
+2026-03-20 20:32:29,855 - src - INFO - 已补齐 activities.society_id 字段
+2026-03-20 20:32:29,855 - src - INFO - 已补齐 activities.society_id 字段
+2026-03-20 20:32:29,855 - src - INFO - 已补齐 points_history.society_id 字段
+2026-03-20 20:32:29,855 - src - INFO - 已补齐 points_history.society_id 字段
+2026-03-20 20:32:29,856 - src - INFO - 已补齐 message.target_society_id 字段
+2026-03-20 20:32:29,856 - src - INFO - 已补齐 message.target_society_id 字段
+2026-03-20 20:32:29,856 - src - INFO - 已同步 student_info.society_id 到 student_societies
+2026-03-20 20:32:29,856 - src - INFO - 已同步 student_info.society_id 到 student_societies
+2026-03-20 20:32:29,856 - src - INFO - 字段 activities.registration_start_time 已存在，跳过补齐
+2026-03-20 20:32:29,856 - src - INFO - 字段 activities.registration_start_time 已存在，跳过补齐
+2026-03-20 20:32:29,856 - src - INFO - 已执行数据库结构与序列健康检查
+2026-03-20 20:32:29,856 - src - INFO - 已执行数据库结构与序列健康检查

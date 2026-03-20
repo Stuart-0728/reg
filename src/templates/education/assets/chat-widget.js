@@ -22,7 +22,6 @@
     systemPrompt: '你是物理实验助手，请用简体中文回答，条理清晰、步骤明确，结合实验数据给出结论与建议。',
     tts: true,
     stt: true,
-    requireLogin: true,
     title: 'AI 实验助手',
     greeting: '你好！我是你的物理实验 AI 助手，有什么想问我的吗？',
     contextProvider: null
@@ -63,8 +62,6 @@
     // bold & italic
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
          .replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    // markdown links
-    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+|\/[^)]+)\)/g, '<a href="$2" target="_self" style="color:#93c5fd;text-decoration:underline;">$1</a>');
     // lists (naive)
     s = s.replace(/^(?:-|\*) (.*)$/gm, '<li>$1</li>');
     s = s.replace(/(?:<li>.*<\/li>\n?)+/g, m => '<ul>' + m.replace(/\n/g,'') + '</ul>');
@@ -206,28 +203,7 @@
   function mountUI(opts) {
     fab = el('button', { class: 'cb-chat-fab', title: 'AI 实验助手' });
     fab.innerHTML = '<span style="font-weight:800;font-style:italic;">AI</span>';
-    fab.addEventListener('click', async () => {
-      if (opts.requireLogin) {
-        if (opts.authenticated === null || typeof opts.authenticated === 'undefined') {
-          try {
-            const res = await fetch('/education/auth-status', { credentials: 'include' });
-            const data = await res.json();
-            opts.authenticated = !!(data && data.authenticated);
-          } catch (_) {
-            opts.authenticated = false;
-          }
-        }
-
-        if (opts.authenticated === false) {
-          suggest('AI 功能需要登录后启用，点击 [登录](/auth/login) 后即可使用。', null, {
-            duration: 9000,
-            showFillButton: false
-          });
-          return;
-        }
-      }
-      togglePanel();
-    });
+    fab.addEventListener('click', togglePanel);
 
     panel = el('div', { class: 'cb-chat-panel' });
     // 固定面板高度与布局（内联，避免依赖全局 CSS 未生效）
@@ -1329,17 +1305,6 @@
     if (mounted) return;
     const opts = Object.assign({}, defaultOptions, options);
 
-    if (opts.requireLogin) {
-      const bodyAuth = document.body && document.body.getAttribute('data-ai-auth');
-      if (bodyAuth === '1' || bodyAuth === 'true') {
-        opts.authenticated = true;
-      } else if (bodyAuth === '0' || bodyAuth === 'false') {
-        opts.authenticated = false;
-      } else if (typeof opts.authenticated !== 'boolean') {
-        opts.authenticated = null;
-      }
-    }
-
     client = new AIClient.DeepseekClient({
       apiKey: opts.apiKey || undefined,
       endpoint: opts.endpoint || undefined,
@@ -1362,7 +1327,7 @@
     mounted = true;
   }
 
-  function suggest(text, payload, options = {}) {
+  function suggest(text, payload) {
     try {
       const now = Date.now();
       const COOLDOWN = 3000; // 3s 冷却
@@ -1382,16 +1347,12 @@
       // 无论面板是否打开，toast 永远挂在页面右下角（面板的 z-index 更高，不会被遮挡）
       const container = document.body;
       toast.className = 'cb-toast';
-      const showFillButton = options.showFillButton !== false;
-      const duration = Number.isFinite(options.duration) ? options.duration : 5000;
-      toast.innerHTML = renderMarkdown(text) + (showFillButton
-        ? ' <button class="btn secondary" style="padding:2px 6px;">填入</button> <button class="btn secondary" style="padding:2px 6px;">关闭</button>'
-        : ' <button class="btn secondary" style="padding:2px 6px;">关闭</button>');
+      toast.innerHTML = renderMarkdown(text) + ' <button class="btn secondary" style="padding:2px 6px;">填入</button> <button class="btn secondary" style="padding:2px 6px;">关闭</button>';
       container.appendChild(toast);
       requestAnimationFrame(()=> toast.classList.add('show'));
       const btns = toast.querySelectorAll('button');
-      const btn = showFillButton ? btns[0] : null;
-      const closeBtn = showFillButton ? btns[1] : btns[0];
+      const btn = btns[0];
+      const closeBtn = btns[1];
 
       function dispatchInputEvents(el) {
         try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch(_) {}
@@ -1499,31 +1460,34 @@
         }
       }
 
-      if (btn) {
-        btn.addEventListener('click', ()=> {
-          try {
-            let handled = false;
-
-            if (typeof window.onChatWidgetFill === 'function') {
-              window.onChatWidgetFill(payload || {});
-              handled = true;
-            } else if (payload && typeof payload === 'object') {
-              handled = defaultFill(payload);
-            } else {
-              handled = handleExperimentSpecificFill(payload);
-            }
-
-            if (!handled) {
-              console.warn('[ChatWidget] 此页面未实现参数填入或未提供可用参数。');
-            }
-          } catch (e) {
-            console.error('参数填入错误:', e);
-            console.warn('[ChatWidget] 参数填入失败，请手动调整。');
+      btn.addEventListener('click', ()=> {
+        try {
+          let handled = false;
+          
+          // 首先尝试页面自定义的填入函数
+          if (typeof window.onChatWidgetFill === 'function') {
+            window.onChatWidgetFill(payload || {});
+            handled = true;
+          } 
+          // 然后尝试通用的参数填入
+          else if (payload && typeof payload === 'object') {
+            handled = defaultFill(payload);
           }
-          toast.classList.remove('show');
-          setTimeout(()=> { if (suggestToast === toast) suggestToast = null; toast.remove(); }, 200);
-        });
-      }
+          // 最后尝试实验特定的参数填入
+          else {
+            handled = handleExperimentSpecificFill(payload);
+          }
+          
+          if (!handled) {
+            console.warn('[ChatWidget] 此页面未实现参数填入或未提供可用参数。');
+          }
+        } catch (e) {
+          console.error('参数填入错误:', e);
+          console.warn('[ChatWidget] 参数填入失败，请手动调整。');
+        }
+        toast.classList.remove('show');
+        setTimeout(()=> { if (suggestToast === toast) suggestToast = null; toast.remove(); }, 200);
+      });
 
       closeBtn.addEventListener('click', ()=> {
         toast.classList.remove('show');
@@ -1533,7 +1497,7 @@
       setTimeout(()=> {
         toast.classList.remove('show');
         setTimeout(()=> { if (suggestToast === toast) suggestToast = null; toast.remove(); }, 200);
-      }, duration);
+      }, 5000);
     } catch (_) {}
   }
 
