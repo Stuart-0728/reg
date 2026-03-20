@@ -968,31 +968,70 @@ def submit_review(activity_id):
 @student_bp.route('/points/rank')
 @login_required
 def points_rank():
-    society_id = _current_student_society_id()
+    society_ids = _current_student_society_ids()
+    student_info = db.session.execute(
+        db.select(StudentInfo).filter_by(user_id=current_user.id)
+    ).scalar_one_or_none()
 
     # 全站总积分榜
     total_top_students = StudentInfo.query.order_by(StudentInfo.points.desc()).limit(100).all()
 
-    # 社团积分榜（按 points_history 聚合）
-    society_top_students = []
-    if society_id:
+    # 多社团积分榜：按每个社团单独聚合 points_history.society_id
+    societies = (
+        db.session.execute(
+            db.select(Society).filter(Society.id.in_(society_ids)).order_by(Society.name)
+        ).scalars().all()
+        if society_ids else []
+    )
+
+    society_boards = []
+    for society in societies:
         rows = db.session.execute(
             db.select(
                 StudentInfo,
                 func.coalesce(func.sum(PointsHistory.points), 0).label('society_points')
             )
-            .outerjoin(PointsHistory, and_(PointsHistory.student_id == StudentInfo.id, PointsHistory.society_id == society_id))
-            .filter(StudentInfo.society_id == society_id)
+            .outerjoin(
+                PointsHistory,
+                and_(
+                    PointsHistory.student_id == StudentInfo.id,
+                    PointsHistory.society_id == society.id
+                )
+            )
+            .filter(
+                or_(
+                    StudentInfo.society_id == society.id,
+                    StudentInfo.joined_societies.any(Society.id == society.id)
+                )
+            )
             .group_by(StudentInfo.id)
-            .order_by(desc('society_points'))
+            .order_by(desc('society_points'), StudentInfo.id.asc())
             .limit(100)
         ).all()
-        for student, society_points in rows:
-            setattr(student, 'society_points', int(society_points or 0))
-            society_top_students.append(student)
 
-    society = db.session.get(Society, society_id) if society_id else None
-    return render_template('student/points_rank.html', top_students=total_top_students, society_top_students=society_top_students, society=society)
+        students = []
+        current_student_points = 0
+        current_student_rank = None
+        for idx, (student, society_points) in enumerate(rows, start=1):
+            points_value = int(society_points or 0)
+            setattr(student, 'society_points', points_value)
+            students.append(student)
+            if student_info and student.id == student_info.id:
+                current_student_points = points_value
+                current_student_rank = idx
+
+        society_boards.append({
+            'society': society,
+            'students': students,
+            'current_student_points': current_student_points,
+            'current_student_rank': current_student_rank
+        })
+
+    return render_template(
+        'student/points_rank.html',
+        top_students=total_top_students,
+        society_boards=society_boards
+    )
 
 def get_recommended_activities(user_id, limit=6):
     """基于用户的历史参与记录和兴趣推荐活动"""

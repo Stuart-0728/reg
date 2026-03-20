@@ -6,10 +6,17 @@
 <div class="container mt-4">
     <h2 class="mb-4">积分排行榜（前100名）</h2>
 
-    {% if society and society_top_students %}
+    {% if society_boards %}
+    {% for board in society_boards %}
     <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-white">
-            <strong>{{ society.name }}社团积分榜（仅统计该社团内活动所得积分）</strong>
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong>{{ board.society.name }}社团积分榜（仅统计该社团内活动所得积分）</strong>
+            <small class="text-muted">
+                我的积分：{{ board.current_student_points or 0 }}
+                {% if board.current_student_rank %}
+                ｜我的排名：第 {{ board.current_student_rank }} 名
+                {% endif %}
+            </small>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -25,7 +32,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for stu in society_top_students %}
+                        {% for stu in board.students %}
                         <tr>
                             <td>{{ loop.index }}</td>
                             <td>{{ stu.real_name }}</td>
@@ -40,6 +47,7 @@
             </div>
         </div>
     </div>
+    {% endfor %}
     {% endif %}
 
     <div class="card shadow-sm border-0">
