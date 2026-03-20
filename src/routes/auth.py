@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from src import db
-from src.models import User, Role, StudentInfo, Tag, AIUserPreferences, SystemLog
+from src.models import User, Role, StudentInfo, Tag, AIUserPreferences, SystemLog, Society
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, SelectField, ValidationError
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Regexp
@@ -508,6 +508,9 @@ def session_state():
     role_name = ''
     display_name = ''
     dashboard_url = url_for('main.index')
+    is_super = False
+    managed_society_id = None
+    managed_society_name = ''
 
     if current_user.is_authenticated:
         try:
@@ -518,6 +521,11 @@ def session_state():
         if role_name == 'admin':
             dashboard_url = url_for('admin.dashboard')
             display_name = current_user.username or '管理员'
+            is_super = bool(getattr(current_user, 'is_super_admin', False))
+            managed_society_id = getattr(current_user, 'managed_society_id', None)
+            if managed_society_id:
+                society = db.session.get(Society, managed_society_id)
+                managed_society_name = society.name if society else ''
         else:
             dashboard_url = url_for('student.dashboard')
             display_name = (
@@ -530,6 +538,9 @@ def session_state():
         'success': True,
         'authenticated': bool(current_user.is_authenticated),
         'role': role_name,
+        'is_super_admin': is_super,
+        'managed_society_id': managed_society_id,
+        'managed_society_name': managed_society_name,
         'display_name': display_name,
         'urls': {
             'login': url_for('auth.login'),
@@ -539,6 +550,8 @@ def session_state():
             'dashboard': dashboard_url,
             'profile': url_for('student.profile') if role_name == 'student' else dashboard_url,
             'messages': url_for('admin.messages') if role_name == 'admin' else '',
+            'societies': url_for('admin.manage_societies') if role_name == 'admin' and is_super else '',
+            'select_society': url_for('admin.select_admin_society') if role_name == 'admin' and not is_super else '',
         }
     })
 

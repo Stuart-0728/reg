@@ -24,6 +24,17 @@
         <div class="card-body p-4">
             <form method="post" action="{{ url_for('student.create_message') }}">
                 {{ form.csrf_token }}
+
+                <div class="mb-3">
+                    <label for="target_type" class="form-label fw-medium">发送给</label>
+                    {{ form.target_type(class="form-select", id="target_type") }}
+                </div>
+
+                <div class="mb-3" id="societyTargetWrap" style="display:none;">
+                    <label for="target_society_id" class="form-label fw-medium">目标社团</label>
+                    {{ form.target_society_id(class="form-select", id="target_society_id") }}
+                    <div class="form-text">系统会自动发送给该社团已绑定的管理员。</div>
+                </div>
                 
                 <div class="mb-3">
                     <label for="subject" class="form-label fw-medium">主题</label>
@@ -59,4 +70,24 @@
         </div>
     </div>
 </div>
+<script>
+(() => {
+    const targetType = document.getElementById('target_type');
+    const societyWrap = document.getElementById('societyTargetWrap');
+    const societySelect = document.getElementById('target_society_id');
+
+    function toggleSocietySelector() {
+        const isSociety = targetType && targetType.value === 'society';
+        societyWrap.style.display = isSociety ? 'block' : 'none';
+        if (!isSociety && societySelect) {
+            societySelect.value = '0';
+        }
+    }
+
+    if (targetType) {
+        targetType.addEventListener('change', toggleSocietySelector);
+        toggleSocietySelector();
+    }
+})();
+</script>
 {% endblock %} 

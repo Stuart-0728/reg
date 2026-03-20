@@ -196,6 +196,7 @@
                     <h5 class="fw-bold mb-3">活动信息</h5>
                     <ul class="list-unstyled">
                         <li class="mb-3"><i class="fas fa-map-marker-alt text-primary me-2"></i> <strong>地点:</strong> {{ activity.location }}</li>
+                        <li class="mb-3"><i class="fas fa-layer-group text-primary me-2"></i> <strong>所属社团:</strong> {{ activity.society.name if activity.society else '全校活动' }}</li>
                         <li class="mb-3"><i class="fas fa-clock text-primary me-2"></i> <strong>时间:</strong> {{ display_datetime(activity.start_time, 'Asia/Shanghai') }} 至 {{ display_datetime(activity.end_time, 'Asia/Shanghai') }}</li>
                         {% if activity.registration_start_time %}
                         <li class="mb-3"><i class="fas fa-play-circle text-primary me-2"></i> <strong>报名开始:</strong> {{ display_datetime(activity.registration_start_time, 'Asia/Shanghai') }}</li>

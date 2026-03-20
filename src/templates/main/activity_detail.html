@@ -41,6 +41,7 @@
                             <h5>活动信息</h5>
                             <ul class="list-group list-group-flush">
                                 <li class="list-group-item"><i class="fas fa-map-marker-alt me-2"></i> <strong>地点：</strong>{{ activity.location }}</li>
+                                <li class="list-group-item"><i class="fas fa-layer-group me-2"></i> <strong>所属社团：</strong>{{ activity.society.name if activity.society else '全校活动' }}</li>
                                 <li class="list-group-item"><i class="fas fa-calendar-alt me-2"></i> <strong>开始时间：</strong>{{ display_datetime(activity.start_time, 'Asia/Shanghai') }}</li>
                                 <li class="list-group-item"><i class="fas fa-calendar-check me-2"></i> <strong>结束时间：</strong>{{ display_datetime(activity.end_time, 'Asia/Shanghai') }}</li>
                                 {% if activity.registration_start_time %}

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}选择社团 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 720px;">
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white">
+            <h4 class="mb-0">请选择你管理的社团</h4>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">首次进入系统需要先绑定一个社团，绑定后即可开始管理该社团下的活动和学生。</p>
+            <form method="post" action="{{ url_for('admin.select_admin_society_submit') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label">社团</label>
+                    <select name="society_id" class="form-select" required>
+                        <option value="">请选择社团</option>
+                        {% for society in societies %}
+                        <option value="{{ society.id }}">{{ society.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">确认绑定</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

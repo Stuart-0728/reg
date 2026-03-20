@@ -157,7 +157,8 @@ def scan_checkin(activity_id, checkin_key):
                 student_id=student_info.id,
                 activity_id=activity.id,
                 points=points,
-                reason=f"参与活动：{activity.title}"
+                reason=f"参与活动：{activity.title}",
+                society_id=student_info.society_id or activity.society_id
             )
             db.session.add(points_history)
         
@@ -361,7 +362,8 @@ def api_checkin(activity_id):
                     user_id=current_user.id,
                     activity_id=activity_id,
                     points=activity.points,
-                    reason=f'参加活动：{activity.title}'
+                    reason=f'参加活动：{activity.title}',
+                    society_id=getattr(user.student_info, 'society_id', None) or activity.society_id
                 )
                 db.session.add(points_history)
         

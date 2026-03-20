@@ -40,6 +40,19 @@ class Role(db.Model):
     def __repr__(self):
         return f'<Role {self.name}>'
 
+
+class Society(db.Model):
+    __tablename__ = 'societies'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(128), unique=True, nullable=False)
+    code = Column(String(64), unique=True, nullable=False)
+    description = Column(Text)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+
+    def __repr__(self):
+        return f'<Society {self.name}>'
+
 # 用户模型
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
@@ -49,6 +62,8 @@ class User(db.Model, UserMixin):
     password_hash = Column(String(256), nullable=False)
     role_id = Column(Integer, ForeignKey('roles.id'))
     active = Column(Boolean, default=True)  # 用户是否激活
+    managed_society_id = Column(Integer, ForeignKey('societies.id'), nullable=True)
+    is_super_admin = Column(Boolean, default=False)
     
     # 时间戳
     created_at = Column(DateTime, default=func.now())
@@ -65,6 +80,7 @@ class User(db.Model, UserMixin):
     notification_reads = relationship('NotificationRead', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     ai_chat_sessions = relationship('AIChatSession', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     ai_preferences = relationship('AIUserPreferences', backref='user', uselist=False, cascade="all, delete-orphan")
+    managed_society = relationship('Society', foreign_keys=[managed_society_id])
     
     @property
     def password(self):
@@ -125,10 +141,12 @@ class StudentInfo(db.Model):
     qq = Column(String(20))  # QQ号
     points = Column(Integer, default=0)  # 积分
     has_selected_tags = Column(Boolean, default=False)  # 是否已选择标签
+    society_id = Column(Integer, ForeignKey('societies.id'), nullable=True)
     
     # 关系
     tags = relationship('Tag', secondary=student_tags, backref=backref('students', lazy='dynamic'))
     points_history = relationship('PointsHistory', backref='student_info', lazy='dynamic', cascade='all, delete-orphan')
+    society = relationship('Society', foreign_keys=[society_id])
     
     def __repr__(self):
         return f'<StudentInfo {self.student_id} {self.real_name}>'
@@ -168,6 +186,7 @@ class Activity(db.Model):
     type = Column(String(50), default='其他')  # 活动类型
     status = Column(String(20), default='active')  # 活动状态：active, completed, cancelled
     is_featured = Column(Boolean, default=False)  # 是否为重点活动
+    society_id = Column(Integer, ForeignKey('societies.id'), nullable=True)
     
     # 海报图片
     poster_image = Column(String(255))  # 存储海报图片文件名
@@ -190,6 +209,7 @@ class Activity(db.Model):
     reviews = relationship('ActivityReview', backref='activity', lazy='dynamic', cascade='all, delete-orphan')
     checkins = relationship('ActivityCheckin', backref='activity', lazy='dynamic', cascade='all, delete-orphan')
     tags = relationship('Tag', secondary=activity_tags, backref=backref('activities', lazy='dynamic'))
+    society = relationship('Society', foreign_keys=[society_id])
     
     # 海报属性方法 - 不再定义数据库字段，而是通过属性方法提供兼容性
     @property
@@ -244,6 +264,9 @@ class PointsHistory(db.Model):
     points = Column(Integer, default=0)  # 积分变化，可正可负
     reason = Column(String(200))  # 积分变化原因
     created_at = Column(DateTime, default=func.now())
+    society_id = Column(Integer, ForeignKey('societies.id'), nullable=True)
+
+    society = relationship('Society', foreign_keys=[society_id])
     
     def __repr__(self):
         return f'<PointsHistory {self.student_id} {self.points}>'
@@ -326,6 +349,9 @@ class Message(db.Model):
     content = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime)
+    target_society_id = Column(Integer, ForeignKey('societies.id'), nullable=True)
+
+    target_society = relationship('Society', foreign_keys=[target_society_id])
     
     def __repr__(self):
         return f'<Message {self.subject}>'

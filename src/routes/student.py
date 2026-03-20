@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, abort, session, Response
 from flask_login import login_required, current_user
-from src.models import db, Activity, Registration, User, StudentInfo, PointsHistory, ActivityReview, Tag, Message, Notification, NotificationRead, Role
+from src.models import db, Activity, Registration, User, StudentInfo, PointsHistory, ActivityReview, Tag, Message, Notification, NotificationRead, Role, Society
 from datetime import datetime, timedelta
 import logging
 import json
@@ -101,6 +101,14 @@ def student_required(func):
             return redirect(url_for('main.index'))
     decorated_view.__name__ = func.__name__
     return decorated_view
+
+
+def _current_student_society_id():
+    try:
+        student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
+        return getattr(student_info, 'society_id', None)
+    except Exception:
+        return None
 
 @student_bp.route('/dashboard')
 @login_required
@@ -227,6 +235,9 @@ def activities():
         
         # 基本查询 - 所有活动
         query = db.select(Activity)
+        society_id = _current_student_society_id()
+        if society_id:
+            query = query.filter(Activity.society_id == society_id)
 
         # 根据状态筛选，使用北京时间进行比较
         if current_status == 'active':
@@ -281,6 +292,10 @@ def activities():
 def activity_detail(id):
     try:
         activity = db.get_or_404(Activity, id)
+        society_id = _current_student_society_id()
+        if society_id and activity.society_id and activity.society_id != society_id:
+            flash('该活动不属于您所在社团，无法查看', 'danger')
+            return redirect(url_for('student.activities'))
         now = get_localized_now()
 
         registration = db.session.execute(db.select(Registration).filter_by(user_id=current_user.id, activity_id=id)).scalar_one_or_none()
@@ -745,7 +760,8 @@ def add_points(student_id, points, reason, activity_id=None):
                 student_id=student_id,
                 points=points,
                 reason=reason,
-                activity_id=activity_id
+                activity_id=activity_id,
+                society_id=student.society_id
             )
             
             db.session.add(history)
@@ -865,7 +881,8 @@ def submit_review(activity_id):
                     student_id=student_info.id,
                     points=5,
                     reason='提交活动评价',
-                    activity_id=activity_id
+                    activity_id=activity_id,
+                    society_id=student_info.society_id
                 ))
 
             db.session.commit()
@@ -893,9 +910,31 @@ def submit_review(activity_id):
 @student_bp.route('/points/rank')
 @login_required
 def points_rank():
-    from src.models import StudentInfo
-    top_students = StudentInfo.query.order_by(StudentInfo.points.desc()).limit(100).all()
-    return render_template('student/points_rank.html', top_students=top_students)
+    society_id = _current_student_society_id()
+
+    # 全站总积分榜
+    total_top_students = StudentInfo.query.order_by(StudentInfo.points.desc()).limit(100).all()
+
+    # 社团积分榜（按 points_history 聚合）
+    society_top_students = []
+    if society_id:
+        rows = db.session.execute(
+            db.select(
+                StudentInfo,
+                func.coalesce(func.sum(PointsHistory.points), 0).label('society_points')
+            )
+            .outerjoin(PointsHistory, and_(PointsHistory.student_id == StudentInfo.id, PointsHistory.society_id == society_id))
+            .filter(StudentInfo.society_id == society_id)
+            .group_by(StudentInfo.id)
+            .order_by(desc('society_points'))
+            .limit(100)
+        ).all()
+        for student, society_points in rows:
+            setattr(student, 'society_points', int(society_points or 0))
+            society_top_students.append(student)
+
+    society = db.session.get(Society, society_id) if society_id else None
+    return render_template('student/points_rank.html', top_students=total_top_students, society_top_students=society_top_students, society=society)
 
 def get_recommended_activities(user_id, limit=6):
     """基于用户的历史参与记录和兴趣推荐活动"""
@@ -1110,6 +1149,7 @@ def checkin():
                     points=points,
                     reason=points_reason,
                     activity_id=activity_id,
+                    society_id=student_info.society_id,
                     created_at=now
                 )
                 db.session.add(points_history)
@@ -1237,24 +1277,37 @@ def create_message():
     try:
         # 创建一个空表单对象用于CSRF保护
         class MessageForm(FlaskForm):
+            target_type = SelectField('接收对象', choices=[('super', '总管理员'), ('society', '指定社团管理员')], default='super')
+            target_society_id = SelectField('目标社团', choices=[], coerce=int, validators=[Optional()])
             subject = StringField('主题', validators=[DataRequired(message='主题不能为空')])
             content = TextAreaField('内容', validators=[DataRequired(message='内容不能为空')])
             submit = SubmitField('提交反馈')
         
         form = MessageForm()
+        societies = db.session.execute(db.select(Society).filter_by(is_active=True).order_by(Society.name)).scalars().all()
+        form.target_society_id.choices = [(0, '请选择社团')] + [(s.id, s.name) for s in societies]
         
         if request.method == 'POST' and form.validate_on_submit():
             subject = form.subject.data
             content = form.content.data
+            target_type = (form.target_type.data or 'super').strip()
+            target_society_id = form.target_society_id.data if form.target_society_id.data and form.target_society_id.data > 0 else None
+            if target_type == 'society' and not target_society_id:
+                flash('请选择要发送的社团', 'warning')
+                return render_template('student/message_form.html', title='提交问题反馈', form=form)
             
-            # 创建消息，发送给管理员
-            # 查找管理员用户
             admin_role = db.session.query(Role).filter_by(name='Admin').first()
             if not admin_role:
                 flash('无法找到管理员，请联系系统管理员', 'danger')
                 return redirect(url_for('student.messages'))
-            
-            admin_user = db.session.execute(db.select(User).filter_by(role_id=admin_role.id)).scalar_one_or_none()
+
+            admin_query = db.select(User).filter_by(role_id=admin_role.id)
+            if target_type == 'society' and target_society_id:
+                admin_query = admin_query.filter(User.managed_society_id == target_society_id, User.is_super_admin == False)
+            else:
+                admin_query = admin_query.filter(User.is_super_admin == True)
+
+            admin_user = db.session.execute(admin_query.order_by(User.id.asc())).scalar_one_or_none()
             if not admin_user:
                 flash('无法找到管理员，请联系系统管理员', 'danger')
                 return redirect(url_for('student.messages'))
@@ -1265,7 +1318,8 @@ def create_message():
                 receiver_id=admin_user.id,
                 subject=subject,
                 content=content,
-                created_at=get_localized_now()
+                created_at=get_localized_now(),
+                target_society_id=target_society_id
             )
             
             db.session.add(message)

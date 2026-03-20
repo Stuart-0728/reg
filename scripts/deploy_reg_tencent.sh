@@ -150,11 +150,22 @@ fi
 sudo nginx -t && sudo systemctl reload nginx"
 
 echo "[8/8] 申请免费 SSL（DNS 生效后）"
-if dig +short ${DOMAIN} A | grep -q "${SERVER_IP}"; then
+A_RECORDS="$(dig +short ${DOMAIN} A | tr '\n' ' ' | xargs)"
+CNAME_RECORD="$(dig +short ${DOMAIN} CNAME | head -n1 | sed 's/\.$//')"
+
+if echo "${A_RECORDS}" | grep -q "${SERVER_IP}"; then
   ssh ${SERVER_USER}@${SERVER_IP} "sudo certbot --nginx -d ${DOMAIN} --non-interactive --agree-tos -m admin@cqaibase.cn --redirect"
   echo "SSL 已申请并配置完成。"
+elif [[ -n "${CNAME_RECORD}" ]]; then
+  echo "检测到 ${DOMAIN} 使用 CNAME: ${CNAME_RECORD}"
+  echo "当前可能处于 EdgeOne/CDN 代理场景，HTTP-01 验证通常无法直接在源站完成。"
+  echo "建议操作："
+  echo "1) 在 EdgeOne 控制台为 ${DOMAIN} 配置/开启边缘证书（推荐）。"
+  echo "2) 如需源站证书，临时关闭代理或改为直连源站后，再执行 certbot。"
+  echo "3) 也可改用 DNS-01 验证（需 DNS API 凭据）。"
+  echo "若已在 EdgeOne 配置证书，本步骤可安全跳过。"
 else
-  echo "当前 ${DOMAIN} 未解析到 ${SERVER_IP}，暂未执行 certbot。"
+  echo "当前 ${DOMAIN} 未解析到 ${SERVER_IP}，且未检测到 CNAME，暂未执行 certbot。"
   echo "请先将 A 记录改到 ${SERVER_IP}，再执行："
   echo "ssh ${SERVER_USER}@${SERVER_IP} 'sudo certbot --nginx -d ${DOMAIN} --non-interactive --agree-tos -m admin@cqaibase.cn --redirect'"
 fi

@@ -29,8 +29,8 @@ from flask_login import current_user, login_required
 from sqlalchemy import func, desc, or_, and_, extract, text, case
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
-from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, student_tags, activity_tags, Announcement
-from src.routes.utils import admin_required, log_action
+from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, student_tags, activity_tags, Announcement, Society
+from src.routes.utils import admin_required, log_action, is_super_admin
 from src.utils.time_helpers import normalize_datetime_for_db, display_datetime, ensure_timezone_aware, get_localized_now, safe_less_than, safe_greater_than, get_activity_status
 from src.forms import ActivityForm  # 添加ActivityForm导入
 from flask_wtf.csrf import generate_csrf, validate_csrf
@@ -41,6 +41,167 @@ admin_bp = Blueprint('admin', __name__)
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
+
+
+def _current_scope_society_id():
+    if is_super_admin(current_user):
+        return None
+    return getattr(current_user, 'managed_society_id', None)
+
+
+def _apply_activity_scope(query):
+    scope_id = _current_scope_society_id()
+    if scope_id:
+        query = query.filter(Activity.society_id == scope_id)
+    return query
+
+
+def _apply_student_scope(query):
+    scope_id = _current_scope_society_id()
+    if scope_id:
+        query = query.filter(StudentInfo.society_id == scope_id)
+    return query
+
+
+def _scope_guard_student(student):
+    scope_id = _current_scope_society_id()
+    if not scope_id:
+        return True
+    return bool(student and getattr(student, 'society_id', None) == scope_id)
+
+
+def _scope_guard_activity(activity):
+    scope_id = _current_scope_society_id()
+    if not scope_id:
+        return True
+    return bool(activity and getattr(activity, 'society_id', None) == scope_id)
+
+
+@admin_bp.route('/societies')
+@admin_required
+def manage_societies():
+    if not is_super_admin(current_user):
+        flash('仅总管理员可管理社团', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    societies = db.session.execute(db.select(Society).order_by(Society.created_at.desc())).scalars().all()
+    admin_rows = db.session.execute(
+        db.select(User.id, User.username, User.managed_society_id)
+        .join(Role, User.role_id == Role.id)
+        .filter(func.lower(Role.name) == 'admin')
+    ).all()
+    admin_users = db.session.execute(
+        db.select(User)
+        .join(Role, User.role_id == Role.id)
+        .filter(func.lower(Role.name) == 'admin', User.is_super_admin == False)
+        .order_by(User.username.asc())
+    ).scalars().all()
+    admin_map = {}
+    for row in admin_rows:
+        if not row.managed_society_id:
+            continue
+        admin_map.setdefault(row.managed_society_id, []).append({'id': row.id, 'username': row.username})
+
+    return render_template('admin/societies.html', societies=societies, admin_map=admin_map, admin_users=admin_users)
+
+
+@admin_bp.route('/society/create', methods=['POST'])
+@admin_required
+def create_society():
+    if not is_super_admin(current_user):
+        flash('仅总管理员可新增社团', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(url_for('admin.manage_societies'))
+
+    name = (request.form.get('name') or '').strip()
+    code = (request.form.get('code') or '').strip().lower()
+    description = (request.form.get('description') or '').strip()
+    if not name or not code:
+        flash('社团名称和编码不能为空', 'warning')
+        return redirect(url_for('admin.manage_societies'))
+
+    exists = db.session.execute(db.select(Society).filter(or_(Society.name == name, Society.code == code))).scalar_one_or_none()
+    if exists:
+        flash('社团名称或编码已存在', 'warning')
+        return redirect(url_for('admin.manage_societies'))
+
+    society = Society(name=name, code=code, description=description, is_active=True)
+    db.session.add(society)
+    db.session.commit()
+    flash('社团已创建', 'success')
+    return redirect(url_for('admin.manage_societies'))
+
+
+@admin_bp.route('/society/<int:society_id>/assign-admin', methods=['POST'])
+@admin_required
+def assign_society_admin(society_id):
+    if not is_super_admin(current_user):
+        flash('仅总管理员可分配社团管理员', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(url_for('admin.manage_societies'))
+
+    society = db.get_or_404(Society, society_id)
+    admin_user_id = request.form.get('admin_user_id', type=int)
+    admin_user = db.session.get(User, admin_user_id) if admin_user_id else None
+    if not admin_user or not admin_user.role or (admin_user.role.name or '').strip().lower() != 'admin':
+        flash('请选择有效的管理员账号', 'warning')
+        return redirect(url_for('admin.manage_societies'))
+    if bool(getattr(admin_user, 'is_super_admin', False)):
+        flash('总管理员不能绑定为社团管理员', 'warning')
+        return redirect(url_for('admin.manage_societies'))
+
+    admin_user.managed_society_id = society.id
+    db.session.commit()
+    flash(f'已将管理员 {admin_user.username} 绑定到社团 {society.name}', 'success')
+    return redirect(url_for('admin.manage_societies'))
+
+
+@admin_bp.route('/select-society', methods=['GET'])
+@admin_required
+def select_admin_society():
+    if is_super_admin(current_user):
+        return redirect(url_for('admin.dashboard'))
+    if getattr(current_user, 'managed_society_id', None):
+        return redirect(url_for('admin.dashboard'))
+
+    societies = db.session.execute(db.select(Society).filter_by(is_active=True).order_by(Society.name)).scalars().all()
+    return render_template('admin/select_society.html', societies=societies)
+
+
+@admin_bp.route('/select-society', methods=['POST'])
+@admin_required
+def select_admin_society_submit():
+    if is_super_admin(current_user):
+        return redirect(url_for('admin.dashboard'))
+    if getattr(current_user, 'managed_society_id', None):
+        return redirect(url_for('admin.dashboard'))
+
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新后重试', 'danger')
+        return redirect(url_for('admin.select_admin_society'))
+
+    society_id = request.form.get('society_id', type=int)
+    society = db.session.get(Society, society_id) if society_id else None
+    if not society or not society.is_active:
+        flash('请选择有效社团', 'warning')
+        return redirect(url_for('admin.select_admin_society'))
+
+    current_user.managed_society_id = society.id
+    db.session.commit()
+    flash(f'已绑定社团：{society.name}', 'success')
+    return redirect(url_for('admin.dashboard'))
 
 def _to_utc_naive_datetime(dt):
     """将表单时间统一转换为 UTC naive，避免数据库时区字段混乱导致 +8h 偏移。"""
@@ -973,23 +1134,26 @@ def dashboard():
     from src.utils.time_helpers import display_datetime
     try:
         # 获取基本统计数据
-        total_students_stmt = db.select(func.count()).select_from(StudentInfo)
+        total_students_stmt = _apply_student_scope(db.select(func.count()).select_from(StudentInfo))
         total_students = db.session.execute(total_students_stmt).scalar()
         
-        total_activities_stmt = db.select(func.count()).select_from(Activity)
+        total_activities_stmt = _apply_activity_scope(db.select(func.count()).select_from(Activity))
         total_activities = db.session.execute(total_activities_stmt).scalar()
         
-        active_activities_stmt = db.select(func.count()).select_from(Activity).filter_by(status='active')
+        active_activities_stmt = _apply_activity_scope(db.select(func.count()).select_from(Activity).filter_by(status='active'))
         active_activities = db.session.execute(active_activities_stmt).scalar()
         
         # 获取最近活动
-        recent_activities_stmt = db.select(Activity).order_by(Activity.created_at.desc()).limit(5)
+        recent_activities_stmt = _apply_activity_scope(db.select(Activity)).order_by(Activity.created_at.desc()).limit(5)
         recent_activities = db.session.execute(recent_activities_stmt).scalars().all()
         
         # 获取最近注册的学生 - 修复查询，使用Role关联而不是role_id
         recent_students_stmt = db.select(User).join(Role).filter(Role.name == 'Student').join(
             StudentInfo, User.id == StudentInfo.user_id
-        ).order_by(User.created_at.desc()).limit(5)
+        )
+        if _current_scope_society_id():
+            recent_students_stmt = recent_students_stmt.filter(StudentInfo.society_id == _current_scope_society_id())
+        recent_students_stmt = recent_students_stmt.order_by(User.created_at.desc()).limit(5)
         recent_students = db.session.execute(recent_students_stmt).scalars().all()
         
         # 获取报名统计
@@ -1021,7 +1185,7 @@ def activities(status='all'):
         search = request.args.get('search', '')
         
         # 基本查询
-        query = db.select(Activity)
+        query = _apply_activity_scope(db.select(Activity))
         
         # 搜索功能
         if search:
@@ -1135,7 +1299,8 @@ def create_activity():
                 points=points,
                 status=status,
                 is_featured=is_featured,
-                created_by=current_user.id
+                created_by=current_user.id,
+                society_id=_current_scope_society_id()
             )
 
             # 先加入会话并flush，确保新建活动拿到稳定ID，避免海报文件名异常
@@ -1235,6 +1400,9 @@ def edit_activity(id):
     try:
         # 获取活动对象
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            flash('您只能管理所属社团的活动', 'danger')
+            return redirect(url_for('admin.activities'))
         form = ActivityForm(obj=activity)
         
         # 加载所有标签并设置选项
@@ -1456,7 +1624,7 @@ def students():
         search = request.args.get('search', '')
         
         # 使用SQLAlchemy 2.0风格查询
-        query = db.select(StudentInfo).join(User, StudentInfo.user_id == User.id)
+        query = _apply_student_scope(db.select(StudentInfo).join(User, StudentInfo.user_id == User.id))
         
         if search:
             query = query.filter(
@@ -1534,6 +1702,10 @@ def delete_student(id):
 @admin_bp.route('/student/<int:user_id>/promote-admin', methods=['POST'])
 @admin_required
 def promote_student_to_admin(user_id):
+    if not is_super_admin(current_user):
+        flash('仅总管理员可设置管理员账号', 'danger')
+        return redirect(request.referrer or url_for('admin.students'))
+
     try:
         csrf_token = request.form.get('csrf_token', '')
         validate_csrf(csrf_token)
@@ -1557,10 +1729,18 @@ def promote_student_to_admin(user_id):
             return redirect(request.referrer or url_for('admin.students'))
 
         user.role_id = admin_role.id
+        selected_society_id = request.form.get('society_id', type=int)
+        if selected_society_id:
+            society = db.session.get(Society, selected_society_id)
+            if society and society.is_active:
+                user.managed_society_id = society.id
         db.session.commit()
 
         log_action('promote_student_to_admin', f'将用户 {user.username}(ID:{user.id}) 设置为管理员')
-        flash('已成功将该学生设置为管理员', 'success')
+        if not user.managed_society_id:
+            flash('已设置为管理员，但尚未绑定社团。该管理员首次进入管理端需先选择社团。', 'warning')
+        else:
+            flash('已成功将该学生设置为管理员并绑定社团', 'success')
         return redirect(request.referrer or url_for('admin.students'))
     except Exception as e:
         db.session.rollback()
@@ -1571,6 +1751,10 @@ def promote_student_to_admin(user_id):
 @admin_bp.route('/student/<int:user_id>/demote-admin', methods=['POST'])
 @admin_required
 def demote_admin_to_student(user_id):
+    if not is_super_admin(current_user):
+        flash('仅总管理员可取消管理员身份', 'danger')
+        return redirect(request.referrer or url_for('admin.students'))
+
     try:
         csrf_token = request.form.get('csrf_token', '')
         validate_csrf(csrf_token)
@@ -1610,6 +1794,8 @@ def demote_admin_to_student(user_id):
             return redirect(request.referrer or url_for('admin.students'))
 
         user.role_id = student_role.id
+        user.managed_society_id = None
+        user.is_super_admin = False
         db.session.commit()
 
         log_action('demote_admin_to_student', f'取消用户 {user.username}(ID:{user.id}) 的管理员身份')
@@ -1631,6 +1817,9 @@ def student_view(user_id):
     student = db.session.execute(db.select(StudentInfo).filter_by(user_id=user_id)).scalar_one_or_none()
     if not student:
         flash('未找到该学生的详细信息', 'warning')
+        return redirect(url_for('admin.students'))
+    if not _scope_guard_student(student):
+        flash('您只能查看所属社团学生信息', 'danger')
         return redirect(url_for('admin.students'))
     
     # 使用SQLAlchemy 2.0风格查询
@@ -1671,6 +1860,9 @@ def edit_student_profile(user_id):
     student = db.session.execute(db.select(StudentInfo).filter_by(user_id=user_id)).scalar_one_or_none()
     if not student:
         flash('未找到该学生资料', 'warning')
+        return redirect(url_for('admin.students'))
+    if not _scope_guard_student(student):
+        flash('您只能修改所属社团学生信息', 'danger')
         return redirect(url_for('admin.students'))
 
     try:
@@ -1826,7 +2018,8 @@ def adjust_student_points(id):
             student_id=id,
             points=points,
             reason=f"管理员调整: {reason}",
-            activity_id=None
+            activity_id=None,
+            society_id=student_info.society_id
         )
         
         db.session.add(points_history)
@@ -2186,9 +2379,13 @@ def export_activity_registrations(id):
 def export_students():
     try:
         # 获取所有学生信息
-        students = User.query.join(Role).filter(Role.name == 'Student').join(
+        students_query = User.query.join(Role).filter(Role.name == 'Student').join(
             StudentInfo, User.id == StudentInfo.user_id
-        ).add_columns(
+        )
+        if _current_scope_society_id():
+            students_query = students_query.filter(StudentInfo.society_id == _current_scope_society_id())
+
+        students = students_query.add_columns(
             User.id,
             User.username,
             User.email,
@@ -2212,6 +2409,14 @@ def export_students():
         for student in students:
             # 将UTC时间转换为北京时间
             beijing_created_at = localize_time(student.created_at)
+            scoped_points = student.points or 0
+            if _current_scope_society_id():
+                scoped_points = db.session.execute(
+                    db.select(func.coalesce(func.sum(PointsHistory.points), 0)).filter(
+                        PointsHistory.student_id == student.id,
+                        PointsHistory.society_id == _current_scope_society_id()
+                    )
+                ).scalar() or 0
             
             data.append({
                 '用户ID': student.id,
@@ -2224,7 +2429,7 @@ def export_students():
                 '专业': student.major,
                 '手机号': student.phone,
                 'QQ': student.qq,
-                '积分': student.points or 0,
+                '积分': scoped_points,
                 '注册时间': beijing_created_at.strftime('%Y-%m-%d %H:%M:%S')
             })
         
@@ -2984,7 +3189,8 @@ def delete_activity_review(review_id):
                         student_id=student_info.id,
                         points=-reclaim_amount,
                         reason='管理员删除活动评价回收积分',
-                        activity_id=activity_id
+                        activity_id=activity_id,
+                        society_id=student_info.society_id
                     ))
 
         db.session.delete(review)
@@ -4508,13 +4714,20 @@ def add_points(student_id, points, reason, activity_id=None):
         
         # 更新积分
         student_info.points = (student_info.points or 0) + points
+
+        society_id = student_info.society_id
+        if activity_id:
+            activity = db.session.get(Activity, activity_id)
+            if activity and activity.society_id:
+                society_id = activity.society_id
         
         # 创建积分历史记录
         points_history = PointsHistory(
             student_id=student_id,
             points=points,
             reason=reason,
-            activity_id=activity_id
+            activity_id=activity_id,
+            society_id=society_id
         )
         
         db.session.add(points_history)

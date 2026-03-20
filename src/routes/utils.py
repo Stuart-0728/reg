@@ -1,4 +1,4 @@
-from flask import Blueprint, redirect, url_for, flash, request, jsonify, abort, Response, render_template, current_app
+from flask import Blueprint, redirect, url_for, flash, request, jsonify, abort, Response, render_template, current_app, g
 from flask_login import login_required, current_user
 from functools import wraps
 import logging
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 from werkzeug.exceptions import HTTPException
 from flask_wtf.csrf import validate_csrf
-from src.models import db, Activity, Tag, StudentInfo, SystemLog, Registration, AIChatHistory, AIChatSession, activity_tags, PointsHistory, User, Role, Message
+from src.models import db, Activity, Tag, StudentInfo, SystemLog, Registration, AIChatHistory, AIChatSession, activity_tags, PointsHistory, User, Role, Message, Society
 from src.utils.time_helpers import get_beijing_time, ensure_timezone_aware
 from src import csrf # Import csrf
 
@@ -42,6 +42,44 @@ def _validate_api_csrf_token():
     except Exception as e:
         logger.warning(f"API CSRF校验失败: {e}")
         return False, '安全验证失败，请刷新页面后重试'
+
+
+def is_super_admin(user):
+    try:
+        return bool(user and getattr(user, 'is_super_admin', False))
+    except Exception:
+        return False
+
+
+def admin_society_id(user):
+    try:
+        return getattr(user, 'managed_society_id', None)
+    except Exception:
+        return None
+
+
+def get_scope_society_id():
+    return getattr(g, 'scope_society_id', None)
+
+
+def _society_selection_required(endpoint):
+    if not endpoint:
+        return False
+    allow_prefixes = (
+        'auth.',
+        'main.',
+        'student.',
+        'utils.',
+        'static',
+    )
+    if endpoint.startswith(allow_prefixes):
+        return False
+    allow_admin_endpoints = {
+        'admin.select_admin_society',
+        'admin.select_admin_society_submit',
+        'admin.logout',
+    }
+    return endpoint not in allow_admin_endpoints
 
 # 管理员权限装饰器
 def admin_required(f):
@@ -74,6 +112,14 @@ def admin_required(f):
                 logger.warning(f"非管理员访问尝试: 用户={current_user.username}, 角色={role_name}, 路径={request.path}")
                 flash('您没有管理员权限', 'danger')
                 return redirect(url_for('main.index'))
+
+            g.scope_is_super_admin = is_super_admin(db_user)
+            g.scope_society_id = None if g.scope_is_super_admin else admin_society_id(db_user)
+
+            # 学生管理员必须绑定社团后才能进入管理功能
+            if not g.scope_is_super_admin and not g.scope_society_id and _society_selection_required(request.endpoint):
+                flash('请先选择并绑定所属社团后再进入管理功能', 'warning')
+                return redirect(url_for('admin.select_admin_society'))
             
             # 权限验证通过
             pass
