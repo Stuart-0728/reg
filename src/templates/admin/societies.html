@@ -45,6 +45,7 @@
                             <th>状态</th>
                             <th>当前管理员</th>
                             <th style="min-width: 280px;">分配管理员</th>
+                            <th style="min-width: 360px;">编辑与删除</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -86,10 +87,36 @@
                                     <button class="btn btn-sm btn-primary" type="submit">保存</button>
                                 </form>
                             </td>
+                            <td>
+                                <form method="post" action="{{ url_for('admin.edit_society', society_id=society.id) }}" class="row g-2 mb-2" data-no-loading="true">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="col-4">
+                                        <input type="text" name="name" class="form-control form-control-sm" value="{{ society.name }}" required>
+                                    </div>
+                                    <div class="col-3">
+                                        <input type="text" name="code" class="form-control form-control-sm" value="{{ society.code }}" required>
+                                    </div>
+                                    <div class="col-5">
+                                        <input type="text" name="description" class="form-control form-control-sm" value="{{ society.description or '' }}" placeholder="简介（可选）">
+                                    </div>
+                                    <div class="col-12 d-flex justify-content-between align-items-center">
+                                        <div class="form-check form-switch mb-0">
+                                            <input class="form-check-input" type="checkbox" name="is_active" id="societyActive{{ society.id }}" {% if society.is_active %}checked{% endif %}>
+                                            <label class="form-check-label small" for="societyActive{{ society.id }}">启用</label>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-primary" type="submit">更新社团</button>
+                                    </div>
+                                </form>
+
+                                <form method="post" action="{{ url_for('admin.delete_society', society_id=society.id) }}" data-no-loading="true" onsubmit="return confirm('确定删除社团【{{ society.name }}】吗？若有活动/学生/管理员关联将无法删除。');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="btn btn-sm btn-outline-danger" type="submit">删除社团</button>
+                                </form>
+                            </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5" class="text-center text-muted py-4">暂无社团，请先创建</td>
+                            <td colspan="6" class="text-center text-muted py-4">暂无社团，请先创建</td>
                         </tr>
                         {% endfor %}
                     </tbody>

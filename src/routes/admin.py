@@ -155,6 +155,92 @@ def create_society():
     return redirect(url_for('admin.manage_societies'))
 
 
+@admin_bp.route('/society/<int:society_id>/edit', methods=['POST'])
+@admin_required
+def edit_society(society_id):
+    if not is_super_admin(current_user):
+        flash('仅总管理员可编辑社团', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(url_for('admin.manage_societies'))
+
+    society = db.get_or_404(Society, society_id)
+    name = (request.form.get('name') or '').strip()
+    code = (request.form.get('code') or '').strip().lower()
+    description = (request.form.get('description') or '').strip()
+    is_active = bool(request.form.get('is_active'))
+
+    if not name or not code:
+        flash('社团名称和编码不能为空', 'warning')
+        return redirect(url_for('admin.manage_societies'))
+
+    exists = db.session.execute(
+        db.select(Society).filter(
+            Society.id != society.id,
+            or_(Society.name == name, Society.code == code)
+        )
+    ).scalar_one_or_none()
+    if exists:
+        flash('社团名称或编码已存在', 'warning')
+        return redirect(url_for('admin.manage_societies'))
+
+    society.name = name
+    society.code = code
+    society.description = description
+    society.is_active = is_active
+    db.session.commit()
+    flash('社团信息已更新', 'success')
+    return redirect(url_for('admin.manage_societies'))
+
+
+@admin_bp.route('/society/<int:society_id>/delete', methods=['POST'])
+@admin_required
+def delete_society(society_id):
+    if not is_super_admin(current_user):
+        flash('仅总管理员可删除社团', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(url_for('admin.manage_societies'))
+
+    society = db.get_or_404(Society, society_id)
+    if (society.code or '').strip().lower() == 'default':
+        flash('默认社团不可删除', 'warning')
+        return redirect(url_for('admin.manage_societies'))
+
+    admin_count = db.session.execute(
+        db.select(func.count()).select_from(User).filter(User.managed_society_id == society.id)
+    ).scalar() or 0
+    activity_count = db.session.execute(
+        db.select(func.count()).select_from(Activity).filter(Activity.society_id == society.id)
+    ).scalar() or 0
+    primary_student_count = db.session.execute(
+        db.select(func.count()).select_from(StudentInfo).filter(StudentInfo.society_id == society.id)
+    ).scalar() or 0
+    joined_student_count = db.session.execute(
+        db.select(func.count()).select_from(StudentInfo).filter(StudentInfo.joined_societies.any(Society.id == society.id))
+    ).scalar() or 0
+
+    if admin_count or activity_count or primary_student_count or joined_student_count:
+        flash(
+            f'无法删除：该社团仍有关联数据（管理员{admin_count}、活动{activity_count}、主社团学生{primary_student_count}、加入学生{joined_student_count}）',
+            'warning'
+        )
+        return redirect(url_for('admin.manage_societies'))
+
+    db.session.delete(society)
+    db.session.commit()
+    flash('社团已删除', 'success')
+    return redirect(url_for('admin.manage_societies'))
+
+
 @admin_bp.route('/society/<int:society_id>/assign-admin', methods=['POST'])
 @admin_required
 def assign_society_admin(society_id):
