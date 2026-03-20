@@ -2835,8 +2835,6 @@ def _sync_published_announcements_to_notifications():
         if created_count > 0:
             db.session.commit()
             logger.info(f"公告同步通知完成，新增 {created_count} 条")
-        else:
-            db.session.rollback()
     except Exception as e:
         db.session.rollback()
         logger.error(f"同步公告到通知失败: {e}")
