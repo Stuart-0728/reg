@@ -5024,18 +5024,12 @@ def change_activity_status(id):
     try:
         activity = db.get_or_404(Activity, id)
         if not _scope_guard_activity(activity):
-            if _is_ajax_request():
-                return jsonify({'success': False, 'message': '您只能管理所属社团活动状态'}), 403
-            flash('您只能管理所属社团活动状态', 'danger')
-            return redirect(url_for('admin.activities'))
+            return jsonify({'success': False, 'message': '您只能管理所属社团活动状态'}), 403
 
         try:
             validate_csrf(request.form.get('csrf_token') or request.headers.get('X-CSRFToken') or '')
         except Exception:
-            if _is_ajax_request():
-                return jsonify({'success': False, 'message': '请求校验失败，请刷新后重试'}), 400
-            flash('请求校验失败，请刷新后重试', 'danger')
-            return redirect(url_for('admin.activity_view', id=id))
+            return jsonify({'success': False, 'message': '请求校验失败，请刷新后重试'}), 400
 
         new_status = request.form.get('status')
         
@@ -5065,23 +5059,17 @@ def change_activity_status(id):
         new_status_name = status_names.get(new_status, new_status)
         
         log_action('change_activity_status', f'更改活动状态: {activity.title}, 从 {old_status_name} 到 {new_status_name}')
-        if _is_ajax_request():
-            return jsonify({
-                'success': True,
-                'message': f'活动状态已从"{old_status_name}"更新为"{new_status_name}"',
-                'old_status': old_status,
-                'new_status': new_status
-            })
-
-        flash(f'活动状态已从“{old_status_name}”更新为“{new_status_name}”', 'success')
-        return redirect(url_for('admin.activity_view', id=id))
+        # 始终返回 JSON，不依赖 _is_ajax_request() 避免 nginx 过滤 header 导致 302
+        return jsonify({
+            'success': True,
+            'message': f'活动状态已从"{old_status_name}"更新为"{new_status_name}"',
+            'old_status': old_status,
+            'new_status': new_status
+        })
     except Exception as e:
         db.session.rollback()
         logger.error(f"更改活动状态出错: {e}")
-        if _is_ajax_request():
-            return jsonify({'success': False, 'message': '更改活动状态时出错'}), 500
-        flash('更改活动状态时出错', 'danger')
-        return redirect(url_for('admin.activity_view', id=id))
+        return jsonify({'success': False, 'message': '更改活动状态时出错'}), 500
 
 @admin_bp.route('/activity/<int:activity_id>/manual_checkin', methods=['POST'])
 @admin_required
