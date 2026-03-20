@@ -77,6 +77,27 @@
                     <!-- 兴趣标签部分 -->
                     <div class="mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="mb-0">我的社团</h5>
+                            <a href="{{ url_for('student.edit_profile') }}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-edit me-1"></i>调整社团
+                            </a>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% if joined_societies %}
+                                {% for society in joined_societies %}
+                                    <span class="badge bg-success-subtle text-success-emphasis border rounded-pill px-3 py-2">{{ society.name }}</span>
+                                {% endfor %}
+                            {% elif student_info.society %}
+                                <span class="badge bg-success-subtle text-success-emphasis border rounded-pill px-3 py-2">{{ student_info.society.name }}</span>
+                            {% else %}
+                                <p class="text-muted mb-0">你当前还没有加入社团。</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- 兴趣标签部分 -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
                             <h5 class="mb-0">兴趣标签</h5>
                             <a href="{{ url_for('auth.select_tags') }}" class="btn btn-sm btn-outline-primary">
                                 <i class="fas fa-edit me-1"></i>修改标签

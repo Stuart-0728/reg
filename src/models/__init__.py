@@ -27,6 +27,14 @@ activity_tags = Table(
     Column('tag_id', Integer, ForeignKey('tags.id'), primary_key=True)
 )
 
+student_societies = Table(
+    'student_societies',
+    db.Model.metadata,
+    Column('student_id', Integer, ForeignKey('student_info.id', ondelete='CASCADE'), primary_key=True),
+    Column('society_id', Integer, ForeignKey('societies.id', ondelete='CASCADE'), primary_key=True),
+    Column('joined_at', DateTime, default=func.now())
+)
+
 # 角色模型
 class Role(db.Model):
     __tablename__ = 'roles'
@@ -147,6 +155,7 @@ class StudentInfo(db.Model):
     tags = relationship('Tag', secondary=student_tags, backref=backref('students', lazy='dynamic'))
     points_history = relationship('PointsHistory', backref='student_info', lazy='dynamic', cascade='all, delete-orphan')
     society = relationship('Society', foreign_keys=[society_id])
+    joined_societies = relationship('Society', secondary=student_societies, backref=backref('members', lazy='dynamic'))
     
     def __repr__(self):
         return f'<StudentInfo {self.student_id} {self.real_name}>'

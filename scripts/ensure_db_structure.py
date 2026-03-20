@@ -50,6 +50,35 @@ def ensure_db_structure(app, db):
             conn.execute(text("INSERT INTO societies (name, code, description, is_active) VALUES ('默认社团', 'default', '系统默认社团', 1)"))
         app.logger.info('已创建 societies 表并初始化默认社团')
 
+    # 1.1) 学生-社团多选关系表
+    if 'student_societies' not in table_names:
+        if dialect == 'postgresql':
+            create_student_societies_sql = """
+            CREATE TABLE student_societies (
+                student_id INTEGER NOT NULL,
+                society_id INTEGER NOT NULL,
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (student_id, society_id),
+                FOREIGN KEY (student_id) REFERENCES student_info(id) ON DELETE CASCADE,
+                FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
+            )
+            """
+        else:
+            create_student_societies_sql = """
+            CREATE TABLE student_societies (
+                student_id INTEGER NOT NULL,
+                society_id INTEGER NOT NULL,
+                joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (student_id, society_id),
+                FOREIGN KEY (student_id) REFERENCES student_info(id) ON DELETE CASCADE,
+                FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
+            )
+            """
+
+        with engine.begin() as conn:
+            conn.execute(text(create_student_societies_sql))
+        app.logger.info('已创建 student_societies 表')
+
     # 2) 多社团关键字段
     alter_plans = [
         ('users', 'managed_society_id', 'INTEGER'),
@@ -66,6 +95,28 @@ def ensure_db_structure(app, db):
         with engine.begin() as conn:
             conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}"))
         app.logger.info(f'已补齐 {table_name}.{col_name} 字段')
+
+    # 2.1) 从 student_info.society_id 回填到 student_societies（幂等）
+    try:
+        with engine.begin() as conn:
+            if dialect == 'postgresql':
+                conn.execute(text("""
+                    INSERT INTO student_societies (student_id, society_id)
+                    SELECT id, society_id
+                    FROM student_info
+                    WHERE society_id IS NOT NULL
+                    ON CONFLICT (student_id, society_id) DO NOTHING
+                """))
+            else:
+                conn.execute(text("""
+                    INSERT OR IGNORE INTO student_societies (student_id, society_id)
+                    SELECT id, society_id
+                    FROM student_info
+                    WHERE society_id IS NOT NULL
+                """))
+        app.logger.info('已同步 student_info.society_id 到 student_societies')
+    except Exception as e:
+        app.logger.warning(f'同步 student_societies 失败: {e}')
 
     # 3) 保证至少有一个总管理员
     if _column_exists(inspector, 'users', 'is_super_admin'):

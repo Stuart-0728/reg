@@ -95,6 +95,20 @@
                         </div>
                         
                         <div class="mb-3">
+                            <label class="form-label">加入社团（可多选）</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for society in all_societies %}
+                                <input type="checkbox" class="btn-check" name="societies" id="society{{ society.id }}" value="{{ society.id }}" autocomplete="off"
+                                    {% if society.id in selected_society_ids %}checked{% endif %}>
+                                <label class="btn btn-outline-success tag-btn {% if society.id in selected_society_ids %}tag-selected{% endif %}" for="society{{ society.id }}">
+                                    <span class="tag-check-mark">✓</span>{{ society.name }}
+                                </label>
+                                {% endfor %}
+                            </div>
+                            <div class="form-text">报名某社团活动时，系统也会自动把你加入该社团。</div>
+                        </div>
+
+                        <div class="mb-3">
                             <label class="form-label">兴趣标签</label>
                             <div class="d-flex flex-wrap gap-2">
                                 {% for tag in all_tags %}
@@ -144,8 +158,8 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const tagInputs = document.querySelectorAll('input[name="tags"]');
-    tagInputs.forEach(input => {
+    const allInputs = document.querySelectorAll('input[name="tags"], input[name="societies"]');
+    allInputs.forEach(input => {
         input.addEventListener('change', function() {
             const label = document.querySelector(`label[for="${input.id}"]`);
             if (label) {

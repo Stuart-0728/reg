@@ -106,9 +106,43 @@ def student_required(func):
 def _current_student_society_id():
     try:
         student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
-        return getattr(student_info, 'society_id', None)
+        if not student_info:
+            return None
+        if getattr(student_info, 'society_id', None):
+            return student_info.society_id
+        joined = getattr(student_info, 'joined_societies', []) or []
+        return joined[0].id if joined else None
     except Exception:
         return None
+
+
+def _current_student_society_ids():
+    try:
+        student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
+        if not student_info:
+            return []
+        ids = set()
+        if getattr(student_info, 'society_id', None):
+            ids.add(student_info.society_id)
+        for s in (getattr(student_info, 'joined_societies', []) or []):
+            if s and s.id:
+                ids.add(s.id)
+        return sorted(ids)
+    except Exception:
+        return []
+
+
+def _ensure_student_join_society(student_info, society_id):
+    if not student_info or not society_id:
+        return
+    society = db.session.get(Society, society_id)
+    if not society:
+        return
+    joined_ids = {s.id for s in (student_info.joined_societies or [])}
+    if society_id not in joined_ids:
+        student_info.joined_societies.append(society)
+    if not getattr(student_info, 'society_id', None):
+        student_info.society_id = society_id
 
 @student_bp.route('/dashboard')
 @login_required
@@ -235,9 +269,9 @@ def activities():
         
         # 基本查询 - 所有活动
         query = db.select(Activity)
-        society_id = _current_student_society_id()
-        if society_id:
-            query = query.filter(Activity.society_id == society_id)
+        society_ids = _current_student_society_ids()
+        if society_ids:
+            query = query.filter(Activity.society_id.in_(society_ids))
 
         # 根据状态筛选，使用北京时间进行比较
         if current_status == 'active':
@@ -292,8 +326,8 @@ def activities():
 def activity_detail(id):
     try:
         activity = db.get_or_404(Activity, id)
-        society_id = _current_student_society_id()
-        if society_id and activity.society_id and activity.society_id != society_id:
+        society_ids = _current_student_society_ids()
+        if society_ids and activity.society_id and activity.society_id not in society_ids:
             flash('该活动不属于您所在社团，无法查看', 'danger')
             return redirect(url_for('student.activities'))
         now = get_localized_now()
@@ -434,6 +468,9 @@ def register_activity(id):
             elif existing_reg.status == 'cancelled':
                 existing_reg.status = 'registered'
                 existing_reg.register_time = now
+                student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
+                if student_info and activity.society_id:
+                    _ensure_student_join_society(student_info, activity.society_id)
                 db.session.commit()
                 return jsonify({'success': True, 'message': '已成功重新报名活动'})
 
@@ -444,6 +481,11 @@ def register_activity(id):
             status='registered'
         )
         db.session.add(new_registration)
+
+        student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
+        if student_info and activity.society_id:
+            _ensure_student_join_society(student_info, activity.society_id)
+
         db.session.commit()
 
         return jsonify({'success': True, 'message': '报名成功！'})
@@ -601,7 +643,8 @@ def profile():
             flash('请先完善个人信息', 'warning')
             return redirect(url_for('student.edit_profile'))
         
-        return render_template('student/profile.html', student_info=student_info)
+        joined_societies = student_info.joined_societies if getattr(student_info, 'joined_societies', None) else []
+        return render_template('student/profile.html', student_info=student_info, joined_societies=joined_societies)
     except Exception as e:
         logger.error(f"Error in profile: {e}")
         flash('加载个人资料时发生错误', 'danger')
@@ -644,6 +687,18 @@ def edit_profile():
             student_info.college = form.college.data
             student_info.phone = form.phone.data
             student_info.qq = form.qq.data
+
+            selected_society_ids = [int(sid) for sid in request.form.getlist('societies') if sid and str(sid).isdigit()]
+            selected_societies = db.session.execute(
+                db.select(Society).filter(Society.id.in_(selected_society_ids), Society.is_active == True)
+            ).scalars().all() if selected_society_ids else []
+            student_info.joined_societies = selected_societies
+            if selected_societies:
+                selected_id_set = {s.id for s in selected_societies}
+                if student_info.society_id not in selected_id_set:
+                    student_info.society_id = selected_societies[0].id
+            else:
+                student_info.society_id = None
             
             # 处理标签
             tag_ids = request.form.getlist('tags')
@@ -671,8 +726,12 @@ def edit_profile():
         # 获取所有标签和已选标签ID
         all_tags = db.session.execute(db.select(Tag)).scalars().all()
         selected_tag_ids = [tag.id for tag in student_info.tags] if student_info.tags else []
+        all_societies = db.session.execute(db.select(Society).filter_by(is_active=True).order_by(Society.name.asc())).scalars().all()
+        selected_society_ids = [s.id for s in (student_info.joined_societies or [])]
+        if student_info.society_id and student_info.society_id not in selected_society_ids:
+            selected_society_ids.append(student_info.society_id)
         
-        return render_template('student/edit_profile.html', form=form, all_tags=all_tags, selected_tag_ids=selected_tag_ids)
+        return render_template('student/edit_profile.html', form=form, all_tags=all_tags, selected_tag_ids=selected_tag_ids, all_societies=all_societies, selected_society_ids=selected_society_ids)
     except Exception as e:
         logger.error(f"Error in edit profile: {e}")
         flash('编辑个人资料时发生错误', 'danger')

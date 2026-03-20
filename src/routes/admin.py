@@ -59,7 +59,12 @@ def _apply_activity_scope(query):
 def _apply_student_scope(query):
     scope_id = _current_scope_society_id()
     if scope_id:
-        query = query.filter(StudentInfo.society_id == scope_id)
+        query = query.filter(
+            or_(
+                StudentInfo.society_id == scope_id,
+                StudentInfo.joined_societies.any(Society.id == scope_id)
+            )
+        )
     return query
 
 
@@ -67,7 +72,12 @@ def _scope_guard_student(student):
     scope_id = _current_scope_society_id()
     if not scope_id:
         return True
-    return bool(student and getattr(student, 'society_id', None) == scope_id)
+    if not student:
+        return False
+    if getattr(student, 'society_id', None) == scope_id:
+        return True
+    joined_ids = {s.id for s in (getattr(student, 'joined_societies', []) or [])}
+    return scope_id in joined_ids
 
 
 def _scope_guard_activity(activity):
@@ -1152,7 +1162,13 @@ def dashboard():
             StudentInfo, User.id == StudentInfo.user_id
         )
         if _current_scope_society_id():
-            recent_students_stmt = recent_students_stmt.filter(StudentInfo.society_id == _current_scope_society_id())
+            scope_id = _current_scope_society_id()
+            recent_students_stmt = recent_students_stmt.filter(
+                or_(
+                    StudentInfo.society_id == scope_id,
+                    StudentInfo.joined_societies.any(Society.id == scope_id)
+                )
+            )
         recent_students_stmt = recent_students_stmt.order_by(User.created_at.desc()).limit(5)
         recent_students = db.session.execute(recent_students_stmt).scalars().all()
         
@@ -2383,7 +2399,13 @@ def export_students():
             StudentInfo, User.id == StudentInfo.user_id
         )
         if _current_scope_society_id():
-            students_query = students_query.filter(StudentInfo.society_id == _current_scope_society_id())
+            scope_id = _current_scope_society_id()
+            students_query = students_query.filter(
+                or_(
+                    StudentInfo.society_id == scope_id,
+                    StudentInfo.joined_societies.any(Society.id == scope_id)
+                )
+            )
 
         students = students_query.add_columns(
             User.id,
