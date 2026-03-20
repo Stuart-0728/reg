@@ -142,6 +142,43 @@ def _remove_student_from_scope_society(student):
     return changed
 
 
+def _notify_approval_result(requester_id, req_type, req_action, approved, reject_reason=''):
+    try:
+        requester = db.session.get(User, requester_id)
+        if not requester or requester.id == current_user.id:
+            return
+
+        status_text = '已通过' if approved else '已驳回'
+        action_map = {
+            'create': '新增',
+            'edit': '修改',
+            'delete': '删除'
+        }
+        type_map = {
+            'notification': '通知',
+            'tag': '标签',
+            'announcement': '公告'
+        }
+        action_text = action_map.get(req_action, req_action or '操作')
+        type_text = type_map.get(req_type, req_type or '内容')
+
+        subject = f'审核结果通知：{type_text}{action_text}{status_text}'
+        content = f'你提交的{type_text}{action_text}审核申请{status_text}。'
+        if reject_reason:
+            content += f' 驳回原因：{reject_reason}'
+
+        db.session.add(Message(
+            sender_id=current_user.id,
+            receiver_id=requester.id,
+            subject=subject,
+            content=content,
+            is_read=False,
+            created_at=get_localized_now()
+        ))
+    except Exception as e:
+        logger.warning(f"发送审核结果站内信失败 requester_id={requester_id}: {e}")
+
+
 @admin_bp.route('/societies')
 @admin_required
 def manage_societies():
@@ -5229,10 +5266,27 @@ def announcements():
         _sync_published_announcements_to_notifications()
         page = request.args.get('page', 1, type=int)
         announcements = Announcement.query.order_by(Announcement.created_at.desc()).paginate(page=page, per_page=10)
+
+        pending_requests = []
+        if is_super_admin(current_user):
+            pending_logs = db.session.execute(
+                db.select(SystemLog)
+                .filter(SystemLog.action == 'approval_request')
+                .order_by(SystemLog.created_at.desc())
+                .limit(200)
+            ).scalars().all()
+            for log in pending_logs:
+                try:
+                    details = json.loads(log.details or '{}')
+                except Exception:
+                    continue
+                if details.get('status') == 'pending' and details.get('type') == 'announcement':
+                    pending_requests.append({'log': log, 'details': details})
         
         # 确保display_datetime函数在模板中可用
         return render_template('admin/announcements.html', 
                               announcements=announcements,
+                              pending_requests=pending_requests,
                               display_datetime=display_datetime)
     except Exception as e:
         logger.error(f"Error in announcements page: {e}")
@@ -5258,6 +5312,19 @@ def create_announcement():
                 if not title or not content:
                     flash('标题和内容不能为空', 'danger')
                     return redirect(url_for('admin.create_announcement'))
+
+                if not is_super_admin(current_user):
+                    _create_approval_request(
+                        'announcement',
+                        'create',
+                        {
+                            'title': title,
+                            'content': content,
+                            'status': status
+                        }
+                    )
+                    flash('公告已提交审核，待总管理员批准后发布', 'info')
+                    return redirect(url_for('admin.announcements'))
                 
                 # 创建公告
                 announcement = Announcement(
@@ -5308,6 +5375,21 @@ def edit_announcement(id):
                 if not title or not content:
                     flash('标题和内容不能为空', 'danger')
                     return redirect(url_for('admin.edit_announcement', id=id))
+
+                if not is_super_admin(current_user):
+                    _create_approval_request(
+                        'announcement',
+                        'edit',
+                        {
+                            'id': id,
+                            'title': title,
+                            'content': content,
+                            'status': status
+                        },
+                        target_id=id
+                    )
+                    flash('公告修改已提交审核，待总管理员批准后生效', 'info')
+                    return redirect(url_for('admin.announcements'))
                 
                 # 更新公告
                 old_title = announcement.title
@@ -5369,6 +5451,20 @@ def edit_announcement(id):
 def delete_announcement(id):
     try:
         announcement = db.get_or_404(Announcement, id)
+
+        if not is_super_admin(current_user):
+            _create_approval_request(
+                'announcement',
+                'delete',
+                {
+                    'id': id,
+                    'title': announcement.title,
+                    'content': announcement.content
+                },
+                target_id=id
+            )
+            flash('公告删除已提交审核，待总管理员批准后执行', 'info')
+            return redirect(url_for('admin.announcements'))
 
         # 删除由该公告同步生成的公开通知，避免首页残留
         notification_ids = db.session.execute(
@@ -5653,10 +5749,89 @@ def approve_request(log_id):
                         student.tags.remove(tag)
                     db.session.delete(tag)
 
+        elif req_type == 'announcement':
+            if req_action == 'create':
+                ann = Announcement(
+                    title=(payload.get('title') or '').strip(),
+                    content=(payload.get('content') or '').strip(),
+                    status=(payload.get('status') or 'published').strip() or 'published',
+                    created_by=details.get('requester_id'),
+                    created_at=get_localized_now(),
+                    updated_at=get_localized_now()
+                )
+                db.session.add(ann)
+                db.session.flush()
+                _sync_published_announcements_to_notifications()
+            elif req_action == 'edit':
+                ann_id = payload.get('id')
+                ann = db.session.get(Announcement, ann_id)
+                if ann:
+                    old_title = ann.title
+                    old_content = ann.content
+
+                    ann.title = (payload.get('title') or '').strip()
+                    ann.content = (payload.get('content') or '').strip()
+                    ann.status = (payload.get('status') or ann.status or 'published').strip()
+                    ann.updated_at = get_localized_now()
+
+                    old_notification_ids = db.session.execute(
+                        db.select(Notification.id).filter(
+                            Notification.is_public == True,
+                            Notification.created_by == ann.created_by,
+                            or_(
+                                Notification.title == old_title,
+                                Notification.content == old_content
+                            )
+                        )
+                    ).scalars().all()
+
+                    if old_notification_ids:
+                        db.session.execute(
+                            db.delete(NotificationRead).where(NotificationRead.notification_id.in_(old_notification_ids))
+                        )
+                    Notification.query.filter(
+                        Notification.is_public == True,
+                        Notification.created_by == ann.created_by,
+                        or_(
+                            Notification.title == old_title,
+                            Notification.content == old_content
+                        )
+                    ).delete(synchronize_session=False)
+
+                    _sync_published_announcements_to_notifications()
+            elif req_action == 'delete':
+                ann_id = payload.get('id')
+                ann = db.session.get(Announcement, ann_id)
+                if ann:
+                    notification_ids = db.session.execute(
+                        db.select(Notification.id).filter(
+                            Notification.is_public == True,
+                            Notification.created_by == ann.created_by,
+                            or_(
+                                Notification.title == ann.title,
+                                Notification.content == ann.content
+                            )
+                        )
+                    ).scalars().all()
+                    if notification_ids:
+                        db.session.execute(
+                            db.delete(NotificationRead).where(NotificationRead.notification_id.in_(notification_ids))
+                        )
+                    Notification.query.filter(
+                        Notification.is_public == True,
+                        Notification.created_by == ann.created_by,
+                        or_(
+                            Notification.title == ann.title,
+                            Notification.content == ann.content
+                        )
+                    ).delete(synchronize_session=False)
+                    db.session.delete(ann)
+
         details['status'] = 'approved'
         details['reviewed_by'] = current_user.id
         details['reviewed_at'] = datetime.now(pytz.utc).isoformat()
         log_row.details = json.dumps(details, ensure_ascii=False)
+        _notify_approval_result(details.get('requester_id'), req_type, req_action, True)
         db.session.commit()
         flash('审核通过并已执行', 'success')
     except Exception as e:
@@ -5695,6 +5870,13 @@ def reject_request(log_id):
     details['reviewed_at'] = datetime.now(pytz.utc).isoformat()
     details['reject_reason'] = (request.form.get('reject_reason') or '').strip()
     log_row.details = json.dumps(details, ensure_ascii=False)
+    _notify_approval_result(
+        details.get('requester_id'),
+        details.get('type'),
+        details.get('action'),
+        False,
+        details.get('reject_reason', '')
+    )
     db.session.commit()
     flash('已驳回该审核请求', 'info')
     return redirect(url_for('admin.approval_requests'))

@@ -418,29 +418,32 @@ document.addEventListener('DOMContentLoaded', function() {
 // 添加更新活动状态的函数
 function updateActivityStatus(activityId, status) {
     if (confirm(`确定要将活动状态更改为"${status === 'active' ? '进行中' : status === 'completed' ? '已结束' : '已取消'}"吗？`)) {
-        // 创建表单
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = "{{ url_for('admin.change_activity_status', id=0) }}".replace('0', activityId);
-        form.style.display = 'none';
-        
-        // 添加CSRF令牌
-        const csrfInput = document.createElement('input');
-        csrfInput.type = 'hidden';
-        csrfInput.name = 'csrf_token';
-        csrfInput.value = "{{ csrf_token() }}";
-        form.appendChild(csrfInput);
-        
-        // 添加状态参数
-        const statusInput = document.createElement('input');
-        statusInput.type = 'hidden';
-        statusInput.name = 'status';
-        statusInput.value = status;
-        form.appendChild(statusInput);
-        
-        // 添加表单到文档并提交
-        document.body.appendChild(form);
-        form.submit();
+        const url = "{{ url_for('admin.change_activity_status', id=0) }}".replace('0', activityId);
+        const csrfToken = "{{ csrf_token() }}";
+        const body = new URLSearchParams();
+        body.append('status', status);
+        body.append('csrf_token', csrfToken);
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: body.toString()
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            if (data && data.success) {
+                window.location.reload();
+                return;
+            }
+            alert((data && data.message) ? data.message : '状态更新失败，请重试');
+        })
+        .catch(() => {
+            alert('状态更新失败，请检查网络后重试');
+        });
     }
 }
 </script>

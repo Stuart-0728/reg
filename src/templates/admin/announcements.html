@@ -92,11 +92,27 @@
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-transparent text-dark d-flex justify-content-between align-items-center">
             <h4 class="mb-0">公告管理</h4>
-            <a href="{{ url_for('admin.create_announcement') }}" class="btn btn-light">
-                <i class="fas fa-plus me-1"></i>创建公告
-            </a>
+            <div class="d-flex gap-2">
+                {% if current_user.is_super_admin %}
+                <a href="{{ url_for('admin.approval_requests') }}" class="btn btn-outline-warning">
+                    <i class="fas fa-clipboard-check me-1"></i>审核请求
+                    {% if pending_requests %}
+                    <span class="badge bg-warning text-dark ms-1">{{ pending_requests|length }}</span>
+                    {% endif %}
+                </a>
+                {% endif %}
+                <a href="{{ url_for('admin.create_announcement') }}" class="btn btn-light">
+                    <i class="fas fa-plus me-1"></i>创建公告
+                </a>
+            </div>
         </div>
         <div class="card-body">
+            {% if not current_user.is_super_admin %}
+            <div class="alert alert-info py-2">
+                你当前是社团管理员，公告的新增/修改/删除将提交给总管理员审核，审核结果会通过站内信通知。
+            </div>
+            {% endif %}
+
             {% if announcements.items %}
             <div class="table-responsive has-sticky-action">
                 <table class="table table-hover table-cell-scroll table-has-sticky-action announcements-table">
