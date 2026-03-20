@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import logging
 from sqlalchemy import func, desc, text, and_, or_, case
 from sqlalchemy.orm import joinedload
-from src import db
+from src import db, cache, limiter
 from src.models import Activity, Registration, User, Tag, Notification, Announcement, Role
 from src.utils.time_helpers import get_localized_now, ensure_timezone_aware, safe_less_than, safe_greater_than, display_datetime, get_activity_status
 import time
@@ -51,7 +51,6 @@ def index():
         
         # 获取当前北京时间
         now = get_localized_now()
-        logger.info(f"当前北京时间: {now}")
         
         # 获取公共通知
         public_notifications = db.session.execute(
@@ -66,7 +65,7 @@ def index():
 
         # 首页活动逻辑：仅显示进行中的活动，按发布时间倒序（越新越靠前）
         active_activities = db.session.execute(
-            db.select(Activity).filter(
+            db.select(Activity).options(joinedload(Activity.category)).filter(
                 Activity.status == 'active'
             ).order_by(
                 Activity.created_at.desc()
@@ -81,11 +80,6 @@ def index():
         if not featured_activities:
             featured_activities = active_activities[:3]
 
-        logger.info(
-            f"首页活动统计(进行中按发布时间倒序): total_active={len(active_activities)}, "
-            f"featured={len(featured_activities)}"
-        )
-        
         # 渲染模板（首页包含登录态相关导航，禁止缓存以避免跨用户残留）
         response = make_response(render_template('main/index.html',
                     featured_activities=featured_activities,
@@ -129,11 +123,13 @@ def index():
 
 
 @main_bp.route('/api/home-activities')
+@cache.cached(timeout=20, query_string=False)
+@limiter.limit('180/minute')
 def home_activities_api():
     """首页活动预告实时接口：每次加载都应获取最新活动。"""
     try:
         active_activities = db.session.execute(
-            db.select(Activity).filter(
+            db.select(Activity).options(joinedload(Activity.category)).filter(
                 Activity.status == 'active'
             ).order_by(
                 Activity.created_at.desc()
@@ -147,9 +143,7 @@ def home_activities_api():
             poster_name = (getattr(activity, 'poster_image', None) or '').strip()
             if poster_name:
                 # 优先静态路径，便于 EdgeOne/CDN 加速与缓存
-                poster_file = os.path.join(current_app.static_folder or '', 'uploads', 'posters', poster_name)
-                if os.path.exists(poster_file):
-                    poster_url = url_for('static', filename=f'uploads/posters/{poster_name}')
+                poster_url = url_for('static', filename=f'uploads/posters/{poster_name}')
             else:
                 poster_url = url_for('static', filename='img/landscape.jpg')
 
@@ -177,10 +171,9 @@ def home_activities_api():
             })
 
         response = jsonify({'success': True, 'activities': activities})
-        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
-        response.headers['Surrogate-Control'] = 'no-store'
+        response.headers['Cache-Control'] = 'public, max-age=20, s-maxage=120, stale-while-revalidate=60'
+        response.headers['Surrogate-Control'] = 'max-age=120, stale-while-revalidate=60'
+        response.headers['Vary'] = 'Accept-Encoding'
         return response
     except Exception as e:
         logger.error(f"首页活动实时接口失败: {e}", exc_info=True)
@@ -536,6 +529,8 @@ def uploaded_file(filename):
 
 
 @main_bp.route('/api/public-notifications')
+@cache.cached(timeout=30, query_string=False)
+@limiter.limit('120/minute')
 def public_notifications_api():
     """公开通知接口：供所有访客读取首页头部通知条。"""
     try:
@@ -548,7 +543,7 @@ def public_notifications_api():
             )
         ).order_by(Notification.is_important.desc(), Notification.created_at.desc()).limit(10).all()
 
-        return jsonify({
+        response = jsonify({
             'success': True,
             'notifications': [
                 {
@@ -561,6 +556,10 @@ def public_notifications_api():
                 for n in notifications
             ]
         })
+        response.headers['Cache-Control'] = 'public, max-age=30, s-maxage=180, stale-while-revalidate=60'
+        response.headers['Surrogate-Control'] = 'max-age=180, stale-while-revalidate=60'
+        response.headers['Vary'] = 'Accept-Encoding'
+        return response
     except Exception as e:
         logger.error(f"获取公开通知失败: {e}")
         return jsonify({'success': False, 'notifications': [], 'error': str(e)}), 500
@@ -585,7 +584,8 @@ def poster_image(activity_id):
         # 返回图片数据
         response = make_response(activity.poster_data)
         response.headers.set('Content-Type', mime_type)
-        response.headers.set('Cache-Control', 'public, max-age=3600')  # 缓存1小时
+        response.headers.set('Cache-Control', 'public, max-age=600, s-maxage=86400, stale-while-revalidate=600')
+        response.headers.set('Vary', 'Accept-Encoding')
         return response
     except Exception as e:
         logger.error(f"获取活动海报时出错: {e}")

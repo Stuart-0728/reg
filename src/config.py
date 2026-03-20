@@ -139,6 +139,7 @@ class Config:
         'max_overflow': 30,  # 增加最大溢出连接数
         'pool_timeout': 20,  # 减少连接超时时间
         'pool_recycle': 3600,  # 连接回收时间，1小时
+        'pool_use_lifo': True,  # 优先复用最近连接，降低空闲连接失活概率
         'pool_pre_ping': True,  # 连接前ping一下确保连接有效
         'echo': False,  # 生产环境关闭SQL回显
     }
@@ -155,8 +156,9 @@ class Config:
     
     # 如果使用PostgreSQL，设置时区和连接参数 - 优化连接性能
     if 'postgresql:' in str(SQLALCHEMY_DATABASE_URI):
+        _statement_timeout_ms = int(os.environ.get('DB_STATEMENT_TIMEOUT_MS', 12000))
         SQLALCHEMY_ENGINE_OPTIONS['connect_args'] = {
-            'options': f'-c timezone=UTC',  # 强制PostgreSQL连接使用UTC时区
+            'options': f'-c timezone=UTC -c statement_timeout={_statement_timeout_ms}',  # 限制慢SQL占用
             'connect_timeout': int(os.environ.get('DB_CONNECT_TIMEOUT', 8)),  # 减少连接超时时间
             'keepalives': 1,  # 启用TCP keepalive
             'keepalives_idle': 20,  # 减少空闲时间，更快检测断开连接
@@ -181,13 +183,22 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SECURE = False  # 在开发环境中设为False，生产环境应为True
     REMEMBER_COOKIE_SAMESITE = 'Lax'
+
+    # 反向代理与静态资源缓存
+    ENABLE_PROXY_FIX = True
+    SEND_FILE_MAX_AGE_DEFAULT = int(os.environ.get('SEND_FILE_MAX_AGE_DEFAULT', 86400))
     
     # Flask-Cache配置
-    CACHE_TYPE = 'SimpleCache'
+    _redis_url = os.environ.get('REDIS_URL', '').strip()
+    if _redis_url:
+        CACHE_TYPE = 'RedisCache'
+        CACHE_REDIS_URL = _redis_url
+    else:
+        CACHE_TYPE = 'SimpleCache'
     CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_TIMEOUT', 300))
     
     # Flask-Limiter配置
-    RATELIMIT_STORAGE_URL = "memory://"
+    RATELIMIT_STORAGE_URL = _redis_url if _redis_url else "memory://"
     RATELIMIT_DEFAULT = "200 per day, 50 per hour"
     RATELIMIT_STRATEGY = 'fixed-window'
     
@@ -255,6 +266,9 @@ class ProductionConfig(Config):
     TESTING = False
     SESSION_COOKIE_SECURE = True
     REMEMBER_COOKIE_SECURE = True
+    SESSION_REFRESH_EACH_REQUEST = False
+    REMEMBER_COOKIE_REFRESH_EACH_REQUEST = False
+    PREFERRED_URL_SCHEME = 'https'
     
     @classmethod
     def init_app(cls, app):

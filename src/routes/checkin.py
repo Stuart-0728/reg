@@ -6,13 +6,16 @@ import logging
 from src.utils.time_helpers import get_localized_now, localize_time, ensure_timezone_aware, normalize_datetime_for_db
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from src.routes.utils import admin_required, student_required
+from src import limiter
 
 logger = logging.getLogger(__name__)
 checkin_bp = Blueprint('checkin', __name__, url_prefix='/checkin')
 
 # 签到接口
 @checkin_bp.route('/<int:activity_id>', methods=['POST'])
-@login_required
+@student_required
+@limiter.limit('30/minute')
 def checkin(activity_id):
     try:
         activity = db.get_or_404(Activity, activity_id)
@@ -40,7 +43,8 @@ def checkin(activity_id):
 
 # 扫描二维码签到路由
 @checkin_bp.route('/scan/<int:activity_id>/<string:checkin_key>')
-@login_required
+@student_required
+@limiter.limit('30/minute')
 def scan_checkin(activity_id, checkin_key):
     try:
         # 检查活动是否存在
@@ -176,7 +180,7 @@ def scan_checkin(activity_id, checkin_key):
 
 # 签到统计页面
 @checkin_bp.route('/statistics/<int:activity_id>', methods=['GET'])
-@login_required
+@admin_required
 def checkin_statistics(activity_id):
     try:
         activity = db.get_or_404(Activity, activity_id)
@@ -191,7 +195,8 @@ def checkin_statistics(activity_id):
         return redirect(url_for('admin.activities'))
 
 @checkin_bp.route('/register/<int:activity_id>', methods=['POST'])
-@login_required
+@student_required
+@limiter.limit('20/minute')
 def register_activity(activity_id):
     """用户报名活动"""
     try:
@@ -268,7 +273,8 @@ def register_activity(activity_id):
         return redirect(url_for('main.activity_detail', activity_id=activity_id))
 
 @checkin_bp.route('/unregister/<int:activity_id>', methods=['POST'])
-@login_required
+@student_required
+@limiter.limit('20/minute')
 def unregister_activity(activity_id):
     """用户取消报名活动"""
     try:
@@ -306,7 +312,8 @@ def unregister_activity(activity_id):
         return redirect(url_for('student.my_activities'))
 
 @checkin_bp.route('/api/checkin/<int:activity_id>', methods=['POST'])
-@login_required
+@student_required
+@limiter.limit('30/minute')
 def api_checkin(activity_id):
     """API接口：用户签到"""
     try:

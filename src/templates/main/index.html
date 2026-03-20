@@ -34,7 +34,7 @@
                 <div class="col-md-9 text-center px-4">
                     <div class="hero-glass-content mb-0" style="background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); border-radius: 30px; padding: 50px; box-shadow: 0 20px 40px rgba(0,0,0,0.08); border: 1px solid rgba(255,255,255,0.6);">
                         <span class="badge mb-3 px-3 py-2 rounded-pill shadow-sm" style="font-size: 0.9em; background: rgba(79, 70, 229, 0.1); color: #4f46e5;"><i class="fas fa-sparkles me-2"></i>智能社团+ 焕新升级</span>
-                        <h1 class="display-3 fw-bolder mb-4 text-dark" style="letter-spacing: -1px; text-shadow: 0 4px 10px rgba(0,0,0,0.02);">数智驱动<br><span style="background: linear-gradient(135deg, #4f46e5, #0ea5e9); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">智能社团+</span></h1>
+                        <h1 class="display-3 fw-bolder mb-4 text-dark" style="letter-spacing: -1px; text-shadow: 0 4px 10px rgba(0,0,0,0.02);">数智驱动<br><span style="background: linear-gradient(135deg, #4f46e5, #0ea5e9); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">智能社团+</span></h1>
                         <p class="lead text-muted mb-5 fs-4" style="line-height: 1.8;">以数智驱动教育，以创新引领未来<br>提升教育技能，培养卓越教育者</p>
                         <div class="d-flex justify-content-center gap-3 flex-wrap">
                             <a href="{{ url_for('main.activities') }}" class="btn btn-primary btn-lg shadow-sm" style="padding: 15px 40px; border-radius: 50px;"><i class="fas fa-rocket me-2"></i>探索活动</a>
@@ -111,6 +111,7 @@
         font-weight: 800;
         letter-spacing: 0.2px;
         background: linear-gradient(135deg, #ffffff, #c7d2fe);
+        background-clip: text;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         transition: transform 0.32s ease, filter 0.32s ease;
@@ -227,15 +228,15 @@
             <div id="home-activity-grid" class="row row-cols-1 row-cols-md-3 g-4 mb-4 text-start">
                 {% for activity in popular_activities %}
                     <div class="col">
-                        <div class="card h-100 activity-card shadow-sm border border-1" style="border-radius: 12px; overflow: hidden; border-color: rgba(0,0,0,0.05) !important; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onclick="window.location.href='{{ url_for('student.activity_detail', id=activity.id) }}'">
+                        <div class="card h-100 activity-card shadow-sm border border-1" style="border-radius: 12px; overflow: hidden; border-color: rgba(0,0,0,0.05) !important; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" data-detail-url="{{ url_for('student.activity_detail', id=activity.id) }}" onclick="window.location.href=this.dataset.detailUrl;">
                             
                                                                                                                                                                         <!-- Poster Image Area -->
                             <div class="position-relative w-100" style="height: 200px; background-color: #f3f4f6; border-top-left-radius: 12px; border-top-right-radius: 12px; overflow: hidden;">
                                 {% if activity.poster_image %}
-                                    {% if 'banner' in activity.poster_image %}
-                                        <img src="{{ url_for('static', filename='uploads/posters/' ~ activity.poster_image) }}" class="w-100 h-100" style="object-fit: cover;" alt="{{ activity.title }}">
-                                    {% else %}
+                                    {% if activity.poster_data %}
                                         <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" class="w-100 h-100" style="object-fit: cover;" alt="{{ activity.title }}">
+                                    {% else %}
+                                        <img src="{{ url_for('static', filename='uploads/posters/' ~ activity.poster_image) }}" class="w-100 h-100" style="object-fit: cover;" alt="{{ activity.title }}">
                                     {% endif %}
                                 {% else %}
                                     <div class="w-100 h-100 d-flex justify-content-center align-items-center text-muted">
@@ -262,7 +263,7 @@
                                     </div>
                                 </div>
                                 
-                                <p class="card-text text-secondary mt-1 mb-4" style="font-size: 0.9rem; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex-grow: 1;">
+                                <p class="card-text text-secondary mt-1 mb-4" style="font-size: 0.9rem; line-height: 1.6; display: -webkit-box; line-clamp: 3; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex-grow: 1;">
                                     {{ activity.description|striptags }}
                                 </p>
                                 
@@ -347,7 +348,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                                     ${startTimeText}
                                 </div>
                             </div>
-                            <p class="card-text text-secondary mt-1 mb-4" style="font-size: 0.9rem; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex-grow: 1;">
+                            <p class="card-text text-secondary mt-1 mb-4" style="font-size: 0.9rem; line-height: 1.6; display: -webkit-box; line-clamp: 3; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex-grow: 1;">
                                 ${description}
                             </p>
                             <div class="mt-auto" style="font-size: 0.85rem; color: #111827;">
@@ -426,43 +427,6 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     if (window.__authSessionState) {
         applyAuthStateToHome(window.__authSessionState);
-    } else {
-        try {
-            const authResp = await fetch(`{{ url_for('auth.session_state') }}?_t=${Date.now()}`, {
-                method: 'GET',
-                cache: 'no-store',
-                credentials: 'same-origin',
-                headers: {
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }
-            });
-            if (authResp.ok) {
-                const authData = await authResp.json();
-                applyAuthStateToHome(authData);
-            }
-        } catch (e) {
-            console.warn('首页登录态入口同步失败，保留服务端渲染内容。', e);
-        }
-    }
-
-    try {
-        const apiUrl = `{{ url_for('main.home_activities_api') }}?_t=${Date.now()}`;
-        const resp = await fetch(apiUrl, {
-            method: 'GET',
-            cache: 'no-store',
-            headers: {
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
-            }
-        });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        if (data && data.success) {
-            renderActivities(data.activities || []);
-        }
-    } catch (e) {
-        console.warn('首页活动实时刷新失败，保留服务端渲染内容。', e);
     }
 });
 </script>

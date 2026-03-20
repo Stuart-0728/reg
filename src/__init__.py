@@ -11,6 +11,7 @@ from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_caching import Cache
+from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime, timedelta
 from src.config import config, Config
 
@@ -26,13 +27,19 @@ cache = Cache()
 def create_app(config_name=None):
     """创建Flask应用"""
     if config_name is None:
-        config_name = os.environ.get('FLASK_CONFIG', 'default')
+        config_name = os.environ.get('FLASK_CONFIG', '').strip()
+        if not config_name:
+            runtime_env = (os.environ.get('FLASK_ENV') or os.environ.get('ENV') or '').strip().lower()
+            config_name = 'production' if runtime_env == 'production' else 'default'
     
     app = Flask(__name__, instance_relative_config=True)
     
     # 从config.py导入配置
     app.config.from_object(config[config_name])
     config[config_name].init_app(app)
+
+    if app.config.get('ENABLE_PROXY_FIX', True):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
     
     # 设置时区
     os.environ['TZ'] = app.config.get('TIMEZONE_NAME', 'Asia/Shanghai')
@@ -44,17 +51,23 @@ def create_app(config_name=None):
     # 配置数据库连接池
     if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql'):
         app.logger.info("检测到PostgreSQL数据库，正在配置连接池...")
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-            'pool_size': 10,  # 连接池大小
-            'pool_recycle': 3600,  # 连接回收时间，单位秒
-            'pool_pre_ping': True,  # 连接前ping以验证连接是否有效
-            'connect_args': {
-                'keepalives': 1,  # 启用TCP keepalive
-                'keepalives_idle': 30,  # 空闲30秒后发送keepalive包
-                'keepalives_interval': 10,  # keepalive包间隔10秒
-                'keepalives_count': 5  # 5次未收到响应则认为连接断开
-            }
-        }
+        engine_options = dict(app.config.get('SQLALCHEMY_ENGINE_OPTIONS') or {})
+        connect_args = dict(engine_options.get('connect_args') or {})
+
+        engine_options.setdefault('pool_size', 10)
+        engine_options.setdefault('max_overflow', 20)
+        engine_options.setdefault('pool_timeout', 20)
+        engine_options.setdefault('pool_recycle', 3600)
+        engine_options.setdefault('pool_use_lifo', True)
+        engine_options.setdefault('pool_pre_ping', True)
+
+        connect_args.setdefault('keepalives', 1)
+        connect_args.setdefault('keepalives_idle', 30)
+        connect_args.setdefault('keepalives_interval', 10)
+        connect_args.setdefault('keepalives_count', 5)
+
+        engine_options['connect_args'] = connect_args
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
         app.logger.info("PostgreSQL连接池配置完成")
     
     # 确保SESSION_COOKIE_NAME已设置
@@ -129,10 +142,12 @@ def create_app(config_name=None):
     @app.before_request
     def before_request():
         """在请求处理前设置时区"""
-        session.permanent = True
+        if not session.permanent:
+            session.permanent = True
         timezone_name = app.config.get('TIMEZONE_NAME', 'Asia/Shanghai')
-        # 将时区存储在会话中，方便在模板和视图中使用
-        session['timezone'] = timezone_name
+        # 仅在缺失或变更时写入session，避免每个请求都触发会话写盘
+        if session.get('timezone') != timezone_name:
+            session['timezone'] = timezone_name
         g.timezone = pytz.timezone(timezone_name)
 
     @app.after_request
@@ -141,6 +156,21 @@ def create_app(config_name=None):
         try:
             path = (request.path or '').lower()
             content_type = (response.headers.get('Content-Type') or '').lower()
+
+            # 统一安全响应头（不影响业务逻辑）
+            response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+            response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+            response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+            response.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+
+            # 静态资源按类型分层缓存，优先让EdgeOne命中
+            if path.startswith('/static/'):
+                if any(path.endswith(ext) for ext in ('.css', '.js', '.mjs')):
+                    response.headers['Cache-Control'] = 'public, max-age=600, s-maxage=86400, stale-while-revalidate=300'
+                elif any(path.endswith(ext) for ext in ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.woff', '.woff2', '.ttf')):
+                    response.headers['Cache-Control'] = 'public, max-age=3600, s-maxage=259200, stale-while-revalidate=600'
+                response.headers['Vary'] = 'Accept-Encoding'
+                return response
 
             # 动态业务路由一律禁用缓存，避免跨账号缓存污染
             is_dynamic_route = (
@@ -168,6 +198,17 @@ def create_app(config_name=None):
 
             if current_user.is_authenticated and 'text/html' in content_type:
                 response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+
+            # 公共JSON接口允许短期边缘缓存，提升高并发命中率
+            public_edge_paths = {
+                '/api/home-activities',
+                '/api/public-notifications',
+            }
+            if path in public_edge_paths and response.status_code == 200:
+                response.headers['Cache-Control'] = 'public, max-age=20, s-maxage=120, stale-while-revalidate=60'
+                response.headers['Vary'] = 'Accept-Encoding'
+                response.headers.pop('Pragma', None)
+                response.headers.pop('Expires', None)
         except Exception:
             pass
         return response

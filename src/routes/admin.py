@@ -29,6 +29,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import func, desc, or_, and_, extract, text, case
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
+from src import cache
 from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, student_tags, activity_tags, student_societies, Announcement, Society
 from src.routes.utils import admin_required, log_action, is_super_admin
 from src.utils.time_helpers import normalize_datetime_for_db, display_datetime, ensure_timezone_aware, get_localized_now, safe_less_than, safe_greater_than, get_activity_status
@@ -41,6 +42,20 @@ admin_bp = Blueprint('admin', __name__)
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
+
+
+def _invalidate_home_page_caches():
+    """后台内容变更后精准失效首页公共缓存。"""
+    try:
+        home_activities_view = current_app.view_functions.get('main.home_activities_api')
+        if home_activities_view:
+            cache.delete_memoized(home_activities_view)
+
+        public_notifications_view = current_app.view_functions.get('main.public_notifications_api')
+        if public_notifications_view:
+            cache.delete_memoized(public_notifications_view)
+    except Exception as e:
+        logger.warning(f"首页缓存失效失败（已忽略）: {e}")
 
 
 def _current_scope_society_id():
@@ -1640,6 +1655,7 @@ def create_activity():
             
             # 保存到数据库
             db.session.commit()
+            _invalidate_home_page_caches()
             
             # 记录操作
             log_action(
@@ -1854,6 +1870,7 @@ def edit_activity(id):
                 
                 try:
                     db.session.commit()
+                    _invalidate_home_page_caches()
                     logger.info("活动更新成功提交到数据库")
                     
                     # 记录日志
@@ -4386,6 +4403,7 @@ def create_notification():
             
             db.session.add(notification)
             db.session.commit()
+            _invalidate_home_page_caches()
             
             log_action('create_notification', f'创建通知: {title}')
             flash('通知创建成功', 'success')
@@ -4452,6 +4470,7 @@ def edit_notification(id):
             notification.is_important = is_important
             
             db.session.commit()
+            _invalidate_home_page_caches()
             
             log_action('edit_notification', f'编辑通知: {title}')
             flash('通知更新成功', 'success')
@@ -4515,6 +4534,7 @@ def delete_notification(id):
             db.delete(Notification).where(Notification.id.in_(duplicate_ids))
         )
         db.session.commit()
+        _invalidate_home_page_caches()
         
         log_action(
             action='delete_notification', 
@@ -5044,6 +5064,7 @@ def change_activity_status(id):
             activity.completed_at = datetime.now(pytz.utc)
             
         db.session.commit()
+        _invalidate_home_page_caches()
         
         # 获取状态的中文名称
         status_names = {
@@ -5323,6 +5344,7 @@ def create_announcement():
                 
                 db.session.add(announcement)
                 db.session.commit()
+                _invalidate_home_page_caches()
 
                 _sync_published_announcements_to_notifications()
                 
@@ -5412,6 +5434,7 @@ def edit_announcement(id):
                 ).delete(synchronize_session=False)
                 
                 db.session.commit()
+                _invalidate_home_page_caches()
 
                 _sync_published_announcements_to_notifications()
                 
@@ -5480,6 +5503,7 @@ def delete_announcement(id):
         # 删除公告
         db.session.delete(announcement)
         db.session.commit()
+        _invalidate_home_page_caches()
         
         log_action('delete_announcement', f'删除公告: {announcement.title}')
         flash('公告已删除', 'success')
@@ -5593,6 +5617,7 @@ def delete_activity(id):
             # 删除活动
             db.session.delete(activity)
             db.session.commit()
+            _invalidate_home_page_caches()
             
             # 记录操作
             log_action('force_delete_activity', f'永久删除活动: {activity.title}')
@@ -5602,6 +5627,7 @@ def delete_activity(id):
             # 软删除（标记为已取消）
             activity.status = 'cancelled'
             db.session.commit()
+            _invalidate_home_page_caches()
             
             # 记录操作
             log_action('cancel_activity', f'取消活动: {activity.title}')

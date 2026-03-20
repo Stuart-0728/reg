@@ -750,6 +750,26 @@
                 width: 90%;
                 right: 5%;
                 left: 5%;
+                bottom: calc(84px + env(safe-area-inset-bottom));
+                height: min(72vh, calc(100dvh - 140px));
+                max-height: calc(100dvh - 120px);
+            }
+
+            .ai-chat-input {
+                position: sticky;
+                bottom: 0;
+                padding-bottom: calc(12px + env(safe-area-inset-bottom));
+                gap: 8px;
+            }
+
+            .ai-chat-input input {
+                min-width: 0;
+            }
+
+            .ai-chat-input button {
+                flex: 0 0 auto;
+                min-width: 72px;
+                white-space: nowrap;
             }
         }
     </style>

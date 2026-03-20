@@ -14,7 +14,7 @@ from werkzeug.exceptions import HTTPException
 from flask_wtf.csrf import validate_csrf
 from src.models import db, Activity, Tag, StudentInfo, SystemLog, Registration, AIChatHistory, AIChatSession, activity_tags, PointsHistory, User, Role, Message, Society
 from src.utils.time_helpers import get_beijing_time, ensure_timezone_aware
-from src import csrf # Import csrf
+from src import csrf, limiter # Import csrf
 
 utils_bp = Blueprint('utils', __name__)
 logger = logging.getLogger(__name__)
@@ -42,6 +42,18 @@ def _validate_api_csrf_token():
     except Exception as e:
         logger.warning(f"API CSRF校验失败: {e}")
         return False, '安全验证失败，请刷新页面后重试'
+
+
+def _is_same_origin_request():
+    """对写操作追加同源校验，降低跨站请求滥用风险。"""
+    origin = (request.headers.get('Origin') or '').strip()
+    if not origin:
+        return True
+    try:
+        host = (request.host_url or '').rstrip('/')
+        return origin.rstrip('/') == host
+    except Exception:
+        return False
 
 
 def is_super_admin(user):
@@ -113,6 +125,10 @@ def admin_required(f):
                 flash('您没有管理员权限', 'danger')
                 return redirect(url_for('main.index'))
 
+            if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'} and not _is_same_origin_request():
+                logger.warning(f"管理员写操作同源校验失败: 用户={current_user.username}, 路径={request.path}")
+                abort(403)
+
             g.scope_is_super_admin = is_super_admin(db_user)
             g.scope_society_id = None if g.scope_is_super_admin else admin_society_id(db_user)
 
@@ -152,6 +168,10 @@ def student_required(f):
             if str(role.name).lower() != 'student':
                 flash('您没有权限访问此页面', 'danger')
                 return redirect(url_for('main.index'))
+
+            if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'} and not _is_same_origin_request():
+                logger.warning(f"学生写操作同源校验失败: 用户={current_user.username}, 路径={request.path}")
+                abort(403)
             
         except Exception as e:
             logger.error(f"Error in student_required: {e}")
@@ -607,6 +627,7 @@ def ai_chat():
 
 @utils_bp.route('/api/ai/chat', methods=['POST'])
 @csrf.exempt
+@limiter.limit('30/minute')
 def ai_chat_legacy_post():
     """兼容旧教育页面使用的 /api/ai/chat POST 接口。"""
     if not current_user.is_authenticated:
@@ -671,16 +692,19 @@ def ai_chat_legacy_post():
 
 # 添加与前端对应的新路由
 @utils_bp.route('/api/ai_chat', methods=['GET'], endpoint='api_ai_chat')
+@limiter.limit('120/minute')
 def api_ai_chat():
     return ai_chat()
 
 # 添加utils前缀的API路由
 @utils_bp.route('/api/ai_chat', methods=['GET'], endpoint='utils_api_ai_chat')
+@limiter.limit('120/minute')
 def utils_api_ai_chat():
     return ai_chat()
 
 @utils_bp.route('/ai_chat/history', methods=['GET'])
 @login_required
+@limiter.limit('120/minute')
 def ai_chat_history_endpoint():
     """获取AI聊天历史记录"""
     session_id = request.args.get('session_id')
@@ -725,6 +749,7 @@ def ai_chat_history_endpoint():
 # 添加utils前缀路由
 @utils_bp.route('/utils/ai_chat/history', methods=['GET'])
 @login_required
+@limiter.limit('120/minute')
 def utils_ai_chat_history():
     """获取AI聊天历史记录 - 带utils前缀的版本"""
     return ai_chat_history_endpoint()
