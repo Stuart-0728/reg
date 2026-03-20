@@ -529,6 +529,11 @@ function setupButtonLoading() {
         const button = e.target.closest('button, a.btn');
         if (!button) return;
 
+        // 提交按钮交由 setupFormLoadingHandlers 处理，避免在浏览器表单校验前提前锁死按钮
+        if (button.tagName === 'BUTTON' && button.type === 'submit' && button.form) {
+            return;
+        }
+
         const isAnchorButton = button.tagName === 'A';
 
         // 普通导航型 a.btn 不应触发“处理中”动画；仅允许显式声明 data-force-loading 的场景

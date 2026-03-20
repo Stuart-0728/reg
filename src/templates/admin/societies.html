@@ -12,7 +12,7 @@
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white"><strong>新增社团</strong></div>
         <div class="card-body">
-            <form method="post" action="{{ url_for('admin.create_society') }}" class="row g-3">
+            <form method="post" action="{{ url_for('admin.create_society') }}" class="row g-3" data-no-loading="true">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="col-md-4">
                     <label class="form-label">社团名称</label>
@@ -75,7 +75,7 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <form method="post" action="{{ url_for('admin.assign_society_admin', society_id=society.id) }}" class="d-flex gap-2">
+                                <form method="post" action="{{ url_for('admin.assign_society_admin', society_id=society.id) }}" class="d-flex gap-2" data-no-loading="true">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <select name="admin_user_id" class="form-select form-select-sm" required>
                                         <option value="">请选择管理员</option>
