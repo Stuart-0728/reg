@@ -87,6 +87,14 @@ def _scope_guard_activity(activity):
     return bool(activity and getattr(activity, 'society_id', None) == scope_id)
 
 
+def _scope_display_label():
+    scope_id = _current_scope_society_id()
+    if not scope_id:
+        return '全站数据'
+    society = db.session.get(Society, scope_id)
+    return f"{society.name}社团" if society else '当前社团'
+
+
 @admin_bp.route('/societies')
 @admin_required
 def manage_societies():
@@ -1186,6 +1194,7 @@ def dashboard():
                               recent_activities=recent_activities,
                               recent_students=recent_students,
                               total_registrations=total_registrations,
+                              scope_label=_scope_display_label(),
                               display_datetime=display_datetime,
                               Registration=Registration)
     except Exception as e:
@@ -2188,7 +2197,8 @@ def statistics():
             type_labels=type_labels,
             type_data=type_data,
             tag_labels=tag_labels,
-            tag_data=tag_data
+            tag_data=tag_data,
+            scope_label=_scope_display_label()
         )
     except Exception as e:
         logger.error(f"Error in statistics: {e}")
