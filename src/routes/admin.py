@@ -95,6 +95,53 @@ def _scope_display_label():
     return f"{society.name}社团" if society else '当前社团'
 
 
+def _is_ajax_request():
+    return (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or 'application/json' in (request.headers.get('Accept') or '')
+    )
+
+
+def _create_approval_request(req_type, req_action, payload, target_id=None):
+    details = {
+        'status': 'pending',
+        'type': req_type,
+        'action': req_action,
+        'payload': payload or {},
+        'target_id': target_id,
+        'requester_id': current_user.id,
+        'requester_name': current_user.username,
+        'requested_at': datetime.now(pytz.utc).isoformat()
+    }
+    db.session.add(SystemLog(
+        user_id=current_user.id,
+        action='approval_request',
+        details=json.dumps(details, ensure_ascii=False),
+        ip_address=request.remote_addr,
+        created_at=datetime.now(pytz.utc)
+    ))
+    db.session.commit()
+
+
+def _remove_student_from_scope_society(student):
+    scope_id = _current_scope_society_id()
+    if not scope_id or not student:
+        return False
+
+    changed = False
+    joined = list(student.joined_societies or [])
+    remaining = [s for s in joined if s.id != scope_id]
+    if len(remaining) != len(joined):
+        student.joined_societies = remaining
+        changed = True
+
+    if student.society_id == scope_id:
+        student.society_id = remaining[0].id if remaining else None
+        changed = True
+
+    return changed
+
+
 @admin_bp.route('/societies')
 @admin_required
 def manage_societies():
@@ -283,9 +330,29 @@ def delete_society(society_id):
         return redirect(url_for('admin.manage_societies'))
     except Exception as e:
         db.session.rollback()
-        logger.error(f"删除社团失败 society_id={society_id}: {e}", exc_info=True)
-        flash('删除社团失败，请稍后重试', 'danger')
-        return redirect(url_for('admin.manage_societies'))
+        logger.error(f"删除社团失败，尝试外键兜底清理 society_id={society_id}: {e}", exc_info=True)
+
+        # 兜底：若存在遗漏外键，统一置空/解绑后再重试删除
+        try:
+            db.session.execute(db.text("UPDATE users SET managed_society_id = NULL WHERE managed_society_id = :sid"), {'sid': society_id})
+            db.session.execute(db.text("UPDATE student_info SET society_id = NULL WHERE society_id = :sid"), {'sid': society_id})
+            db.session.execute(db.text("UPDATE activities SET society_id = NULL WHERE society_id = :sid"), {'sid': society_id})
+            db.session.execute(db.text("UPDATE points_history SET society_id = NULL WHERE society_id = :sid"), {'sid': society_id})
+            db.session.execute(db.text("UPDATE message SET target_society_id = NULL WHERE target_society_id = :sid"), {'sid': society_id})
+            db.session.execute(student_societies.delete().where(student_societies.c.society_id == society_id))
+            db.session.flush()
+
+            society_retry = db.session.get(Society, society_id)
+            if society_retry:
+                db.session.delete(society_retry)
+            db.session.commit()
+            flash('社团已删除（已自动执行外键兜底清理）', 'success')
+            return redirect(url_for('admin.manage_societies'))
+        except Exception as retry_e:
+            db.session.rollback()
+            logger.error(f"删除社团兜底清理仍失败 society_id={society_id}: {retry_e}", exc_info=True)
+            flash('删除社团失败：存在未清理的关联数据，请联系开发排查具体外键', 'danger')
+            return redirect(url_for('admin.manage_societies'))
 
 
 @admin_bp.route('/society/<int:society_id>/assign-admin', methods=['POST'])
@@ -1827,6 +1894,24 @@ def delete_student(id):
             flash('只能删除学生账号', 'danger')
             return redirect(url_for('admin.students'))
 
+        if not is_super_admin(current_user):
+            student = user.student_info
+            if not student:
+                flash('该用户不是学生账号', 'warning')
+                return redirect(url_for('admin.students'))
+            if not _scope_guard_student(student):
+                flash('您只能管理所属社团学生', 'danger')
+                return redirect(url_for('admin.students'))
+
+            changed = _remove_student_from_scope_society(student)
+            db.session.commit()
+            if changed:
+                log_action('remove_student_from_society', f'将学生移出社团名单: user_id={user.id}, scope_society_id={_current_scope_society_id()}')
+                flash('已将该学生移出当前社团名单（账号保留）', 'success')
+            else:
+                flash('该学生不在当前社团名单中，无需移除', 'info')
+            return redirect(url_for('admin.students'))
+
         # 清理外键依赖，避免删除失败
         db.session.execute(db.text("UPDATE system_logs SET user_id = NULL WHERE user_id = :uid"), {'uid': user.id})
         db.session.execute(db.text("UPDATE announcements SET created_by = NULL WHERE created_by = :uid"), {'uid': user.id})
@@ -2160,6 +2245,9 @@ def update_student_tags(id):
 def adjust_student_points(id):
     try:
         student_info = db.get_or_404(StudentInfo, id)
+        if not _scope_guard_student(student_info):
+            flash('您只能调整所属社团学生积分', 'danger')
+            return redirect(url_for('admin.students'))
         points = request.form.get('points', type=int)
         reason = request.form.get('reason', '').strip()
         
@@ -2174,13 +2262,15 @@ def adjust_student_points(id):
         # 更新学生积分
         student_info.points = (student_info.points or 0) + points
         
+        scope_society_id = _current_scope_society_id()
+
         # 创建积分历史记录
         points_history = PointsHistory(
             student_id=id,
             points=points,
             reason=f"管理员调整: {reason}",
             activity_id=None,
-            society_id=student_info.society_id
+            society_id=scope_society_id or student_info.society_id
         )
         
         db.session.add(points_history)
@@ -2450,6 +2540,9 @@ def activity_registrations(id):
         # 导入display_datetime函数供模板使用
         from src.utils.time_helpers import display_datetime
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            flash('您只能管理所属社团活动', 'danger')
+            return redirect(url_for('admin.activities'))
         
         # 获取报名学生列表 - 修复报名详情查看问题
         # 使用SQLAlchemy查询，确保包含registration_id
@@ -2503,6 +2596,9 @@ def activity_registrations(id):
 def export_activity_registrations(id):
     try:
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            flash('您只能导出所属社团活动报名', 'danger')
+            return redirect(url_for('admin.activities'))
         
         # 获取报名学生列表
         registrations = Registration.query.filter_by(
@@ -3026,6 +3122,10 @@ def import_backup():
 def update_registration_status(id):
     try:
         registration = db.get_or_404(Registration, id)
+        activity = db.session.get(Activity, registration.activity_id)
+        if not _scope_guard_activity(activity):
+            flash('您只能管理所属社团活动报名', 'danger')
+            return redirect(url_for('admin.activities'))
         new_status = request.form.get('status')
         old_status = registration.status
         
@@ -3034,7 +3134,6 @@ def update_registration_status(id):
             return redirect(url_for('admin.activity_registrations', id=registration.activity_id))
         
         # 处理积分变更
-        activity = db.session.get(Activity, registration.activity_id)
         student_info = StudentInfo.query.join(User).filter(User.id == registration.user_id).first()
         
         if student_info and activity:
@@ -3082,6 +3181,8 @@ def activity_checkin(id):
         
         # 查找活动
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'message': '您只能管理所属社团活动签到'}), 403
         
         # 查找报名记录
         registration = db.session.execute(db.select(Registration).filter_by(
@@ -3124,7 +3225,23 @@ def manage_tags():
     
     tags_stmt = db.select(Tag).order_by(Tag.created_at.desc())
     tags = db.session.execute(tags_stmt).scalars().all()
-    return render_template('admin/tags.html', tags=tags, display_datetime=display_datetime)
+    pending_requests = []
+    if is_super_admin(current_user):
+        pending_logs = db.session.execute(
+            db.select(SystemLog)
+            .filter(SystemLog.action == 'approval_request')
+            .order_by(SystemLog.created_at.desc())
+            .limit(200)
+        ).scalars().all()
+        for log in pending_logs:
+            try:
+                details = json.loads(log.details or '{}')
+            except Exception:
+                continue
+            if details.get('status') == 'pending' and details.get('type') == 'tag':
+                pending_requests.append({'log': log, 'details': details})
+
+    return render_template('admin/tags.html', tags=tags, display_datetime=display_datetime, pending_requests=pending_requests)
 
 @admin_bp.route('/tags/create', methods=['POST'])
 @admin_required
@@ -3144,6 +3261,15 @@ def create_tag():
             flash('标签已存在', 'warning')
             return redirect(url_for('admin.manage_tags'))
         
+        if not is_super_admin(current_user):
+            _create_approval_request(
+                'tag',
+                'create',
+                {'name': name, 'color': color}
+            )
+            flash('标签创建已提交审核，待总管理员批准后生效', 'info')
+            return redirect(url_for('admin.manage_tags'))
+
         tag = Tag(name=name, color=color)
         db.session.add(tag)
         db.session.commit()
@@ -3176,6 +3302,16 @@ def edit_tag(id):
             flash('标签名称已存在', 'warning')
             return redirect(url_for('admin.manage_tags'))
         
+        if not is_super_admin(current_user):
+            _create_approval_request(
+                'tag',
+                'edit',
+                {'id': id, 'name': name, 'color': color},
+                target_id=id
+            )
+            flash('标签修改已提交审核，待总管理员批准后生效', 'info')
+            return redirect(url_for('admin.manage_tags'))
+
         tag.name = name
         tag.color = color
         db.session.commit()
@@ -3196,6 +3332,16 @@ def delete_tag(id):
         validate_csrf(request.form.get('csrf_token'))
         tag = db.get_or_404(Tag, id)
         name = tag.name
+
+        if not is_super_admin(current_user):
+            _create_approval_request(
+                'tag',
+                'delete',
+                {'id': id, 'name': name},
+                target_id=id
+            )
+            flash('标签删除已提交审核，待总管理员批准后执行', 'info')
+            return redirect(url_for('admin.manage_tags'))
         
         # 从所有相关活动中移除标签
         for activity in tag.activities:
@@ -3326,6 +3472,9 @@ def activity_reviews(id):
         from flask_wtf.csrf import generate_csrf
         
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            flash('您只能管理所属社团活动评价', 'danger')
+            return redirect(url_for('admin.activities'))
         reviews = ActivityReview.query.filter_by(activity_id=id).order_by(ActivityReview.created_at.desc()).all()
 
         # 预加载评价人信息，避免模板中姓名为空（非匿名时优先显示真实姓名）
@@ -3383,6 +3532,10 @@ def delete_activity_review(review_id):
     try:
         review = db.get_or_404(ActivityReview, review_id)
         activity_id = review.activity_id
+        activity = db.session.get(Activity, activity_id)
+        if not _scope_guard_activity(activity):
+            flash('您只能管理所属社团活动评价', 'danger')
+            return redirect(url_for('admin.activities'))
         reclaim_points = request.form.get('reclaim_points') == '1'
 
         if reclaim_points:
@@ -3419,6 +3572,8 @@ def ai_review_cluster_summary(id):
     try:
         validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'message': '仅可分析所属社团活动'}), 403
         reviews = ActivityReview.query.filter_by(activity_id=id).order_by(ActivityReview.created_at.desc()).all()
 
         if not reviews:
@@ -3458,6 +3613,8 @@ def ai_activity_retrospective_report(id):
     try:
         validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'message': '仅可分析所属社团活动'}), 403
         reviews = ActivityReview.query.filter_by(activity_id=id).all()
         registrations = Registration.query.filter_by(activity_id=id).all()
 
@@ -3518,6 +3675,8 @@ def generate_checkin_qrcode(id):
     try:
         # 检查活动是否存在
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'message': '您只能管理所属社团活动签到'}), 403
         
         # 获取当前本地化时间
         now = get_localized_now()
@@ -3595,6 +3754,9 @@ def checkin_modal(id):
         
         # 获取活动信息
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            flash('您只能管理所属社团活动签到', 'danger')
+            return redirect(url_for('admin.activities'))
         logger.info(f"获取活动信息: id={activity.id}, 标题={activity.title}")
         
         # 获取当前时间
@@ -3678,6 +3840,9 @@ def toggle_checkin(id):
             return redirect(url_for('admin.activity_view', id=id))
         
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            flash('您只能管理所属社团活动签到', 'danger')
+            return redirect(url_for('admin.activities'))
         
         # 获取当前状态
         current_status = getattr(activity, 'checkin_enabled', False)
@@ -4100,10 +4265,27 @@ def notifications():
     try:
         page = request.args.get('page', 1, type=int)
         notifications = Notification.query.order_by(Notification.created_at.desc()).paginate(page=page, per_page=10)
+
+        pending_requests = []
+        if is_super_admin(current_user):
+            pending_logs = db.session.execute(
+                db.select(SystemLog)
+                .filter(SystemLog.action == 'approval_request')
+                .order_by(SystemLog.created_at.desc())
+                .limit(200)
+            ).scalars().all()
+            for log in pending_logs:
+                try:
+                    details = json.loads(log.details or '{}')
+                except Exception:
+                    continue
+                if details.get('status') == 'pending' and details.get('type') == 'notification':
+                    pending_requests.append({'log': log, 'details': details})
         
         # 确保display_datetime函数在模板中可用
         return render_template('admin/notifications.html', 
                               notifications=notifications,
+                              pending_requests=pending_requests,
                               display_datetime=display_datetime)
     except Exception as e:
         logger.error(f"Error in notifications page: {e}")
@@ -4129,6 +4311,20 @@ def create_notification():
                 flash('标题和内容不能为空', 'danger')
                 return redirect(url_for('admin.create_notification'))
             
+            if not is_super_admin(current_user):
+                _create_approval_request(
+                    'notification',
+                    'create',
+                    {
+                        'title': title,
+                        'content': content,
+                        'is_important': bool(is_important),
+                        'expiry_date': expiry_date_str or ''
+                    }
+                )
+                flash('通知已提交审核，待总管理员批准后发布', 'info')
+                return redirect(url_for('admin.notifications'))
+
             # 处理过期日期
             expiry_date = None
             if expiry_date_str:
@@ -4187,6 +4383,22 @@ def edit_notification(id):
                 flash('标题和内容不能为空', 'danger')
                 return redirect(url_for('admin.edit_notification', id=id))
             
+            if not is_super_admin(current_user):
+                _create_approval_request(
+                    'notification',
+                    'edit',
+                    {
+                        'id': id,
+                        'title': title,
+                        'content': content,
+                        'is_important': bool(is_important),
+                        'expiry_date': expiry_date_str or ''
+                    },
+                    target_id=id
+                )
+                flash('通知修改已提交审核，待总管理员批准后生效', 'info')
+                return redirect(url_for('admin.notifications'))
+
             # 处理过期日期
             if expiry_date_str:
                 try:
@@ -4230,6 +4442,20 @@ def edit_notification(id):
 def delete_notification(id):
     try:
         notification = db.get_or_404(Notification, id)
+
+        if not is_super_admin(current_user):
+            _create_approval_request(
+                'notification',
+                'delete',
+                {
+                    'id': id,
+                    'title': notification.title,
+                    'content': notification.content
+                },
+                target_id=id
+            )
+            flash('通知删除已提交审核，待总管理员批准后执行', 'info')
+            return redirect(url_for('admin.notifications'))
 
         # 批量删除同源重复通知（同标题+同内容+同创建者+同公开属性）
         duplicate_ids = [row[0] for row in db.session.execute(
@@ -4762,6 +4988,20 @@ def fix_timezone():
 def change_activity_status(id):
     try:
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            if _is_ajax_request():
+                return jsonify({'success': False, 'message': '您只能管理所属社团活动状态'}), 403
+            flash('您只能管理所属社团活动状态', 'danger')
+            return redirect(url_for('admin.activities'))
+
+        try:
+            validate_csrf(request.form.get('csrf_token') or request.headers.get('X-CSRFToken') or '')
+        except Exception:
+            if _is_ajax_request():
+                return jsonify({'success': False, 'message': '请求校验失败，请刷新后重试'}), 400
+            flash('请求校验失败，请刷新后重试', 'danger')
+            return redirect(url_for('admin.activity_view', id=id))
+
         new_status = request.form.get('status')
         
         if new_status not in ['draft', 'pending', 'approved', 'active', 'completed', 'cancelled']:
@@ -4790,16 +5030,23 @@ def change_activity_status(id):
         new_status_name = status_names.get(new_status, new_status)
         
         log_action('change_activity_status', f'更改活动状态: {activity.title}, 从 {old_status_name} 到 {new_status_name}')
-        return jsonify({
-            'success': True, 
-            'message': f'活动状态已从"{old_status_name}"更新为"{new_status_name}"',
-            'old_status': old_status,
-            'new_status': new_status
-        })
+        if _is_ajax_request():
+            return jsonify({
+                'success': True,
+                'message': f'活动状态已从"{old_status_name}"更新为"{new_status_name}"',
+                'old_status': old_status,
+                'new_status': new_status
+            })
+
+        flash(f'活动状态已从“{old_status_name}”更新为“{new_status_name}”', 'success')
+        return redirect(url_for('admin.activity_view', id=id))
     except Exception as e:
         db.session.rollback()
         logger.error(f"更改活动状态出错: {e}")
-        return jsonify({'success': False, 'message': '更改活动状态时出错'}), 500
+        if _is_ajax_request():
+            return jsonify({'success': False, 'message': '更改活动状态时出错'}), 500
+        flash('更改活动状态时出错', 'danger')
+        return redirect(url_for('admin.activity_view', id=id))
 
 @admin_bp.route('/activity/<int:activity_id>/manual_checkin', methods=['POST'])
 @admin_required
@@ -4814,6 +5061,8 @@ def manual_checkin(activity_id):
         
         # 获取活动和学生信息
         activity = db.session.get(Activity, activity_id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'message': '您只能管理所属社团活动签到'}), 403
         student_info = StudentInfo.query.join(User).filter(User.id == registration.user_id).first()
         
         # 检查是否之前已经签到过（可能是被取消的签到）
@@ -4872,6 +5121,10 @@ def cancel_checkin(activity_id):
         # 确保登记与活动匹配
         if registration.activity_id != activity_id:
             return jsonify({'success': False, 'message': '登记记录与活动不匹配'}), 400
+
+        activity = db.session.get(Activity, activity_id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'message': '您只能管理所属社团活动签到'}), 403
         
         # 判断原来是否已签到
         was_checked_in = registration.check_in_time is not None
@@ -4884,7 +5137,6 @@ def cancel_checkin(activity_id):
             registration.status = 'registered'
             
             # 扣除积分
-            activity = db.session.get(Activity, activity_id)
             student_info = StudentInfo.query.join(User).filter(User.id == registration.user_id).first()
             
             if student_info and activity and was_checked_in:
@@ -5163,6 +5415,9 @@ def activity_view(id):
     try:
         # 获取活动详情
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            flash('您只能查看所属社团活动详情', 'danger')
+            return redirect(url_for('admin.activities'))
 
         active_statuses = ['registered', 'attended']
         
@@ -5229,6 +5484,9 @@ def delete_activity(id):
     try:
         # 获取活动
         activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            flash('您只能删除所属社团活动', 'danger')
+            return redirect(url_for('admin.activities'))
         
         # 检查是否强制删除
         force_delete = request.args.get('force', 'false').lower() == 'true'
@@ -5275,6 +5533,171 @@ def delete_activity(id):
         logger.exception(f"Error deleting activity: {e}")
         flash('删除活动时出错', 'danger')
         return redirect(url_for('admin.activities'))
+
+
+@admin_bp.route('/approval-requests')
+@admin_required
+def approval_requests():
+    if not is_super_admin(current_user):
+        flash('仅总管理员可审核请求', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    rows = db.session.execute(
+        db.select(SystemLog)
+        .filter(SystemLog.action == 'approval_request')
+        .order_by(SystemLog.created_at.desc())
+        .limit(500)
+    ).scalars().all()
+
+    requests_data = []
+    for row in rows:
+        try:
+            details = json.loads(row.details or '{}')
+        except Exception:
+            continue
+        requests_data.append({'log': row, 'details': details})
+
+    return render_template('admin/approval_requests.html', requests_data=requests_data, display_datetime=display_datetime)
+
+
+@admin_bp.route('/approval-request/<int:log_id>/approve', methods=['POST'])
+@admin_required
+def approve_request(log_id):
+    if not is_super_admin(current_user):
+        flash('仅总管理员可审核请求', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(url_for('admin.approval_requests'))
+
+    log_row = db.get_or_404(SystemLog, log_id)
+    try:
+        details = json.loads(log_row.details or '{}')
+    except Exception:
+        details = {}
+
+    if details.get('status') != 'pending':
+        flash('该请求已处理，无需重复审核', 'warning')
+        return redirect(url_for('admin.approval_requests'))
+
+    req_type = details.get('type')
+    req_action = details.get('action')
+    payload = details.get('payload') or {}
+
+    try:
+        if req_type == 'notification':
+            if req_action == 'create':
+                expiry_date = None
+                expiry_date_str = (payload.get('expiry_date') or '').strip()
+                if expiry_date_str:
+                    try:
+                        expiry_date = pytz.utc.localize(datetime.strptime(expiry_date_str, '%Y-%m-%d'))
+                    except Exception:
+                        expiry_date = None
+                db.session.add(Notification(
+                    title=(payload.get('title') or '').strip(),
+                    content=(payload.get('content') or '').strip(),
+                    is_important=bool(payload.get('is_important')),
+                    created_at=datetime.now(pytz.utc),
+                    created_by=details.get('requester_id'),
+                    expiry_date=expiry_date,
+                    is_public=True
+                ))
+            elif req_action == 'edit':
+                nid = payload.get('id')
+                notice = db.session.get(Notification, nid)
+                if notice:
+                    notice.title = (payload.get('title') or '').strip()
+                    notice.content = (payload.get('content') or '').strip()
+                    notice.is_important = bool(payload.get('is_important'))
+                    expiry_date_str = (payload.get('expiry_date') or '').strip()
+                    if expiry_date_str:
+                        try:
+                            notice.expiry_date = pytz.utc.localize(datetime.strptime(expiry_date_str, '%Y-%m-%d'))
+                        except Exception:
+                            notice.expiry_date = None
+                    else:
+                        notice.expiry_date = None
+            elif req_action == 'delete':
+                nid = payload.get('id')
+                notice = db.session.get(Notification, nid)
+                if notice:
+                    db.session.execute(db.delete(NotificationRead).where(NotificationRead.notification_id == notice.id))
+                    db.session.delete(notice)
+
+        elif req_type == 'tag':
+            if req_action == 'create':
+                name = (payload.get('name') or '').strip()
+                if name and not db.session.execute(db.select(Tag).filter_by(name=name)).scalar_one_or_none():
+                    db.session.add(Tag(name=name, color=(payload.get('color') or 'primary')))
+            elif req_action == 'edit':
+                tag_id = payload.get('id')
+                tag = db.session.get(Tag, tag_id)
+                if tag:
+                    new_name = (payload.get('name') or '').strip()
+                    if new_name:
+                        dup = db.session.execute(db.select(Tag).filter(Tag.name == new_name, Tag.id != tag.id)).scalar_one_or_none()
+                        if not dup:
+                            tag.name = new_name
+                    tag.color = (payload.get('color') or tag.color or 'primary')
+            elif req_action == 'delete':
+                tag_id = payload.get('id')
+                tag = db.session.get(Tag, tag_id)
+                if tag:
+                    for activity in tag.activities:
+                        activity.tags.remove(tag)
+                    for student in tag.students:
+                        student.tags.remove(tag)
+                    db.session.delete(tag)
+
+        details['status'] = 'approved'
+        details['reviewed_by'] = current_user.id
+        details['reviewed_at'] = datetime.now(pytz.utc).isoformat()
+        log_row.details = json.dumps(details, ensure_ascii=False)
+        db.session.commit()
+        flash('审核通过并已执行', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"审批执行失败 log_id={log_id}: {e}", exc_info=True)
+        flash('审核执行失败，请稍后重试', 'danger')
+
+    return redirect(url_for('admin.approval_requests'))
+
+
+@admin_bp.route('/approval-request/<int:log_id>/reject', methods=['POST'])
+@admin_required
+def reject_request(log_id):
+    if not is_super_admin(current_user):
+        flash('仅总管理员可审核请求', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新页面后重试', 'danger')
+        return redirect(url_for('admin.approval_requests'))
+
+    log_row = db.get_or_404(SystemLog, log_id)
+    try:
+        details = json.loads(log_row.details or '{}')
+    except Exception:
+        details = {}
+
+    if details.get('status') != 'pending':
+        flash('该请求已处理，无需重复审核', 'warning')
+        return redirect(url_for('admin.approval_requests'))
+
+    details['status'] = 'rejected'
+    details['reviewed_by'] = current_user.id
+    details['reviewed_at'] = datetime.now(pytz.utc).isoformat()
+    details['reject_reason'] = (request.form.get('reject_reason') or '').strip()
+    log_row.details = json.dumps(details, ensure_ascii=False)
+    db.session.commit()
+    flash('已驳回该审核请求', 'info')
+    return redirect(url_for('admin.approval_requests'))
 
 # 数据库状态监控路由
 @admin_bp.route('/database-status')

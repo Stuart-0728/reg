@@ -974,7 +974,29 @@ def points_rank():
     ).scalar_one_or_none()
 
     # 全站总积分榜
-    total_top_students = StudentInfo.query.order_by(StudentInfo.points.desc()).limit(100).all()
+    total_top_students = db.session.execute(
+        db.select(StudentInfo)
+        .join(User, User.id == StudentInfo.user_id)
+        .join(Role, Role.id == User.role_id)
+        .filter(Role.name == 'Student')
+        .order_by(StudentInfo.points.desc(), StudentInfo.id.asc())
+        .limit(100)
+    ).scalars().all()
+
+    total_current_student_points = 0
+    total_current_student_rank = None
+    if student_info:
+        total_current_student_points = int(student_info.points or 0)
+        higher_points_count = db.session.execute(
+            db.select(func.count(StudentInfo.id))
+            .join(User, User.id == StudentInfo.user_id)
+            .join(Role, Role.id == User.role_id)
+            .filter(
+                Role.name == 'Student',
+                func.coalesce(StudentInfo.points, 0) > total_current_student_points
+            )
+        ).scalar_one()
+        total_current_student_rank = int(higher_points_count or 0) + 1
 
     # 多社团积分榜：按每个社团单独聚合 points_history.society_id
     societies = (
@@ -998,7 +1020,10 @@ def points_rank():
                     PointsHistory.society_id == society.id
                 )
             )
+            .join(User, User.id == StudentInfo.user_id)
+            .join(Role, Role.id == User.role_id)
             .filter(
+                Role.name == 'Student',
                 or_(
                     StudentInfo.society_id == society.id,
                     StudentInfo.joined_societies.any(Society.id == society.id)
@@ -1030,7 +1055,9 @@ def points_rank():
     return render_template(
         'student/points_rank.html',
         top_students=total_top_students,
-        society_boards=society_boards
+        society_boards=society_boards,
+        total_current_student_points=total_current_student_points,
+        total_current_student_rank=total_current_student_rank
     )
 
 def get_recommended_activities(user_id, limit=6):

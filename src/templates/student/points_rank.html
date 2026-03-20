@@ -51,8 +51,14 @@
     {% endif %}
 
     <div class="card shadow-sm border-0">
-        <div class="card-header bg-white">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
             <strong>全站总积分榜</strong>
+            <small class="text-muted">
+                我的积分：{{ total_current_student_points or 0 }}
+                {% if total_current_student_rank %}
+                ｜我的排名：第 {{ total_current_student_rank }} 名
+                {% endif %}
+            </small>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">

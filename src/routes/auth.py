@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from src import db
+from src import db, limiter
 from src.models import User, Role, StudentInfo, Tag, AIUserPreferences, SystemLog, Society
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, SelectField, ValidationError
@@ -503,6 +503,7 @@ def logout():
 
 
 @auth_bp.route('/session-state')
+@limiter.exempt
 def session_state():
     """返回当前会话登录态，用于前端纠正被CDN缓存污染的头部显示。"""
     role_name = ''

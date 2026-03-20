@@ -1,20 +1,23 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from src.models import db, Tag, Activity, activity_tags
+from src.routes.utils import admin_required, is_super_admin
 
 tag_bp = Blueprint('tag', __name__, url_prefix='/tags')
 
 # 标签管理页面
 @tag_bp.route('/', methods=['GET'])
-@login_required
+@admin_required
 def tag_list():
-    tags = db.session.execute(db.select(Tag)).scalars().all()
-    return render_template('admin/tags.html', tags=tags)
+    return redirect(url_for('admin.manage_tags'))
 
 # 新建标签
 @tag_bp.route('/create', methods=['POST'])
-@login_required
+@admin_required
 def create_tag():
+    if not is_super_admin(current_user):
+        flash('该入口已停用，请使用管理后台审核流程', 'warning')
+        return redirect(url_for('admin.manage_tags'))
     name = request.form.get('name')
     desc = request.form.get('description')
     if not name:
@@ -31,8 +34,11 @@ def create_tag():
 
 # 删除标签
 @tag_bp.route('/delete/<int:tag_id>', methods=['POST'])
-@login_required
+@admin_required
 def delete_tag(tag_id):
+    if not is_super_admin(current_user):
+        flash('该入口已停用，请使用管理后台审核流程', 'warning')
+        return redirect(url_for('admin.manage_tags'))
     tag = db.get_or_404(Tag, tag_id)
     db.session.delete(tag)
     db.session.commit()
@@ -41,8 +47,10 @@ def delete_tag(tag_id):
 
 # 活动打标签（AJAX接口）
 @tag_bp.route('/assign', methods=['POST'])
-@login_required
+@admin_required
 def assign_tag():
+    if not is_super_admin(current_user):
+        return jsonify({'success': False, 'msg': '该入口已停用，请使用管理后台审核流程'}), 403
     activity_id = request.form.get('activity_id')
     tag_ids = request.form.getlist('tag_ids')
     activity = db.session.get(Activity, activity_id)

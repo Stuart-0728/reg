@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}审核请求 - 重庆师范大学智能社团+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">管理面板</a></li>
+            <li class="breadcrumb-item active" aria-current="page">审核请求</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-transparent text-dark d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">通知/标签审核请求</h4>
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-light btn-sm">返回</a>
+        </div>
+        <div class="card-body">
+            {% if requests_data %}
+            <div class="table-responsive">
+                <table class="table table-hover table-cell-scroll">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>类型</th>
+                            <th>动作</th>
+                            <th>申请人</th>
+                            <th>状态</th>
+                            <th>申请时间</th>
+                            <th>内容摘要</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in requests_data %}
+                        {% set d = item.details %}
+                        <tr>
+                            <td>{{ item.log.id }}</td>
+                            <td>{{ d.type or '-' }}</td>
+                            <td>{{ d.action or '-' }}</td>
+                            <td>{{ d.requester_name or '-' }}</td>
+                            <td>
+                                {% if d.status == 'pending' %}
+                                <span class="badge bg-warning">待审核</span>
+                                {% elif d.status == 'approved' %}
+                                <span class="badge bg-success">已通过</span>
+                                {% else %}
+                                <span class="badge bg-secondary">已驳回</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ display_datetime(item.log.created_at) }}</td>
+                            <td>
+                                {% set p = d.payload or {} %}
+                                {% if d.type == 'notification' %}
+                                <div class="small"><strong>{{ p.title or '无标题' }}</strong></div>
+                                <div class="text-muted small">{{ (p.content or '')[:60] }}{% if (p.content or '')|length > 60 %}...{% endif %}</div>
+                                {% elif d.type == 'tag' %}
+                                <div class="small"><strong>{{ p.name or '无标签名' }}</strong></div>
+                                <div class="text-muted small">颜色: {{ p.color or '-' }}</div>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if d.status == 'pending' %}
+                                <div class="d-flex gap-1">
+                                    <form method="post" action="{{ url_for('admin.approve_request', log_id=item.log.id) }}" data-no-loading="true">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-success">通过</button>
+                                    </form>
+                                    <form method="post" action="{{ url_for('admin.reject_request', log_id=item.log.id) }}" data-no-loading="true">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">驳回</button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <span class="text-muted small">已处理</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">暂无审核请求。</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
