@@ -29,7 +29,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import func, desc, or_, and_, extract, text, case
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
-from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, student_tags, activity_tags, Announcement, Society
+from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, student_tags, activity_tags, student_societies, Announcement, Society
 from src.routes.utils import admin_required, log_action, is_super_admin
 from src.utils.time_helpers import normalize_datetime_for_db, display_datetime, ensure_timezone_aware, get_localized_now, safe_less_than, safe_greater_than, get_activity_status
 from src.forms import ActivityForm  # 添加ActivityForm导入
@@ -215,30 +215,77 @@ def delete_society(society_id):
         flash('默认社团不可删除', 'warning')
         return redirect(url_for('admin.manage_societies'))
 
-    admin_count = db.session.execute(
-        db.select(func.count()).select_from(User).filter(User.managed_society_id == society.id)
-    ).scalar() or 0
-    activity_count = db.session.execute(
-        db.select(func.count()).select_from(Activity).filter(Activity.society_id == society.id)
-    ).scalar() or 0
-    primary_student_count = db.session.execute(
-        db.select(func.count()).select_from(StudentInfo).filter(StudentInfo.society_id == society.id)
-    ).scalar() or 0
-    joined_student_count = db.session.execute(
-        db.select(func.count()).select_from(StudentInfo).filter(StudentInfo.joined_societies.any(Society.id == society.id))
-    ).scalar() or 0
+    try:
+        activity_ids = db.session.execute(
+            db.select(Activity.id).filter(Activity.society_id == society.id)
+        ).scalars().all()
 
-    if admin_count or activity_count or primary_student_count or joined_student_count:
+        deleted_registration = 0
+        deleted_checkin = 0
+        deleted_review = 0
+        deleted_activity = 0
+        deleted_points = 0
+        deleted_messages = 0
+        cleared_admin_bindings = 0
+        affected_students = 0
+
+        if activity_ids:
+            db.session.execute(activity_tags.delete().where(activity_tags.c.activity_id.in_(activity_ids)))
+
+            deleted_registration = Registration.query.filter(Registration.activity_id.in_(activity_ids)).delete(synchronize_session=False) or 0
+            deleted_checkin = ActivityCheckin.query.filter(ActivityCheckin.activity_id.in_(activity_ids)).delete(synchronize_session=False) or 0
+            deleted_review = ActivityReview.query.filter(ActivityReview.activity_id.in_(activity_ids)).delete(synchronize_session=False) or 0
+
+            deleted_points += PointsHistory.query.filter(
+                or_(
+                    PointsHistory.activity_id.in_(activity_ids),
+                    PointsHistory.society_id == society.id
+                )
+            ).delete(synchronize_session=False) or 0
+
+            deleted_activity = Activity.query.filter(Activity.id.in_(activity_ids)).delete(synchronize_session=False) or 0
+        else:
+            deleted_points += PointsHistory.query.filter(PointsHistory.society_id == society.id).delete(synchronize_session=False) or 0
+
+        deleted_messages = Message.query.filter(Message.target_society_id == society.id).delete(synchronize_session=False) or 0
+
+        cleared_admin_bindings = User.query.filter(User.managed_society_id == society.id).update(
+            {User.managed_society_id: None}, synchronize_session=False
+        ) or 0
+
+        students = db.session.execute(
+            db.select(StudentInfo).filter(
+                or_(
+                    StudentInfo.society_id == society.id,
+                    StudentInfo.joined_societies.any(Society.id == society.id)
+                )
+            )
+        ).scalars().all()
+
+        for stu in students:
+            before_count = len(stu.joined_societies or [])
+            remaining_societies = [s for s in (stu.joined_societies or []) if s.id != society.id]
+            stu.joined_societies = remaining_societies
+            if stu.society_id == society.id:
+                stu.society_id = remaining_societies[0].id if remaining_societies else None
+            if before_count != len(remaining_societies) or stu.society_id != society.id:
+                affected_students += 1
+
+        db.session.execute(student_societies.delete().where(student_societies.c.society_id == society.id))
+
+        db.session.delete(society)
+        db.session.commit()
+
         flash(
-            f'无法删除：该社团仍有关联数据（管理员{admin_count}、活动{activity_count}、主社团学生{primary_student_count}、加入学生{joined_student_count}）',
-            'warning'
+            f'社团已删除，并清理关联数据：活动{deleted_activity}、报名{deleted_registration}、签到{deleted_checkin}、评价{deleted_review}、积分记录{deleted_points}、消息{deleted_messages}、管理员解绑{cleared_admin_bindings}、学生关系调整{affected_students}',
+            'success'
         )
         return redirect(url_for('admin.manage_societies'))
-
-    db.session.delete(society)
-    db.session.commit()
-    flash('社团已删除', 'success')
-    return redirect(url_for('admin.manage_societies'))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"删除社团失败 society_id={society_id}: {e}", exc_info=True)
+        flash('删除社团失败，请稍后重试', 'danger')
+        return redirect(url_for('admin.manage_societies'))
 
 
 @admin_bp.route('/society/<int:society_id>/assign-admin', methods=['POST'])

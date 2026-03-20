@@ -108,7 +108,7 @@
                                     </div>
                                 </form>
 
-                                <form method="post" action="{{ url_for('admin.delete_society', society_id=society.id) }}" data-no-loading="true" onsubmit="return confirm('确定删除社团【{{ society.name }}】吗？若有活动/学生/管理员关联将无法删除。');">
+                                <form method="post" action="{{ url_for('admin.delete_society', society_id=society.id) }}" data-no-loading="true" onsubmit="return confirm('确定删除社团【{{ society.name }}】吗？系统将一并清理该社团关联活动、报名、签到、评价、积分和社团关系。');">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button class="btn btn-sm btn-outline-danger" type="submit">删除社团</button>
                                 </form>
