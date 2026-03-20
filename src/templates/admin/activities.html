@@ -417,52 +417,66 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 添加更新活动状态的函数
 function updateActivityStatus(activityId, status) {
-    if (confirm(`确定要将活动状态更改为"${status === 'active' ? '进行中' : status === 'completed' ? '已结束' : '已取消'}"吗？`)) {
-        const url = "{{ url_for('admin.change_activity_status', id=0) }}".replace('0', activityId);
-        const csrfToken = "{{ csrf_token() }}";
-        const body = new URLSearchParams();
-        body.append('status', status);
-        body.append('csrf_token', csrfToken);
+    const statusLabel = status === 'active' ? '进行中' : status === 'completed' ? '已结束' : '已取消';
+    if (!confirm(`确定要将活动状态更改为"${statusLabel}"吗？`)) return;
 
-        fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRFToken': csrfToken,
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: body.toString()
-        })
-        .then(async (resp) => {
-            const contentType = (resp.headers.get('content-type') || '').toLowerCase();
-            if (contentType.includes('application/json')) {
-                const data = await resp.json();
-                return { ok: resp.ok, json: true, data };
-            }
-            const text = await resp.text();
-            return { ok: resp.ok, json: false, text };
-        })
-        .then((result) => {
-            if (result.json) {
-                if (result.data && result.data.success) {
-                    window.location.reload();
-                    return;
-                }
-                alert((result.data && result.data.message) ? result.data.message : '状态更新失败，请重试');
+    // 禁用所有状态按钮，防止重复点击
+    document.querySelectorAll('.activity-status-btn').forEach(btn => btn.disabled = true);
+
+    const url = "{{ url_for('admin.change_activity_status', id=0) }}".replace('0', activityId);
+    const csrfToken = "{{ csrf_token() }}";
+    const body = new URLSearchParams();
+    body.append('status', status);
+    body.append('csrf_token', csrfToken);
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': csrfToken,
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: body.toString()
+    })
+    .then(async (resp) => {
+        const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+        if (contentType.includes('application/json')) {
+            const data = await resp.json();
+            return { ok: resp.ok, json: true, data };
+        }
+        const text = await resp.text();
+        return { ok: resp.ok, json: false, text };
+    })
+    .then((result) => {
+        const forceRefresh = () => {
+            // 跳转到全部活动页面，附加时间戳强制无缓存刷新，确保用户可见到最新状态
+            const allUrl = "{{ url_for('admin.activities', status='all') }}" + '?_t=' + Date.now();
+            window.location.href = allUrl;
+        };
+
+        if (result.json) {
+            if (result.data && result.data.success) {
+                forceRefresh();
                 return;
             }
+            // 恢复按钮
+            document.querySelectorAll('.activity-status-btn').forEach(btn => btn.disabled = false);
+            alert((result.data && result.data.message) ? result.data.message : '状态更新失败，请重试');
+            return;
+        }
 
-            // 兜底：后端若返回HTML（如重定向页）但请求成功，仍强制刷新，避免页面状态不同步
-            if (result.ok) {
-                window.location.reload();
-                return;
-            }
-            alert('状态更新失败，请重试');
-        })
-        .catch(() => {
-            alert('状态更新失败，请检查网络后重试');
-        });
-    }
+        // 兜底：后端若返回HTML（如重定向页）但请求成功，仍强制刷新，避免页面状态不同步
+        if (result.ok) {
+            forceRefresh();
+            return;
+        }
+        document.querySelectorAll('.activity-status-btn').forEach(btn => btn.disabled = false);
+        alert('状态更新失败，请重试');
+    })
+    .catch(() => {
+        document.querySelectorAll('.activity-status-btn').forEach(btn => btn.disabled = false);
+        alert('状态更新失败，请检查网络后重试');
+    });
 }
 </script>
 
