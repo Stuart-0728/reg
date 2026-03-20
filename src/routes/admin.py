@@ -5059,7 +5059,6 @@ def change_activity_status(id):
         new_status_name = status_names.get(new_status, new_status)
         
         log_action('change_activity_status', f'更改活动状态: {activity.title}, 从 {old_status_name} 到 {new_status_name}')
-        # 始终返回 JSON，不依赖 _is_ajax_request() 避免 nginx 过滤 header 导致 302
         return jsonify({
             'success': True,
             'message': f'活动状态已从"{old_status_name}"更新为"{new_status_name}"',
