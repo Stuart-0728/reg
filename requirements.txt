@@ -5,6 +5,7 @@ Flask-WTF
 Flask-Migrate
 Flask-Caching
 Flask-Limiter
+redis
 Werkzeug
 SQLAlchemy
 python-dotenv

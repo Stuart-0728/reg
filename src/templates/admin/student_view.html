@@ -102,10 +102,6 @@
                         <button class="btn btn-outline-primary w-100" type="button" data-bs-toggle="collapse" data-bs-target="#editStudentProfileForm" aria-expanded="false" aria-controls="editStudentProfileForm">
                             <i class="fas fa-user-edit me-1"></i>编辑学生资料
                         </button>
-                        <button class="btn btn-outline-danger w-100" type="button" data-bs-toggle="collapse" data-bs-target="#resetStudentPasswordForm" aria-expanded="false" aria-controls="resetStudentPasswordForm">
-                            <i class="fas fa-key me-1"></i>重置学生密码
-                        </button>
-
                         {% if user.role and user.role.name and user.role.name|lower == 'student' %}
                         <form method="post" action="{{ url_for('admin.promote_student_to_admin', user_id=user.id) }}" onsubmit="return confirm('确认将该学生设置为管理员？');" data-no-loading="true">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -174,22 +170,6 @@
                         </div>
                     </div>
 
-                    <div class="collapse mt-3" id="resetStudentPasswordForm">
-                        <div class="card card-body border-danger-subtle">
-                            <form method="post" action="{{ url_for('admin.reset_student_password', user_id=user.id) }}" data-no-global-loading="true">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <p class="small text-muted mb-2">管理员仅发起重置流程，不直接设置新密码。点击后会生成重置链接，由学生本人自行输入新密码。</p>
-                                <button type="submit" class="btn btn-danger btn-sm w-100" onclick="return confirm('确认为该学生生成重置链接？');">生成重置链接</button>
-                            </form>
-                            {% if reset_link %}
-                            <div class="mt-3">
-                                <label class="form-label mb-1">重置链接（2小时有效）</label>
-                                <textarea id="resetLinkField" class="form-control form-control-sm" rows="3" readonly>{{ reset_link }}</textarea>
-                                <div id="resetLinkCopyTip" class="form-text">链接已自动复制到剪贴板，请直接发送给学生。</div>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -215,7 +195,22 @@
                                 {% endfor %}
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">更新标签</button>
+                        {% if current_user.is_super_admin %}
+                        <div class="mb-3">
+                            <label class="form-label">加入社团（总管理员可编辑）</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for society in all_societies %}
+                                <input type="checkbox" class="btn-check" name="societies" id="society{{ society.id }}" value="{{ society.id }}" autocomplete="off"
+                                    {% if society.id in selected_society_ids %}checked{% endif %}>
+                                <label class="btn btn-outline-success tag-btn {% if society.id in selected_society_ids %}tag-selected{% endif %}" for="society{{ society.id }}">
+                                    <i class="fas fa-check tag-check-icon"></i>
+                                    {{ society.name }}
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        <button type="submit" class="btn btn-primary w-100">更新标签{% if current_user.is_super_admin %}和社团{% endif %}</button>
                     </form>
                 </div>
             </div>
@@ -335,43 +330,6 @@
                                                 <span class="badge bg-info rounded-pill px-3">已报名</span>
                                             {% elif reg.status == 'attended' %}
                                                 <span class="badge bg-success rounded-pill px-3">已参加</span>
-
-                                                {% if reset_link %}
-                                                <script>
-                                                document.addEventListener('DOMContentLoaded', async function () {
-                                                    const field = document.getElementById('resetLinkField');
-                                                    const tip = document.getElementById('resetLinkCopyTip');
-                                                    if (!field) return;
-
-                                                    const text = field.value || '';
-                                                    if (!text) return;
-
-                                                    let copied = false;
-                                                    try {
-                                                        if (navigator.clipboard && window.isSecureContext) {
-                                                            await navigator.clipboard.writeText(text);
-                                                            copied = true;
-                                                        }
-                                                    } catch (e) {
-                                                        copied = false;
-                                                    }
-
-                                                    if (!copied) {
-                                                        field.focus();
-                                                        field.select();
-                                                        try {
-                                                            copied = document.execCommand('copy');
-                                                        } catch (e) {
-                                                            copied = false;
-                                                        }
-                                                    }
-
-                                                    if (tip && !copied) {
-                                                        tip.textContent = '自动复制失败，请手动复制后发送给学生。';
-                                                    }
-                                                });
-                                                </script>
-                                                {% endif %}
                                             {% elif reg.status == 'cancelled' %}
                                                 <span class="badge bg-secondary rounded-pill px-3">已取消</span>
                                             {% else %}

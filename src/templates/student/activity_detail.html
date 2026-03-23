@@ -10,6 +10,7 @@
 
 {% block styles %}
 {{ super() }}
+<link href="https://cdn.bootcdn.net/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css" rel="stylesheet">
 <style>
 @media (max-width: 576px) {
     #action-buttons {
@@ -31,13 +32,38 @@
         width: 100%;
     }
 }
+
+@media (max-width: 1199.98px) {
+    .activity-detail-main,
+    .activity-detail-side {
+        width: 100%;
+    }
+
+    .activity-detail-side .card {
+        margin-left: auto;
+        margin-right: auto;
+        max-width: 640px;
+    }
+
+    .activity-detail-side .weather-card {
+        max-width: 420px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .activity-detail-side .weather-card {
+        max-width: 100%;
+    }
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4" data-activity-id="{{ activity.id }}">
     <div class="row">
-        <div class="col-lg-8">
+        <div class="col-12 col-xl-8 activity-detail-main">
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body p-4">
                     <h2 class="fw-bold mb-3">{{ activity.title }}</h2>
@@ -65,13 +91,6 @@
                         </div>
                     </div>
                     
-                    <div class="activity-requirements mb-4">
-                        <h5 class="fw-bold mb-3">活动要求</h5>
-                        <div class="formatted-content">
-                            {{ activity.requirements|default('', true)|striptags|replace('\n', '<br>')|safe }}
-                        </div>
-                    </div>
-                    
                     <div class="activity-rewards mb-4">
                         <h5 class="fw-bold mb-3">活动奖励</h5>
                         <div class="d-flex align-items-center">
@@ -79,6 +98,55 @@
                             {% if activity.reward_description %}
                             <span>{{ activity.reward_description }}</span>
                             {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="activity-info-overview mb-4 d-xl-none">
+                        <h5 class="fw-bold mb-3">活动信息</h5>
+                        <ul class="list-unstyled mb-0">
+                            <li class="mb-2"><i class="fas fa-map-marker-alt text-primary me-2"></i><strong>地点:</strong> {{ activity.location }}</li>
+                            <li class="mb-2"><i class="fas fa-clock text-primary me-2"></i><strong>时间:</strong> {{ display_datetime(activity.start_time, 'Asia/Shanghai') }} 至 {{ display_datetime(activity.end_time, 'Asia/Shanghai') }}</li>
+                            {% if activity.registration_start_time %}
+                            <li class="mb-2"><i class="fas fa-play-circle text-primary me-2"></i><strong>报名开始:</strong> {{ display_datetime(activity.registration_start_time, 'Asia/Shanghai') }}</li>
+                            {% endif %}
+                            <li class="mb-2"><i class="fas fa-hourglass-end text-primary me-2"></i><strong>报名截止:</strong> {{ display_datetime(activity.registration_deadline, 'Asia/Shanghai') }}</li>
+                            <li><i class="fas fa-users text-primary me-2"></i><strong>人数:</strong>
+                                {% if activity.max_participants > 0 %}
+                                    <span class="registration-count">{{ registered_count }}</span>/{{ activity.max_participants }}
+                                {% else %}
+                                    <span class="registration-count">{{ registered_count }}</span> (不限)
+                                {% endif %}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="activity-tags-overview mb-4 d-xl-none">
+                        <h5 class="fw-bold mb-3">活动标签</h5>
+                        {% if activity.tags %}
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for tag in activity.tags %}
+                            <span class="badge bg-{{ tag.color }}">{{ tag.name }}</span>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted mb-0">暂无活动标签</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="activity-organizer-overview mb-4 d-xl-none">
+                        <h5 class="fw-bold mb-3">组织者</h5>
+                        <div class="d-flex align-items-center">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-user-tie fa-2x text-primary"></i>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <h6 class="mb-0">{{ activity.society.name if activity.society else '重庆师范大学智能社团+' }}</h6>
+                                {% if activity.society and activity.society.description %}
+                                <p class="text-muted mb-0 small">{{ activity.society.description }}</p>
+                                {% elif not activity.society %}
+                                <p class="text-muted mb-0 small">AI融合一站式社团管理解决方案</p>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                     
@@ -94,7 +162,7 @@
                                     <i class="fas fa-check-circle me-1"></i>已报名
                                 </span>
                                 {% if can_cancel %}
-                                    <button id="cancel-btn" class="btn btn-outline-danger">
+                                    <button id="cancel-btn" type="button" class="btn btn-outline-danger" data-no-loading="true" data-no-global-loading="true">
                                         <i class="fas fa-times-circle me-1"></i>取消报名
                                     </button>
                                     {% endif %}
@@ -106,7 +174,7 @@
                                 {% elif registration.status == 'cancelled' %}
                                                  <div class="alert alert-warning d-inline-block p-2 mb-2">您已取消报名</div>
                                                  {% if can_register %}
-                                                 <button id="register-btn" class="btn btn-primary">
+                                                 <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
                                                      <i class="fas fa-redo me-1"></i>重新报名
                                                  </button>
                                                  {% else %}
@@ -117,7 +185,7 @@
                                 {% endif %}
                             {% else %}
                                 {% if can_register %}
-                                <button id="register-btn" class="btn btn-primary">
+                                <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
                                     <i class="fas fa-user-plus me-1"></i>立即报名
                                 </button>
                                 {% elif activity.status == 'active' and activity.registration_start_time and safe_greater_than(activity.registration_start_time, now) %}
@@ -190,30 +258,64 @@
                 </div>
             </div>
         </div>
-        <div class="col-lg-4">
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body p-4">
+        <div class="col-xl-4 activity-detail-side">
+            <div class="card border-0 shadow-sm mb-4 d-none d-xl-block">
+                <div class="card-body">
                     <h5 class="fw-bold mb-3">活动信息</h5>
-                    <ul class="list-unstyled">
-                        <li class="mb-3"><i class="fas fa-map-marker-alt text-primary me-2"></i> <strong>地点:</strong> {{ activity.location }}</li>
-                        <li class="mb-3"><i class="fas fa-clock text-primary me-2"></i> <strong>时间:</strong> {{ display_datetime(activity.start_time, 'Asia/Shanghai') }} 至 {{ display_datetime(activity.end_time, 'Asia/Shanghai') }}</li>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2"><i class="fas fa-map-marker-alt text-primary me-2"></i><strong>地点:</strong> {{ activity.location }}</li>
+                        <li class="mb-2"><i class="fas fa-clock text-primary me-2"></i><strong>时间:</strong> {{ display_datetime(activity.start_time, 'Asia/Shanghai') }} 至 {{ display_datetime(activity.end_time, 'Asia/Shanghai') }}</li>
                         {% if activity.registration_start_time %}
-                        <li class="mb-3"><i class="fas fa-play-circle text-primary me-2"></i> <strong>报名开始:</strong> {{ display_datetime(activity.registration_start_time, 'Asia/Shanghai') }}</li>
+                        <li class="mb-2"><i class="fas fa-play-circle text-primary me-2"></i><strong>报名开始:</strong> {{ display_datetime(activity.registration_start_time, 'Asia/Shanghai') }}</li>
                         {% endif %}
-                        <li class="mb-3"><i class="fas fa-hourglass-end text-primary me-2"></i> <strong>报名截止:</strong> {{ display_datetime(activity.registration_deadline, 'Asia/Shanghai') }}</li>
-                        <li><i class="fas fa-users text-primary me-2"></i> <strong>人数:</strong> 
+                        <li class="mb-2"><i class="fas fa-hourglass-end text-primary me-2"></i><strong>报名截止:</strong> {{ display_datetime(activity.registration_deadline, 'Asia/Shanghai') }}</li>
+                        <li><i class="fas fa-users text-primary me-2"></i><strong>人数:</strong>
                             {% if activity.max_participants > 0 %}
-                                <span id="registration-count">{{ registered_count }}</span>/{{ activity.max_participants }}
+                                <span class="registration-count">{{ registered_count }}</span>/{{ activity.max_participants }}
                             {% else %}
-                                <span id="registration-count">{{ registered_count }}</span> (不限)
+                                <span class="registration-count">{{ registered_count }}</span> (不限)
                             {% endif %}
                         </li>
                     </ul>
                 </div>
             </div>
-            
+
+            <div class="card border-0 shadow-sm mb-4 d-none d-xl-block">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">活动标签</h5>
+                    {% if activity.tags %}
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for tag in activity.tags %}
+                        <span class="badge bg-{{ tag.color }}">{{ tag.name }}</span>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">暂无活动标签</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4 d-none d-xl-block">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-3">组织者</h5>
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-user-tie fa-2x text-primary"></i>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="mb-0">{{ activity.society.name if activity.society else '重庆师范大学智能社团+' }}</h6>
+                            {% if activity.society and activity.society.description %}
+                            <p class="text-muted mb-0 small">{{ activity.society.description }}</p>
+                            {% elif not activity.society %}
+                            <p class="text-muted mb-0 small">AI融合一站式社团管理解决方案</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if weather_data %}
             <!-- 天气卡片 -->
-                    {% if weather_data %}
                     <div class="card border-0 shadow-sm mb-4">
                         <div class="card-body p-0">
                             <div class="weather-card 
@@ -309,39 +411,8 @@
                             </div>
                         </div>
                     </div>
-                    {% endif %}
-            
-            {% if activity.tags %}
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body p-4">
-                    <h5 class="fw-bold mb-3">活动标签</h5>
-                    <div class="d-flex flex-wrap gap-2">
-                        {% for tag in activity.tags %}
-                        <span class="badge bg-{{ tag.color }}">{{ tag.name }}</span>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
             {% endif %}
-            
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-4">
-                    <h5 class="fw-bold mb-3">组织者</h5>
-                    <div class="d-flex align-items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-user-tie fa-2x text-primary"></i>
-                        </div>
-                        <div class="flex-grow-1 ms-3">
-                            <h6 class="mb-0">{{ activity.society.name if activity.society else '重庆师范大学智能社团+' }}</h6>
-                            {% if activity.society and activity.society.description %}
-                            <p class="text-muted mb-0 small">{{ activity.society.description }}</p>
-                            {% elif not activity.society %}
-                            <p class="text-muted mb-0 small">AI融合一站式社团管理解决方案</p>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
+        </div>
         </div>
     </div>
 </div>
@@ -349,12 +420,42 @@
 
 {% block scripts %}
 {{ super() }}
-<script src="https://unpkg.com/html5-qrcode"></script>
 <script>
 // QR扫描器代码
 let html5QrcodeScanner = null;
 
-function showQRScanner() {
+function ensureHtml5QrcodeLoaded() {
+    return new Promise((resolve, reject) => {
+        if (window.Html5Qrcode && window.Html5QrcodeSupportedFormats) {
+            resolve();
+            return;
+        }
+
+        const existing = document.getElementById('html5-qrcode-script');
+        if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error('扫码库加载失败')), { once: true });
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.id = 'html5-qrcode-script';
+        script.src = 'https://unpkg.com/html5-qrcode';
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('扫码库加载失败'));
+        document.head.appendChild(script);
+    });
+}
+
+async function showQRScanner() {
+    try {
+        await ensureHtml5QrcodeLoaded();
+    } catch (e) {
+        showToast('扫码组件加载失败，请检查网络后重试', 'danger');
+        return;
+    }
+
     // 创建QR扫描器容器
     if (!document.getElementById('qr-reader')) {
         const qrContainer = document.createElement('div');
@@ -481,7 +582,8 @@ function onScanSuccess(decodedText, decodedResult) {
     html5QrcodeScanner.pause();
     
     // 提取活动ID和签到码
-    let activityId = {{ activity.id }};
+    const activityIdFromDom = Number(document.querySelector('[data-activity-id]')?.dataset.activityId || 0);
+    let activityId = activityIdFromDom;
     let checkinKey = decodedText;
     
     // 尝试解析二维码内容
@@ -602,21 +704,38 @@ function showToast(message, type = 'info') {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // 获取按钮元素
-    const registerBtn = document.getElementById('register-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
-    // 获取CSRF令牌
+    const actionButtons = document.getElementById('action-buttons');
     const csrfToken = "{{ csrf_token() }}";
 
-    // 为报名按钮添加事件监听器
-    if (registerBtn) {
-        registerBtn.addEventListener('click', function() {
-            // 显示加载状态
-            const originalText = registerBtn.innerHTML;
-            registerBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
-            registerBtn.disabled = true;
+    function updateRegistrationCount(delta) {
+        const countElements = document.querySelectorAll('.registration-count');
+        if (!countElements.length) {
+            return;
+        }
+        countElements.forEach(element => {
+            const current = parseInt(element.textContent, 10);
+            if (!Number.isNaN(current)) {
+                element.textContent = String(Math.max(0, current + delta));
+            }
+        });
+    }
 
-            // 发送AJAX请求
+    function isCapacityFullMessage(message) {
+        if (!message) {
+            return false;
+        }
+        return message.includes('报名人数已满') || message.includes('名额已满') || message.includes('无名额');
+    }
+
+    function bindRegisterButton(button) {
+        if (!button) {
+            return;
+        }
+        button.addEventListener('click', function() {
+            const originalText = button.innerHTML;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
+            button.disabled = true;
+
             fetch('{{ url_for("student.register_activity", id=activity.id) }}', {
                 method: 'POST',
                 headers: {
@@ -627,182 +746,55 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    // 更新UI显示已报名状态
-                    const actionButtons = document.getElementById('action-buttons');
-                    actionButtons.innerHTML = `
-                        <div class="mb-3 mb-md-0">
-                            <span class="badge bg-success rounded-pill px-3 py-2 me-2">
-                                <i class="fas fa-check-circle me-1"></i>已报名
-                            </span>
-                            <button id="cancel-btn" class="btn btn-outline-danger">
-                                <i class="fas fa-times-circle me-1"></i>取消报名
-                            </button>
-                        </div>
-                        <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary">
-                            <i class="fas fa-arrow-left me-1"></i>返回活动列表
-                        </a>
-                    `;
-                    
-                    // 更新报名人数
-                    const countElement = document.getElementById('registration-count');
-                    if (countElement) {
-                        countElement.textContent = (parseInt(countElement.textContent) + 1).toString();
+                if (!data.success) {
+                    if (isCapacityFullMessage(data.message)) {
+                        if (window.showToast) {
+                            window.showToast('当前无名额，页面将刷新同步最新状态', 'warning');
+                        } else {
+                            alert('当前无名额，页面将刷新同步最新状态');
+                        }
+                        setTimeout(() => {
+                            location.reload();
+                        }, 900);
+                        return;
                     }
-                    
-                    // 添加取消按钮的事件监听
-                    const newCancelBtn = document.getElementById('cancel-btn');
-                    if (newCancelBtn) {
-                        newCancelBtn.addEventListener('click', function() {
-                            if (confirm('确定要取消报名吗？')) {
-                                // 显示加载状态
-                                const originalText = newCancelBtn.innerHTML;
-                                newCancelBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
-                                newCancelBtn.disabled = true;
 
-                                // 发送AJAX请求
-                                fetch('{{ url_for("student.cancel_registration", id=activity.id) }}', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRFToken': csrfToken
-                                    },
-                                    credentials: 'same-origin'
-                                })
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        // 更新UI显示可报名状态
-                                        const actionButtons = document.getElementById('action-buttons');
-                                        actionButtons.innerHTML = `
-                                            <div class="mb-3 mb-md-0">
-                                                <div class="alert alert-warning d-inline-block p-2 mb-2">
-                                                    <i class="fas fa-exclamation-triangle me-1"></i>您已取消报名
-                                                </div>
-                                                <br>
-                                                <button id="register-btn" class="btn btn-primary">
-                                                    <i class="fas fa-user-plus me-1"></i>重新报名
-                                                </button>
-                                            </div>
-                                            <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary">
-                                                <i class="fas fa-arrow-left me-1"></i>返回活动列表
-                                            </a>
-                                        `;
-                                        
-                                        // 更新报名人数
-                                        const countElement = document.getElementById('registration-count');
-                                        if (countElement) {
-                                            countElement.textContent = (parseInt(countElement.textContent) - 1).toString();
-                                        }
-                                        
-                                        // 添加报名按钮的事件监听
-                                        const newRegisterBtn = document.getElementById('register-btn');
-                                        if (newRegisterBtn) {
-                                            newRegisterBtn.addEventListener('click', function() {
-                                                // 显示加载状态
-                                                const originalText = newRegisterBtn.innerHTML;
-                                                newRegisterBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
-                                                newRegisterBtn.disabled = true;
-
-                                                // 发送AJAX请求
-                                                fetch('{{ url_for("student.register_activity", id=activity.id) }}', {
-                                                    method: 'POST',
-                                                    headers: {
-                                                        'Content-Type': 'application/json',
-                                                        'X-CSRFToken': csrfToken
-                                                    },
-                                                    credentials: 'same-origin'
-                                                })
-                                                .then(response => response.json())
-                                                .then(data => {
-                                                    if (data.success) {
-                                                        // 显示成功消息
-                                                        if (window.showToast) {
-                                                            window.showToast(data.message || '重新报名成功！', 'success');
-                                                        } else {
-                                                            alert(data.message || '重新报名成功！');
-                                                        }
-                                                        
-                                                        // 重新加载页面以显示正确的状态
-                                                        setTimeout(() => {
-                                                            location.reload();
-                                                        }, 1000);
-                                                    } else {
-                                                        // 恢复按钮状态
-                                                        newRegisterBtn.innerHTML = originalText;
-                                                        newRegisterBtn.disabled = false;
-                                                        if (window.showToast) {
-                                                            window.showToast(data.message || '重新报名失败，请稍后再试', 'danger');
-                                                        } else {
-                                                            alert(data.message || '重新报名失败，请稍后再试');
-                                                        }
-                                                    }
-                                                })
-                                                .catch(error => {
-                                                    console.error('Error:', error);
-                                                    newRegisterBtn.innerHTML = originalText;
-                                                    newRegisterBtn.disabled = false;
-                                                    if (window.showToast) {
-                                                        window.showToast('重新报名请求失败，请检查网络连接', 'danger');
-                                                    } else {
-                                                        alert('重新报名请求失败，请检查网络连接');
-                                                    }
-                                                });
-                                            });
-                                        }
-                                        
-                                        // 显示成功消息
-                                        if (window.showToast) {
-                                            window.showToast(data.message, 'success');
-                                        } else {
-                                            alert(data.message);
-                                        }
-                                    } else {
-                                        // 恢复按钮状态
-                                        newCancelBtn.innerHTML = originalText;
-                                        newCancelBtn.disabled = false;
-                                        if (window.showToast) {
-                                            window.showToast(data.message || '取消报名失败，请稍后再试', 'danger');
-                                        } else {
-                                            alert(data.message || '取消报名失败，请稍后再试');
-                                        }
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Error:', error);
-                                    newCancelBtn.innerHTML = originalText;
-                                    newCancelBtn.disabled = false;
-                                    if (window.showToast) {
-                                        window.showToast('取消报名请求失败，请检查网络连接', 'danger');
-                                    } else {
-                                        alert('取消报名请求失败，请检查网络连接');
-                                    }
-                                });
-                            }
-                        });
-                    }
-                    
-                    // 显示成功消息
-                    if (window.showToast) {
-                        window.showToast(data.message, 'success');
-                    } else {
-                        alert(data.message);
-                    }
-                } else {
-                    // 恢复按钮状态
-                    registerBtn.innerHTML = originalText;
-                    registerBtn.disabled = false;
+                    button.innerHTML = originalText;
+                    button.disabled = false;
                     if (window.showToast) {
                         window.showToast(data.message || '报名失败，请稍后再试', 'danger');
                     } else {
                         alert(data.message || '报名失败，请稍后再试');
                     }
+                    return;
+                }
+
+                actionButtons.innerHTML = `
+                    <div class="mb-3 mb-md-0 d-flex flex-wrap align-items-center gap-2 student-action-main">
+                        <span class="badge bg-success rounded-pill px-3 py-2 me-2">
+                            <i class="fas fa-check-circle me-1"></i>已报名
+                        </span>
+                        <button id="cancel-btn" type="button" class="btn btn-outline-danger" data-no-loading="true" data-no-global-loading="true">
+                            <i class="fas fa-times-circle me-1"></i>取消报名
+                        </button>
+                    </div>
+                    <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary mt-2 mt-md-0">
+                        <i class="fas fa-arrow-left me-1"></i>返回活动列表
+                    </a>
+                `;
+                updateRegistrationCount(1);
+                bindCancelButton(document.getElementById('cancel-btn'));
+
+                if (window.showToast) {
+                    window.showToast(data.message || '重新报名成功！', 'success');
+                } else {
+                    alert(data.message || '重新报名成功！');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                registerBtn.innerHTML = originalText;
-                registerBtn.disabled = false;
+                button.innerHTML = originalText;
+                button.disabled = false;
                 if (window.showToast) {
                     window.showToast('报名请求失败，请检查网络连接', 'danger');
                 } else {
@@ -812,136 +804,77 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 为取消按钮添加事件监听器
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', function() {
-            if (confirm('确定要取消报名吗？')) {
-                // 显示加载状态
-                const originalText = cancelBtn.innerHTML;
-                cancelBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
-                cancelBtn.disabled = true;
-
-                // 发送AJAX请求
-                fetch('{{ url_for("student.cancel_registration", id=activity.id) }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrfToken
-                    },
-                    credentials: 'same-origin'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // 更新UI显示可报名状态
-                        const actionButtons = document.getElementById('action-buttons');
-                        actionButtons.innerHTML = `
-                            <div class="mb-3 mb-md-0">
-                                <div class="alert alert-warning d-inline-block p-2 mb-2">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>您已取消报名
-                                </div>
-                                <br>
-                                <button id="register-btn" class="btn btn-primary">
-                                    <i class="fas fa-user-plus me-1"></i>重新报名
-                                </button>
-                            </div>
-                            <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary">
-                                <i class="fas fa-arrow-left me-1"></i>返回活动列表
-                            </a>
-                        `;
-                        
-                        // 更新报名人数
-                        const countElement = document.getElementById('registration-count');
-                        if (countElement) {
-                            countElement.textContent = (parseInt(countElement.textContent) - 1).toString();
-                        }
-                        
-                        // 添加报名按钮的事件监听
-                        const newRegisterBtn = document.getElementById('register-btn');
-                        if (newRegisterBtn) {
-                            newRegisterBtn.addEventListener('click', function() {
-                                // 显示加载状态
-                                const originalText = newRegisterBtn.innerHTML;
-                                newRegisterBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
-                                newRegisterBtn.disabled = true;
-
-                                // 发送AJAX请求
-                                fetch('{{ url_for("student.register_activity", id=activity.id) }}', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRFToken': csrfToken
-                                    },
-                                    credentials: 'same-origin'
-                                })
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.success) {
-                                        // 显示成功消息
-                                        if (window.showToast) {
-                                            window.showToast(data.message || '重新报名成功！', 'success');
-                                        } else {
-                                            alert(data.message || '重新报名成功！');
-                                        }
-                                        
-                                        // 重新加载页面以显示正确的状态
-                                        setTimeout(() => {
-                                            location.reload();
-                                        }, 1000);
-                                    } else {
-                                        // 恢复按钮状态
-                                        newRegisterBtn.innerHTML = originalText;
-                                        newRegisterBtn.disabled = false;
-                                        if (window.showToast) {
-                                            window.showToast(data.message || '重新报名失败，请稍后再试', 'danger');
-                                        } else {
-                                            alert(data.message || '重新报名失败，请稍后再试');
-                                        }
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Error:', error);
-                                    newRegisterBtn.innerHTML = originalText;
-                                    newRegisterBtn.disabled = false;
-                                    if (window.showToast) {
-                                        window.showToast('重新报名请求失败，请检查网络连接', 'danger');
-                                    } else {
-                                        alert('重新报名请求失败，请检查网络连接');
-                                    }
-                                });
-                            });
-                        }
-                        
-                        // 显示成功消息
-                        if (window.showToast) {
-                            window.showToast(data.message, 'success');
-                        } else {
-                            alert(data.message);
-                        }
-                    } else {
-                        // 恢复按钮状态
-                        cancelBtn.innerHTML = originalText;
-                        cancelBtn.disabled = false;
-                        if (window.showToast) {
-                            window.showToast(data.message || '取消报名失败，请稍后再试', 'danger');
-                        } else {
-                            alert(data.message || '取消报名失败，请稍后再试');
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    cancelBtn.innerHTML = originalText;
-                    cancelBtn.disabled = false;
-                    if (window.showToast) {
-                        window.showToast('取消报名请求失败，请检查网络连接', 'danger');
-                    } else {
-                        alert('取消报名请求失败，请检查网络连接');
-                    }
-                });
+    function bindCancelButton(button) {
+        if (!button) {
+            return;
+        }
+        button.addEventListener('click', function() {
+            if (!confirm('确定要取消报名吗？')) {
+                return;
             }
+
+            const originalText = button.innerHTML;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
+            button.disabled = true;
+
+            fetch('{{ url_for("student.cancel_registration", id=activity.id) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                    if (window.showToast) {
+                        window.showToast(data.message || '取消报名失败，请稍后再试', 'danger');
+                    } else {
+                        alert(data.message || '取消报名失败，请稍后再试');
+                    }
+                    return;
+                }
+
+                actionButtons.innerHTML = `
+                    <div class="mb-3 mb-md-0 d-flex flex-wrap align-items-center gap-2 student-action-main">
+                        <div class="alert alert-warning d-inline-block p-2 mb-0">
+                            <i class="fas fa-exclamation-triangle me-1"></i>您已取消报名
+                        </div>
+                        <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
+                            <i class="fas fa-user-plus me-1"></i>重新报名
+                        </button>
+                    </div>
+                    <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary mt-2 mt-md-0">
+                        <i class="fas fa-arrow-left me-1"></i>返回活动列表
+                    </a>
+                `;
+                updateRegistrationCount(-1);
+                bindRegisterButton(document.getElementById('register-btn'));
+
+                if (window.showToast) {
+                    window.showToast(data.message || '取消报名成功', 'success');
+                } else {
+                    alert(data.message || '取消报名成功');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                button.innerHTML = originalText;
+                button.disabled = false;
+                if (window.showToast) {
+                    window.showToast('取消报名请求失败，请检查网络连接', 'danger');
+                } else {
+                    alert('取消报名请求失败，请检查网络连接');
+                }
+            });
         });
     }
+
+    bindRegisterButton(document.getElementById('register-btn'));
+    bindCancelButton(document.getElementById('cancel-btn'));
 });
 </script>
 {% endblock %}

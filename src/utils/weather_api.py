@@ -4,11 +4,165 @@
 import requests
 import logging
 from datetime import datetime, timedelta
+import json
+import time
 import pytz
 from src.config import Config
 from src.utils.time_helpers import get_localized_now
 
 logger = logging.getLogger(__name__)
+
+WEATHER_HTTP_TIMEOUT = (1.5, 2.5)
+WEATHER_FALLBACK_BUDGET_SECONDS = 2.2
+WEATHER_CACHE_TTL_SECONDS = {
+    'base': 300,
+    'all': 900
+}
+_WEATHER_CACHE = {}
+_WEATHER_MISS_CACHE = {}
+WEATHER_MISS_TTL_SECONDS = {
+    'base': 300,
+    'all': 1800
+}
+
+
+def _resolve_weather_date(activity_date=None):
+    if activity_date is None:
+        return _get_beijing_now().date()
+    try:
+        if isinstance(activity_date, datetime):
+            beijing_tz = pytz.timezone('Asia/Shanghai')
+            if activity_date.tzinfo is None:
+                return pytz.utc.localize(activity_date).astimezone(beijing_tz).date()
+            return activity_date.astimezone(beijing_tz).date()
+        if hasattr(activity_date, 'date'):
+            return activity_date.date()
+    except Exception:
+        pass
+    return _get_beijing_now().date()
+
+
+def _weather_cache_key(city_adcode, extensions, activity_date=None):
+    date_key = _resolve_weather_date(activity_date).isoformat()
+    return f"{city_adcode}:{extensions}:{date_key}"
+
+
+def _weather_cache_get(key):
+    item = _WEATHER_CACHE.get(key)
+    if not item:
+        return None
+    if item['expires_at'] <= time.time():
+        _WEATHER_CACHE.pop(key, None)
+        return None
+    return item['data']
+
+
+def _weather_cache_set(key, data, extensions):
+    if not data:
+        return
+    ttl = WEATHER_CACHE_TTL_SECONDS.get(extensions, 300)
+    _WEATHER_CACHE[key] = {
+        'data': data,
+        'expires_at': time.time() + ttl
+    }
+
+
+def _weather_miss_hit(key):
+    expires_at = _WEATHER_MISS_CACHE.get(key)
+    if not expires_at:
+        return False
+    if expires_at <= time.time():
+        _WEATHER_MISS_CACHE.pop(key, None)
+        return False
+    return True
+
+
+def _weather_miss_set(key, extensions):
+    ttl = WEATHER_MISS_TTL_SECONDS.get(extensions, 300)
+    _WEATHER_MISS_CACHE[key] = time.time() + ttl
+
+
+def _get_db_weather_cache(city_adcode, extensions, activity_date=None):
+    try:
+        from src import db
+        from src.models import WeatherDailyCache
+
+        weather_date = _resolve_weather_date(activity_date)
+        record = db.session.execute(
+            db.select(WeatherDailyCache).filter_by(
+                city_adcode=city_adcode,
+                weather_date=weather_date,
+                extensions=extensions
+            )
+        ).scalar_one_or_none()
+        if not record or not record.payload:
+            return None
+
+        today = _get_beijing_now().date()
+        updated_at = getattr(record, 'updated_at', None)
+        if not updated_at:
+            return None
+        updated_date = updated_at.date() if hasattr(updated_at, 'date') else None
+        if updated_date != today:
+            return None
+
+        return json.loads(record.payload)
+    except Exception as e:
+        logger.debug(f"读取数据库天气缓存失败: {e}")
+        try:
+            from src import db
+            db.session.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _save_db_weather_cache(city_adcode, extensions, activity_date, weather_data):
+    if not weather_data:
+        return
+
+    try:
+        from src import db
+        from src.models import WeatherDailyCache
+
+        weather_date = _resolve_weather_date(activity_date)
+        payload = json.dumps(weather_data, ensure_ascii=False)
+
+        record = db.session.execute(
+            db.select(WeatherDailyCache).filter_by(
+                city_adcode=city_adcode,
+                weather_date=weather_date,
+                extensions=extensions
+            )
+        ).scalar_one_or_none()
+
+        source = weather_data.get('api_source', 'unknown') if isinstance(weather_data, dict) else 'unknown'
+        now = _get_beijing_now()
+
+        if record:
+            record.payload = payload
+            record.source = source
+            record.updated_at = now
+        else:
+            record = WeatherDailyCache(
+                city_adcode=city_adcode,
+                weather_date=weather_date,
+                extensions=extensions,
+                payload=payload,
+                source=source,
+                created_at=now,
+                updated_at=now
+            )
+            db.session.add(record)
+
+        db.session.commit()
+    except Exception as e:
+        logger.debug(f"保存数据库天气缓存失败: {e}")
+        try:
+            from src import db
+            db.session.rollback()
+        except Exception:
+            pass
 
 def _get_beijing_now():
     """获取北京时间（兼容 get_localized_now 返回 naive UTC 的情况）"""
@@ -120,7 +274,7 @@ def get_weather_data(city_adcode=CHONGQING_ADCODE, extensions='base', allow_fall
         }
         
         logger.info(f"正在获取城市编码{city_adcode}的天气数据...")
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, params=params, timeout=WEATHER_HTTP_TIMEOUT)
         response.raise_for_status()
         
         data = response.json()
@@ -247,7 +401,7 @@ def get_openweather_data(city='Chongqing', date=None):
             }
         
         logger.info(f"使用OpenWeather API获取{city}的天气数据...")
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, params=params, timeout=WEATHER_HTTP_TIMEOUT)
         response.raise_for_status()
         
         data = response.json()
@@ -350,16 +504,40 @@ def get_weather_data_with_fallback(city_adcode=CHONGQING_ADCODE, extensions='bas
     Returns:
         dict: 天气数据字典
     """
+    cache_key = _weather_cache_key(city_adcode, extensions, activity_date)
+
+    if _weather_miss_hit(cache_key):
+        return None
+
+    cached = _weather_cache_get(cache_key)
+    if cached:
+        return cached
+
+    db_cached = _get_db_weather_cache(city_adcode, extensions, activity_date)
+    if db_cached:
+        _weather_cache_set(cache_key, db_cached, extensions)
+        return db_cached
+
+    started_at = time.time()
+
     # 首先尝试高德API
     logger.info("尝试使用高德API获取天气数据...")
     weather_data = get_weather_data(city_adcode, extensions, allow_fallback=False)
     
     if weather_data:
         weather_data['api_source'] = 'amap'
+        _weather_cache_set(cache_key, weather_data, extensions)
+        _save_db_weather_cache(city_adcode, extensions, activity_date, weather_data)
         logger.info("高德API获取天气数据成功")
         return weather_data
     
     # 高德API失败，尝试OpenWeather API
+    elapsed = time.time() - started_at
+    if elapsed >= WEATHER_FALLBACK_BUDGET_SECONDS:
+        logger.warning(f"天气主接口已耗时{elapsed:.2f}s，跳过备用接口以避免阻塞页面渲染")
+        _weather_miss_set(cache_key, extensions)
+        return None
+
     logger.warning("高德API失败，尝试使用OpenWeather API作为备用...")
     
     # 将高德的extensions参数转换为OpenWeather的日期参数
@@ -371,9 +549,12 @@ def get_weather_data_with_fallback(city_adcode=CHONGQING_ADCODE, extensions='bas
         fallback_data = get_openweather_data('Chongqing', None)
     
     if fallback_data:
+        _weather_cache_set(cache_key, fallback_data, extensions)
+        _save_db_weather_cache(city_adcode, extensions, activity_date, fallback_data)
         logger.info("备用OpenWeather API获取天气数据成功")
         return fallback_data
     else:
+        _weather_miss_set(cache_key, extensions)
         logger.error("所有天气API都失败，无法获取天气数据")
         return None
 

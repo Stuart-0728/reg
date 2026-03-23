@@ -11,13 +11,29 @@ import string
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from werkzeug.exceptions import HTTPException
-from flask_wtf.csrf import validate_csrf
+from flask_wtf.csrf import validate_csrf, generate_csrf
 from src.models import db, Activity, Tag, StudentInfo, SystemLog, Registration, AIChatHistory, AIChatSession, activity_tags, PointsHistory, User, Role, Message, Society
 from src.utils.time_helpers import get_beijing_time, ensure_timezone_aware
 from src import csrf, limiter # Import csrf
 
 utils_bp = Blueprint('utils', __name__)
 logger = logging.getLogger(__name__)
+
+
+@utils_bp.after_app_request
+def _prevent_ai_api_cache(response):
+    """防止AI聊天与CSRF刷新接口被浏览器/CDN错误缓存。"""
+    try:
+        path = request.path or ''
+        if path.startswith('/utils/ai_chat') or path.startswith('/utils/csrf_token'):
+            response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            response.headers['Surrogate-Control'] = 'no-store'
+            response.headers['Vary'] = 'Cookie, Authorization'
+    except Exception:
+        pass
+    return response
 
 
 def _debug_endpoints_enabled():
@@ -54,6 +70,26 @@ def _is_same_origin_request():
         return origin.rstrip('/') == host
     except Exception:
         return False
+
+
+def _is_ajax_request():
+    accept = (request.headers.get('Accept') or '').lower()
+    xrw = (request.headers.get('X-Requested-With') or '').strip()
+    return xrw == 'XMLHttpRequest' or 'application/json' in accept
+
+
+def _deny_forbidden(message, redirect_endpoint):
+    if _is_ajax_request():
+        return jsonify({'success': False, 'message': message}), 403
+    flash(message, 'danger')
+    return redirect(url_for(redirect_endpoint))
+
+
+def _deny_unauthorized(message='请先登录'):
+    if _is_ajax_request():
+        return jsonify({'success': False, 'message': message}), 401
+    flash(message, 'danger')
+    return redirect(url_for('auth.login'))
 
 
 def is_super_admin(user):
@@ -102,14 +138,12 @@ def admin_required(f):
             # 验证用户是否为管理员
             if not current_user.is_authenticated:
                 logger.warning(f"未认证的访问尝试: {request.path}")
-                flash('请先登录', 'danger')
-                return redirect(url_for('auth.login'))
+                return _deny_unauthorized('请先登录')
             
             # 检查用户角色
             if not hasattr(current_user, 'role') or not current_user.role:
                 logger.error(f"用户没有角色: 用户名={current_user.username}, 用户ID={current_user.id}")
-                flash('您没有被分配角色', 'danger')
-                return redirect(url_for('main.index'))
+                return _deny_forbidden('您没有被分配角色', 'main.index')
 
             # 详细记录角色信息用于调试
             role_name = getattr(current_user.role, 'name', None)
@@ -122,8 +156,7 @@ def admin_required(f):
             # 检查角色名称
             if db_role_name != 'admin':
                 logger.warning(f"非管理员访问尝试: 用户={current_user.username}, 角色={role_name}, 路径={request.path}")
-                flash('您没有管理员权限', 'danger')
-                return redirect(url_for('main.index'))
+                return _deny_forbidden('您没有管理员权限', 'main.index')
 
             if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'} and not _is_same_origin_request():
                 logger.warning(f"管理员写操作同源校验失败: 用户={current_user.username}, 路径={request.path}")
@@ -138,6 +171,8 @@ def admin_required(f):
 
             # 学生管理员必须绑定社团后才能进入管理功能
             if not g.scope_is_super_admin and not g.scope_society_id and _society_selection_required(request.endpoint):
+                if _is_ajax_request():
+                    return jsonify({'success': False, 'message': '请先选择并绑定所属社团后再进入管理功能'}), 403
                 flash('请先选择并绑定所属社团后再进入管理功能', 'warning')
                 return redirect(url_for('admin.select_admin_society'))
             
@@ -146,6 +181,8 @@ def admin_required(f):
             
         except Exception as e:
             logger.error(f"admin_required装饰器错误: {str(e)}")
+            if _is_ajax_request():
+                return jsonify({'success': False, 'message': '权限验证时出错'}), 500
             flash('权限验证时出错', 'danger')
             return redirect(url_for('main.index'))
         
@@ -530,13 +567,21 @@ def ai_chat():
     # 添加用户当前消息
     messages.append({"role": "user", "content": user_message})
 
+    text_model = current_app.config.get(
+        'AI_TEXT_MODEL',
+        current_app.config.get('VOLCANO_MODEL', 'ep-20260320185026-9cc4w')
+    )
+
     # 构建API请求
     payload = {
-        "model": "ep-20260320185026-9cc4w",  # 用户指定的推理接入点
+        "model": text_model,
         "messages": messages,
         "temperature": 0.7,
         "stream": True
     }
+
+    connect_timeout = float(current_app.config.get('AI_CHAT_CONNECT_TIMEOUT', 10))
+    read_timeout = float(current_app.config.get('AI_CHAT_READ_TIMEOUT', 180))
 
     # 保存当前用户ID和会话ID，以便在流式响应中使用
     current_user_id = current_user.id if current_user.is_authenticated else None
@@ -549,8 +594,16 @@ def ai_chat():
     def generate():
         nonlocal current_user_id, current_message, current_session_id
         try:
+            # 先发送状态事件，尽快建立前端可见的流式连接，降低长思考时前置代理断连概率
+            yield f"event: status\ndata: {json.dumps({'stage': 'connecting'})}\n\n"
             logger.info(f"发送 AI 请求: URL={url}, Headers={headers}, Payload={payload}")
-            response = requests.post(url, headers=headers, json=payload, timeout=30, stream=True)
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=(connect_timeout, read_timeout),
+                stream=True
+            )
             logger.info(f"AI API 响应状态码: {response.status_code}")
             response.raise_for_status()
             
@@ -617,12 +670,20 @@ def ai_chat():
                     
         except requests.exceptions.RequestException as e:
             logger.error(f"AI API 调用失败: {str(e)}")
-            yield f"data: {json.dumps({'error': 'AI 服务调用失败'})}\n\n"
+            error_message = 'AI 服务调用失败'
+            if isinstance(e, requests.exceptions.ReadTimeout):
+                error_message = 'AI 响应超时，请稍后重试'
+            elif isinstance(e, requests.exceptions.ConnectTimeout):
+                error_message = 'AI 服务连接超时，请稍后重试'
+            yield f"data: {json.dumps({'error': error_message})}\n\n"
         except Exception as e:
             logger.error(f"处理 AI 响应时出错: {str(e)}")
             yield f"data: {json.dumps({'error': '处理 AI 响应时出错'})}\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    response = Response(generate(), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache, no-transform'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
 
 
 @utils_bp.route('/api/ai/chat', methods=['POST'])
@@ -666,8 +727,13 @@ def ai_chat_legacy_post():
 
         messages.append({'role': 'user', 'content': prompt})
 
+        text_model = current_app.config.get(
+            'AI_TEXT_MODEL',
+            current_app.config.get('VOLCANO_MODEL', 'ep-20260320185026-9cc4w')
+        )
+
         payload = {
-            'model': 'ep-20260320185026-9cc4w',
+            'model': text_model,
             'messages': messages,
             'temperature': 0.6,
         }
@@ -969,6 +1035,19 @@ def check_login_status():
         'role': role_name,
         'redirect_url': redirect_url
     })
+    response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['Surrogate-Control'] = 'no-store'
+    response.headers['Vary'] = 'Cookie, Authorization'
+    return response
+
+
+@utils_bp.route('/csrf_token', methods=['GET'])
+@login_required
+def get_csrf_token():
+    """为前端AJAX提供可刷新的CSRF令牌。"""
+    response = jsonify({'success': True, 'csrf_token': generate_csrf()})
     response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'

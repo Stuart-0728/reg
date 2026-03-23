@@ -29,13 +29,14 @@ from flask_login import current_user, login_required
 from sqlalchemy import func, desc, or_, and_, extract, text, case
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
-from src import cache
+from src import cache, limiter
 from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, student_tags, activity_tags, student_societies, Announcement, Society
 from src.routes.utils import admin_required, log_action, is_super_admin
-from src.utils.time_helpers import normalize_datetime_for_db, display_datetime, ensure_timezone_aware, get_localized_now, safe_less_than, safe_greater_than, get_activity_status
+from src.utils.time_helpers import normalize_datetime_for_db, display_datetime, ensure_timezone_aware, get_localized_now, get_beijing_time, safe_less_than, safe_greater_than, get_activity_status
 from src.forms import ActivityForm  # 添加ActivityForm导入
 from flask_wtf.csrf import generate_csrf, validate_csrf
 from src.utils import get_compatible_paginate
+from src.utils.input_safety import sanitize_plain_text, sanitize_rich_html
 
 # 创建蓝图
 admin_bp = Blueprint('admin', __name__)
@@ -108,6 +109,24 @@ def _scope_display_label():
         return '全站数据'
     society = db.session.get(Society, scope_id)
     return f"{society.name}社团" if society else '当前社团'
+
+
+def _flash_form_errors(form, fallback_message='表单填写有误，请检查后重试'):
+    """将WTForms错误汇总为可读提示，避免用户不知道失败原因。"""
+    try:
+        error_messages = []
+        for field_name, messages in (form.errors or {}).items():
+            field = getattr(form, field_name, None)
+            label = getattr(getattr(field, 'label', None), 'text', None) or field_name
+            if messages:
+                error_messages.append(f"{label}：{messages[0]}")
+
+        if error_messages:
+            flash('保存失败，请修正：' + '；'.join(error_messages), 'warning')
+        else:
+            flash(fallback_message, 'warning')
+    except Exception:
+        flash(fallback_message, 'warning')
 
 
 def _is_ajax_request():
@@ -491,14 +510,19 @@ def _format_review_time_for_display(dt):
         localized = dt.astimezone(beijing_tz)
     return localized.strftime('%Y-%m-%d %H:%M')
 
-def _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.6, max_tokens=1200):
+def _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.6, max_tokens=1200, timeout_seconds=45):
     api_key = os.environ.get("ARK_API_KEY") or current_app.config.get('VOLCANO_API_KEY')
     if not api_key:
         raise ValueError('未配置ARK_API_KEY，无法使用AI生成能力')
 
     url = current_app.config.get('VOLCANO_API_URL', "https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+    text_model = current_app.config.get(
+        'AI_TEXT_MODEL',
+        current_app.config.get('VOLCANO_MODEL', 'ep-20260320185026-9cc4w')
+    )
+
     payload = {
-        "model": current_app.config.get('VOLCANO_MODEL', 'doubao-1-5-pro-32k-250115'),
+        "model": text_model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
@@ -510,7 +534,7 @@ def _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.6, max_t
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
-    response = requests.post(url, headers=headers, json=payload, timeout=45)
+    response = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
     response.raise_for_status()
     data = response.json()
     return data['choices'][0]['message']['content'].strip()
@@ -536,6 +560,67 @@ def _extract_json_block(raw_text):
         except Exception:
             return {}
     return {}
+
+
+def _normalize_ai_datetime_value(raw_value):
+    """将AI时间字段统一规范为北京时间字符串: YYYY-MM-DD HH:MM。"""
+    text = str(raw_value or '').strip()
+    if not text:
+        return ''
+
+    beijing_tz = pytz.timezone('Asia/Shanghai')
+
+    def _fmt(dt_obj):
+        if dt_obj.tzinfo is None:
+            dt_obj = beijing_tz.localize(dt_obj)
+        else:
+            dt_obj = dt_obj.astimezone(beijing_tz)
+        return dt_obj.strftime('%Y-%m-%d %H:%M')
+
+    normalized = text.replace('/', '-')
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+    # 优先处理ISO-8601及带时区格式，确保Z/±HH:MM按北京时间展示
+    iso_candidate = normalized.replace('T', ' ')
+    if iso_candidate.endswith('Z'):
+        iso_candidate = iso_candidate[:-1] + '+00:00'
+    if re.match(r'.*[+-]\d{4}$', iso_candidate):
+        iso_candidate = f"{iso_candidate[:-5]}{iso_candidate[-5:-2]}:{iso_candidate[-2:]}"
+
+    for candidate in (iso_candidate, normalized):
+        try:
+            parsed = datetime.fromisoformat(candidate)
+            return _fmt(parsed)
+        except Exception:
+            pass
+
+    # 兼容常见中文文本中抽取出的时间格式
+    format_candidates = [
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
+        '%Y-%m-%d %H:%M:%S.%f',
+        '%Y-%m-%d'
+    ]
+    for fmt in format_candidates:
+        try:
+            parsed = datetime.strptime(normalized, fmt)
+            if fmt == '%Y-%m-%d':
+                parsed = parsed.replace(hour=0, minute=0, second=0, microsecond=0)
+            return _fmt(parsed)
+        except Exception:
+            continue
+
+    # 最后兜底：从混合文本中提取日期与时间
+    match = re.search(r'(\d{4}-\d{1,2}-\d{1,2})\s+(\d{1,2}:\d{2})(?::\d{2})?', normalized)
+    if match:
+        dt_text = f"{match.group(1)} {match.group(2)}"
+        try:
+            parsed = datetime.strptime(dt_text, '%Y-%m-%d %H:%M')
+            return _fmt(parsed)
+        except Exception:
+            return ''
+
+    return ''
 
 def _normalize_activity_ai_payload(payload):
     if not isinstance(payload, dict):
@@ -567,6 +652,16 @@ def _normalize_activity_ai_payload(payload):
 
     if normalized['status'] not in ('active', 'completed', 'cancelled'):
         normalized['status'] = 'active'
+
+    datetime_fields = (
+        'start_time',
+        'end_time',
+        'registration_start_time',
+        'registration_deadline'
+    )
+    for field_name in datetime_fields:
+        normalized[field_name] = _normalize_ai_datetime_value(normalized.get(field_name, ''))
+
     return normalized
 
 def _attach_ai_poster_from_url(activity, image_url):
@@ -744,6 +839,369 @@ def _build_share_poster_image(activity, detail_url):
     return final_image
 
 AI_POSTER_JOB_TTL_SECONDS = 30 * 60
+AI_PARSE_JOB_TTL_SECONDS = 15 * 60
+AI_TEXT_JOB_TTL_SECONDS = 20 * 60
+
+
+def _text_job_dir(app):
+    base_dir = app.config.get('INSTANCE_PATH') or app.instance_path or tempfile.gettempdir()
+    job_dir = os.path.join(base_dir, 'ai_text_jobs')
+    os.makedirs(job_dir, exist_ok=True)
+    return job_dir
+
+
+def _text_job_path(app, job_id):
+    safe_job_id = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id or ''))
+    if not safe_job_id:
+        raise ValueError('无效任务ID')
+    return os.path.join(_text_job_dir(app), f'{safe_job_id}.json')
+
+
+def _write_text_job(app, job_id, payload):
+    file_path = _text_job_path(app, job_id)
+    temp_path = f'{file_path}.tmp'
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False)
+    os.replace(temp_path, file_path)
+
+
+def _read_text_job(app, job_id):
+    file_path = _text_job_path(app, job_id)
+    if not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _cleanup_expired_text_jobs(app):
+    job_dir = _text_job_dir(app)
+    now_ts = datetime.utcnow().timestamp()
+    for filename in os.listdir(job_dir):
+        if not filename.endswith('.json'):
+            continue
+        path = os.path.join(job_dir, filename)
+        try:
+            if now_ts - os.path.getmtime(path) > AI_TEXT_JOB_TTL_SECONDS:
+                os.remove(path)
+        except Exception:
+            continue
+
+
+def _run_async_text_job(app, job_id, job_kind, payload):
+    with app.app_context():
+        try:
+            current_payload = _read_text_job(app, job_id) or {}
+            current_payload.update({
+                'job_id': job_id,
+                'status': 'running',
+                'success': True,
+                'done': False,
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            })
+            _write_text_job(app, job_id, current_payload)
+
+            result_data = {}
+
+            if job_kind == 'activity_description':
+                title = (payload.get('title') or '').strip()
+                system_prompt = "你是高校活动运营助手，只输出简洁、可直接发布的活动文案。"
+                user_prompt = (
+                    f"活动标题：{title}\n"
+                    "请输出一段活动描述，包含：活动亮点、参与对象、流程要点、收获价值。"
+                    "要求：中文、150-280字、自然口语化、不要使用Markdown标题。"
+                )
+                content = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.7, max_tokens=800)
+                result_data = {'description': content}
+
+            elif job_kind == 'review_cluster_summary':
+                activity_id = int(payload.get('activity_id'))
+                activity = db.get_or_404(Activity, activity_id)
+                reviews = ActivityReview.query.filter_by(activity_id=activity_id).order_by(ActivityReview.created_at.desc()).all()
+
+                if not reviews:
+                    result_data = {'summary': '该活动暂无评价数据，暂无法生成聚类总结。'}
+                else:
+                    review_lines = []
+                    for idx, review in enumerate(reviews[:120], start=1):
+                        review_text = (review.review or '').replace('\n', ' ').strip()
+                        if len(review_text) > 180:
+                            review_text = review_text[:180] + '…'
+                        review_lines.append(
+                            f"{idx}. 总评{review.rating}/5，内容{review.content_quality or '-'}，组织{review.organization or '-'}，设施{review.facility or '-'}，反馈：{review_text}"
+                        )
+
+                    system_prompt = "你是高校活动评价分析助手，擅长把大量反馈聚类并输出行动建议。"
+                    user_prompt = (
+                        f"活动标题：{activity.title}\n"
+                        f"评价总数：{len(reviews)}\n"
+                        f"评价样本：\n" + "\n".join(review_lines) + "\n\n"
+                        "请输出：\n"
+                        "1) 评价主题聚类（3-6类，每类含‘主题名、占比估计、典型反馈、优先级’）\n"
+                        "2) Top3 优点\n"
+                        "3) Top3 问题\n"
+                        "4) 可执行改进清单（按高/中/低优先级）\n"
+                        "要求：中文，结构清晰，直接可用于运营复盘。"
+                    )
+                    summary = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.3, max_tokens=1600)
+                    result_data = {'summary': summary}
+
+            elif job_kind == 'retrospective_report':
+                activity_id = int(payload.get('activity_id'))
+                activity = db.get_or_404(Activity, activity_id)
+                reviews = ActivityReview.query.filter_by(activity_id=activity_id).all()
+                registrations = Registration.query.filter_by(activity_id=activity_id).all()
+
+                total_registered = len(registrations)
+                attended_count = sum(1 for r in registrations if (r.status == 'attended' or r.check_in_time is not None))
+                cancelled_count = sum(1 for r in registrations if r.status == 'cancelled')
+                no_show_count = max(total_registered - attended_count - cancelled_count, 0)
+                attendance_rate = (attended_count / total_registered * 100.0) if total_registered else 0.0
+
+                avg_rating = (sum((r.rating or 0) for r in reviews) / len(reviews)) if reviews else 0.0
+                avg_content = (sum((r.content_quality or 0) for r in reviews) / len(reviews)) if reviews else 0.0
+                avg_organization = (sum((r.organization or 0) for r in reviews) / len(reviews)) if reviews else 0.0
+                avg_facility = (sum((r.facility or 0) for r in reviews) / len(reviews)) if reviews else 0.0
+
+                sample_reviews = []
+                for idx, review in enumerate(reviews[:40], start=1):
+                    text_sample = (review.review or '').replace('\n', ' ').strip()
+                    if len(text_sample) > 160:
+                        text_sample = text_sample[:160] + '…'
+                    sample_reviews.append(f"{idx}. {text_sample}")
+
+                system_prompt = "你是高校活动运营复盘顾问，擅长产出可执行复盘报告。"
+                user_prompt = (
+                    f"活动：{activity.title}\n"
+                    f"状态：{activity.status}\n"
+                    f"时间：{display_datetime(activity.start_time, None, '%Y-%m-%d %H:%M')} - {display_datetime(activity.end_time, None, '%Y-%m-%d %H:%M')}\n"
+                    f"地点：{activity.location or '未设置'}\n"
+                    f"积分：{activity.points or 0}\n"
+                    f"报名人数：{total_registered}\n"
+                    f"到场人数：{attended_count}\n"
+                    f"取消人数：{cancelled_count}\n"
+                    f"疑似未到场人数：{no_show_count}\n"
+                    f"到场率：{attendance_rate:.1f}%\n"
+                    f"评价数：{len(reviews)}\n"
+                    f"平均总评分：{avg_rating:.2f}\n"
+                    f"内容均分：{avg_content:.2f}\n"
+                    f"组织均分：{avg_organization:.2f}\n"
+                    f"设施均分：{avg_facility:.2f}\n"
+                    f"评价样本：\n{chr(10).join(sample_reviews) if sample_reviews else '暂无评价样本'}\n\n"
+                    "请生成复盘报告，包含：\n"
+                    "1) 活动目标达成评估\n"
+                    "2) 数据结论（报名/到场/评分）\n"
+                    "3) 关键问题与根因\n"
+                    "4) 下一次活动优化方案（会前/会中/会后）\n"
+                    "5) 下次可量化KPI建议（3-5条）\n"
+                    "要求：中文、结构清晰、可执行、不要空泛。"
+                )
+                report = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.35, max_tokens=1900)
+                result_data = {'report': report}
+
+            elif job_kind == 'message_reply_draft':
+                message_id = int(payload.get('message_id'))
+                message = db.get_or_404(Message, message_id)
+                sender = db.session.get(User, message.sender_id) if message.sender_id else None
+                sender_info = None
+                if sender:
+                    sender_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=sender.id)).scalar_one_or_none()
+
+                sender_name = (
+                    sender_info.real_name if sender_info and sender_info.real_name
+                    else (sender.username if sender else '同学')
+                )
+                sender_student_id = sender_info.student_id if sender_info else ''
+
+                system_prompt = "你是高校社团管理后台助手，请生成专业、友好、可直接发送的中文回复。"
+                user_prompt = (
+                    f"收到的消息主题：{message.subject or ''}\n"
+                    f"发件人：{sender_name}"
+                    f"{f'（学号：{sender_student_id}）' if sender_student_id else ''}\n"
+                    f"消息内容：\n{(message.content or '').strip()}\n\n"
+                    "请输出一段回复正文，要求：\n"
+                    "1) 先表示已收到并理解问题\n"
+                    "2) 给出明确处理建议或下一步\n"
+                    "3) 语气简洁礼貌，不要空话\n"
+                    "4) 120-220字\n"
+                    "5) 不要使用Markdown标题"
+                )
+                reply_content = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.5, max_tokens=700)
+                reply_subject = f"回复：{message.subject}" if message.subject else "回复：你的反馈"
+                result_data = {
+                    'reply_subject': reply_subject,
+                    'reply_content': reply_content,
+                    'receiver_id': message.sender_id
+                }
+            else:
+                raise ValueError('不支持的任务类型')
+
+            done_payload = {
+                'job_id': job_id,
+                'status': 'success',
+                'success': True,
+                'done': True,
+                'message': 'AI任务已完成',
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            }
+            done_payload.update(result_data)
+            _write_text_job(app, job_id, done_payload)
+
+        except Exception as e:
+            logger.error(f"异步文本任务失败 job_id={job_id}, kind={job_kind}: {e}")
+            if isinstance(e, requests.exceptions.Timeout):
+                fail_message = 'AI任务超时，请稍后重试'
+            elif isinstance(e, requests.exceptions.HTTPError):
+                detail = _extract_ark_error_message(getattr(e, 'response', None)) if getattr(e, 'response', None) is not None else ''
+                fail_message = f"任务失败: {detail or str(e)}"
+            else:
+                fail_message = f'任务失败: {str(e)}'
+
+            _write_text_job(app, job_id, {
+                'job_id': job_id,
+                'status': 'failed',
+                'success': False,
+                'done': True,
+                'message': fail_message,
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            })
+
+
+def _enqueue_text_job(job_kind, payload):
+    app_ref = current_app._get_current_object()
+    _cleanup_expired_text_jobs(app_ref)
+    job_id = f"text_{uuid.uuid4().hex}"
+    _write_text_job(app_ref, job_id, {
+        'job_id': job_id,
+        'owner_id': current_user.id,
+        'job_kind': job_kind,
+        'status': 'queued',
+        'success': True,
+        'done': False,
+        'message': '任务已提交',
+        'updated_at': datetime.utcnow().isoformat() + 'Z'
+    })
+    worker = threading.Thread(
+        target=_run_async_text_job,
+        args=(app_ref, job_id, job_kind, payload),
+        daemon=True
+    )
+    worker.start()
+    return job_id
+
+
+def _parse_job_dir(app):
+    base_dir = app.config.get('INSTANCE_PATH') or app.instance_path or tempfile.gettempdir()
+    job_dir = os.path.join(base_dir, 'ai_parse_jobs')
+    os.makedirs(job_dir, exist_ok=True)
+    return job_dir
+
+
+def _parse_job_path(app, job_id):
+    safe_job_id = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id or ''))
+    if not safe_job_id:
+        raise ValueError('无效任务ID')
+    return os.path.join(_parse_job_dir(app), f'{safe_job_id}.json')
+
+
+def _write_parse_job(app, job_id, payload):
+    file_path = _parse_job_path(app, job_id)
+    temp_path = f'{file_path}.tmp'
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False)
+    os.replace(temp_path, file_path)
+
+
+def _read_parse_job(app, job_id):
+    file_path = _parse_job_path(app, job_id)
+    if not os.path.exists(file_path):
+        return None
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _cleanup_expired_parse_jobs(app):
+    job_dir = _parse_job_dir(app)
+    now_ts = datetime.utcnow().timestamp()
+    for filename in os.listdir(job_dir):
+        if not filename.endswith('.json'):
+            continue
+        path = os.path.join(job_dir, filename)
+        try:
+            if now_ts - os.path.getmtime(path) > AI_PARSE_JOB_TTL_SECONDS:
+                os.remove(path)
+        except Exception:
+            continue
+
+
+def _parse_activity_content_with_ai(raw_content):
+    system_prompt = "你是活动表单解析助手，必须输出严格JSON。"
+    user_prompt = (
+        "请从下面文本提取活动表单字段，并仅输出JSON对象，不要其他文字。\n"
+        "字段: title, description, location, start_time, end_time, registration_start_time, registration_deadline, max_participants, points, status, is_featured\n"
+        "规则:\n"
+        "1) 时间格式必须是 YYYY-MM-DD HH:MM，无法确定填空字符串\n"
+        "2) status 仅可为 active/completed/cancelled，默认active\n"
+        "3) max_participants/points 返回数字；未知返回空字符串\n"
+        "4) is_featured 返回布尔值\n"
+        f"\n原始文本:\n{raw_content}"
+    )
+    parsed_text = _call_ark_chat_completion(
+        system_prompt,
+        user_prompt,
+        temperature=0.2,
+        max_tokens=520,
+        timeout_seconds=20
+    )
+    parsed_json = _extract_json_block(parsed_text)
+    return _normalize_activity_ai_payload(parsed_json)
+
+
+def _run_async_parse_job(app, job_id, raw_content):
+    with app.app_context():
+        try:
+            current_payload = _read_parse_job(app, job_id) or {}
+            current_payload.update({
+                'job_id': job_id,
+                'status': 'running',
+                'success': True,
+                'done': False,
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            })
+            _write_parse_job(app, job_id, current_payload)
+
+            normalized = _parse_activity_content_with_ai(raw_content)
+            _write_parse_job(app, job_id, {
+                'job_id': job_id,
+                'status': 'success',
+                'success': True,
+                'done': True,
+                'data': normalized,
+                'message': 'AI已自动填充表单',
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            })
+        except Exception as e:
+            logger.error(f"异步解析活动内容失败 job_id={job_id}: {e}")
+            if isinstance(e, requests.exceptions.Timeout):
+                fail_message = 'AI解析超时，请稍后重试'
+            elif isinstance(e, requests.exceptions.HTTPError):
+                detail = _extract_ark_error_message(getattr(e, 'response', None)) if getattr(e, 'response', None) is not None else ''
+                fail_message = f"解析失败: {detail or str(e)}"
+            else:
+                fail_message = f'解析失败: {str(e)}'
+            _write_parse_job(app, job_id, {
+                'job_id': job_id,
+                'status': 'failed',
+                'success': False,
+                'done': True,
+                'message': fail_message,
+                'updated_at': datetime.utcnow().isoformat() + 'Z'
+            })
 
 
 def _poster_quality_profile(quality):
@@ -1112,6 +1570,23 @@ def ai_generate_activity_description():
         logger.error(f"AI生成活动描述失败: {e}")
         return jsonify({'success': False, 'message': f'生成失败: {str(e)}'}), 500
 
+
+@admin_bp.route('/activity/ai/generate-description-async', methods=['POST'])
+@admin_required
+def ai_generate_activity_description_async():
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        payload = request.get_json(silent=True) or {}
+        title = (payload.get('title') or '').strip()
+        if not title:
+            return jsonify({'success': False, 'message': '请先输入活动标题'}), 400
+
+        job_id = _enqueue_text_job('activity_description', {'title': title})
+        return jsonify({'success': True, 'done': False, 'job_id': job_id, 'message': '任务已提交，正在生成文案'})
+    except Exception as e:
+        logger.error(f"提交活动描述异步任务失败: {e}")
+        return jsonify({'success': False, 'message': f'提交失败: {str(e)}'}), 500
+
 @admin_bp.route('/activity/ai/parse-content', methods=['POST'])
 @admin_required
 def ai_parse_activity_content():
@@ -1122,24 +1597,53 @@ def ai_parse_activity_content():
         if not raw_content:
             return jsonify({'success': False, 'message': '请先粘贴活动内容'}), 400
 
-        system_prompt = "你是活动表单解析助手，必须输出严格JSON。"
-        user_prompt = (
-            "请从下面文本提取活动表单字段，并仅输出JSON对象，不要其他文字。\n"
-            "字段: title, description, location, start_time, end_time, registration_start_time, registration_deadline, max_participants, points, status, is_featured\n"
-            "规则:\n"
-            "1) 时间格式必须是 YYYY-MM-DD HH:MM，无法确定填空字符串\n"
-            "2) status 仅可为 active/completed/cancelled，默认active\n"
-            "3) max_participants/points 返回数字；未知返回空字符串\n"
-            "4) is_featured 返回布尔值\n"
-            f"\n原始文本:\n{raw_content}"
+        app_ref = current_app._get_current_object()
+        _cleanup_expired_parse_jobs(app_ref)
+
+        job_id = f"parse_{uuid.uuid4().hex}"
+        _write_parse_job(app_ref, job_id, {
+            'job_id': job_id,
+            'status': 'queued',
+            'success': True,
+            'done': False,
+            'message': '解析任务已提交',
+            'updated_at': datetime.utcnow().isoformat() + 'Z'
+        })
+
+        worker = threading.Thread(
+            target=_run_async_parse_job,
+            args=(app_ref, job_id, raw_content),
+            daemon=True
         )
-        parsed_text = _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.2, max_tokens=1200)
-        parsed_json = _extract_json_block(parsed_text)
-        normalized = _normalize_activity_ai_payload(parsed_json)
-        return jsonify({'success': True, 'data': normalized})
+        worker.start()
+
+        return jsonify({
+            'success': True,
+            'job_id': job_id,
+            'done': False,
+            'message': '解析任务已提交，正在处理中'
+        })
     except Exception as e:
         logger.error(f"AI解析活动内容失败: {e}")
         return jsonify({'success': False, 'message': f'解析失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/activity/ai/parse-content/status/<job_id>', methods=['GET'])
+@admin_required
+def ai_parse_activity_content_status(job_id):
+    try:
+        _cleanup_expired_parse_jobs(current_app)
+        payload = _read_parse_job(current_app, job_id)
+        if not payload:
+            return jsonify({'success': False, 'message': '任务不存在或已过期'}), 404
+        response = jsonify(payload)
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        logger.error(f"查询AI解析任务状态失败: {e}")
+        return jsonify({'success': False, 'message': f'查询失败: {str(e)}'}), 500
 
 @admin_bp.route('/activity/ai/generate-poster', methods=['POST'])
 @admin_required
@@ -1530,6 +2034,7 @@ def activities(status='all'):
 
 @admin_bp.route('/activity/create', methods=['GET', 'POST'])
 @admin_required
+@limiter.limit('20 per minute', methods=['POST'], error_message='提交过于频繁，请稍后再试')
 def create_activity():
     """创建活动"""
     form = ActivityForm()
@@ -1543,18 +2048,24 @@ def create_activity():
     if form.validate_on_submit():
         try:
             # 获取表单数据
-            title = form.title.data
-            description = form.description.data
-            location = form.location.data
+            title = sanitize_plain_text(form.title.data, max_length=120)
+            description = sanitize_plain_text(form.description.data, allow_multiline=True, max_length=8000)
+            location = sanitize_plain_text(form.location.data, max_length=200)
             start_time = form.start_time.data
             end_time = form.end_time.data
             registration_start_time = form.registration_start_time.data
             registration_deadline = form.registration_deadline.data
             max_participants = form.max_participants.data
+            if max_participants is None:
+                max_participants = 0
             points = form.points.data
             status = form.status.data
             is_featured = form.is_featured.data
             ai_poster_url = (request.form.get('ai_poster_url') or '').strip()
+
+            if not title or not description or not location:
+                flash('标题、活动描述、活动地点不能为空（不支持HTML脚本内容）', 'warning')
+                return render_template('admin/activity_form.html', form=form, activity=None)
             
             # 统一写库：北京时间输入 -> UTC naive（数据库）
             start_time = _to_utc_naive_datetime(start_time)
@@ -1672,11 +2183,15 @@ def create_activity():
             logger.error(f"Error in create_activity: {str(e)}")
             flash(f'创建活动失败: {str(e)}', 'danger')
     
+    if request.method == 'POST' and not form.validate_on_submit():
+        _flash_form_errors(form)
+
     # GET请求或表单验证失败
     return render_template('admin/activity_form.html', form=form, activity=None)
 
 @admin_bp.route('/activity/<int:id>/edit', methods=['GET', 'POST'])
 @admin_required
+@limiter.limit('30 per minute', methods=['POST'], error_message='提交过于频繁，请稍后再试')
 def edit_activity(id):
     try:
         # 获取活动对象
@@ -1729,15 +2244,19 @@ def edit_activity(id):
                 
                 # 使用form填充对象
                 # 手动填充对象字段，避免标签处理错误
-                activity.title = form.title.data
-                activity.description = form.description.data
-                activity.location = form.location.data
-                activity.max_participants = form.max_participants.data
+                activity.title = sanitize_plain_text(form.title.data, max_length=120)
+                activity.description = sanitize_plain_text(form.description.data, allow_multiline=True, max_length=8000)
+                activity.location = sanitize_plain_text(form.location.data, max_length=200)
+                activity.max_participants = form.max_participants.data if form.max_participants.data is not None else 0
                 activity.points = form.points.data
                 activity.status = form.status.data
                 activity.is_featured = form.is_featured.data
                 activity.activity_type = form.activity_type.data if hasattr(form, 'activity_type') else None
                 # 不处理tags字段，它会在后面单独处理
+
+                if not activity.title or not activity.description or not activity.location:
+                    flash('标题、活动描述、活动地点不能为空（不支持HTML脚本内容）', 'warning')
+                    return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
                 
                 # 使用转换后的时间覆盖填充的时间字段
                 activity.start_time = start_time
@@ -1889,6 +2408,9 @@ def edit_activity(id):
                 flash(f'编辑活动时出错: {str(e)}', 'danger')
                 return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
         
+        if request.method == 'POST' and not form.validate_on_submit():
+            _flash_form_errors(form)
+
         return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
     except Exception as e:
         db.session.rollback()
@@ -2135,17 +2657,19 @@ def student_view(user_id):
     # 获取所有标签
     tags_stmt = db.select(Tag)
     all_tags = db.session.execute(tags_stmt).scalars().all()
+    all_societies = db.session.execute(db.select(Society).filter_by(is_active=True).order_by(Society.name.asc())).scalars().all()
+    selected_society_ids = [s.id for s in (student.joined_societies or [])]
+    if student.society_id and student.society_id not in selected_society_ids:
+        selected_society_ids.append(student.society_id)
 
     # 学生详情页注册时间展示：兼容历史北京时间 naive 数据，避免重复 +8h
     created_at_display = _format_review_time_for_display(user.created_at)
-    reset_link = (request.args.get('reset_link') or '').strip()
-    
     return render_template('admin/student_view.html', student=student, user=user, 
                            points_history=points_history, registrations=registrations,
                            selected_tag_ids=selected_tag_ids, all_tags=all_tags,
+                           all_societies=all_societies, selected_society_ids=selected_society_ids,
                            display_datetime=display_datetime,
-                           created_at_display=created_at_display,
-                           reset_link=reset_link)
+                           created_at_display=created_at_display)
 
 @admin_bp.route('/student/<int:user_id>/edit-profile', methods=['POST'])
 @admin_required
@@ -2175,6 +2699,7 @@ def edit_student_profile(user_id):
         major = (request.form.get('major') or '').strip()
         phone = (request.form.get('phone') or '').strip()
         qq = (request.form.get('qq') or '').strip()
+        selected_society_ids = [int(sid) for sid in request.form.getlist('societies') if sid and str(sid).isdigit()]
 
         if not username:
             flash('用户名不能为空', 'warning')
@@ -2208,6 +2733,14 @@ def edit_student_profile(user_id):
             flash('学号已存在，请检查后重试', 'warning')
             return redirect(url_for('admin.student_view', user_id=user_id))
 
+        if phone:
+            phone_exists = db.session.execute(
+                db.select(StudentInfo).filter(StudentInfo.phone == phone, StudentInfo.user_id != user.id)
+            ).scalar_one_or_none()
+            if phone_exists:
+                flash('手机号已被占用，请更换', 'warning')
+                return redirect(url_for('admin.student_view', user_id=user_id))
+
         user.username = username
         user.email = email or None
 
@@ -2218,6 +2751,19 @@ def edit_student_profile(user_id):
         student.major = major
         student.phone = phone
         student.qq = qq
+
+        # 仅总管理员可修改学生社团归属，且直接生效（后台操作不走邮箱验证流程）
+        if is_super_admin(current_user):
+            selected_societies = db.session.execute(
+                db.select(Society).filter(Society.id.in_(selected_society_ids), Society.is_active == True)
+            ).scalars().all() if selected_society_ids else []
+            student.joined_societies = selected_societies
+            if selected_societies:
+                selected_id_set = {s.id for s in selected_societies}
+                if student.society_id not in selected_id_set:
+                    student.society_id = selected_societies[0].id
+            else:
+                student.society_id = None
 
         db.session.commit()
         log_action('edit_student_profile', f'管理员编辑学生资料: user_id={user.id}, student_id={student.student_id}')
@@ -2232,34 +2778,7 @@ def edit_student_profile(user_id):
 @admin_bp.route('/student/<int:user_id>/reset-password', methods=['POST'])
 @admin_required
 def reset_student_password(user_id):
-    try:
-        validate_csrf(request.form.get('csrf_token', ''))
-    except Exception:
-        flash('请求校验失败，请刷新页面后重试', 'danger')
-        return redirect(url_for('admin.student_view', user_id=user_id))
-
-    user = db.get_or_404(User, user_id)
-
-    try:
-        serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-        password_fingerprint = (user.password_hash or '')[-24:]
-        token = serializer.dumps(
-            {
-                'uid': int(user.id),
-                'purpose': 'password-reset',
-                'ph': password_fingerprint
-            },
-            salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:password-reset"
-        )
-        reset_link = url_for('auth.reset_password_with_token', token=token, _external=True)
-
-        log_action('reset_student_password', f'管理员发起用户密码重置: user_id={user.id}, username={user.username}')
-        flash(f'已为 {user.username} 生成重置链接（2小时有效），请发给学生自行设置新密码。', 'success')
-        return redirect(url_for('admin.student_view', user_id=user_id, reset_link=reset_link))
-    except Exception as e:
-        logger.error(f"重置学生密码失败 user_id={user_id}: {e}", exc_info=True)
-        flash('重置密码时出错', 'danger')
-
+    flash('管理员手动生成重置链接功能已停用，请引导用户在登录页使用“忘记密码”通过邮箱重置。', 'info')
     return redirect(url_for('admin.student_view', user_id=user_id))
 
 @admin_bp.route('/student/<int:id>/update-tags', methods=['POST'])
@@ -2270,6 +2789,7 @@ def update_student_tags(id):
     try:
         # 获取提交的标签ID
         tag_ids = request.form.getlist('tags')
+        selected_society_ids = [int(sid) for sid in request.form.getlist('societies') if sid and str(sid).isdigit()]
         
         # 清除原有标签关联
         student.tags = []
@@ -2284,9 +2804,22 @@ def update_student_tags(id):
         # 更新学生标签选择状态
         if hasattr(student, 'has_selected_tags'):
             student.has_selected_tags = True if tag_ids else False
+
+        if is_super_admin(current_user):
+            selected_societies = db.session.execute(
+                db.select(Society).filter(Society.id.in_(selected_society_ids), Society.is_active == True)
+            ).scalars().all() if selected_society_ids else []
+            student.joined_societies = selected_societies
+            if selected_societies:
+                selected_id_set = {s.id for s in selected_societies}
+                if student.society_id not in selected_id_set:
+                    student.society_id = selected_societies[0].id
+            else:
+                student.society_id = None
+
         db.session.commit()
         
-        flash('学生标签更新成功！', 'success')
+        flash('学生标签信息更新成功！', 'success')
     except Exception as e:
         db.session.rollback()
         logger.error(f"更新学生标签时出错: {e}")
@@ -2814,6 +3347,103 @@ def export_students():
     except Exception as e:
         logger.error(f"Error exporting students: {e}")
         flash('导出学生信息时出错', 'danger')
+        return redirect(url_for('admin.students'))
+
+
+@admin_bp.route('/admins/export_excel')
+@admin_required
+def export_society_admins():
+    if not is_super_admin(current_user):
+        flash('仅总管理员可导出社团管理员信息', 'danger')
+        return redirect(url_for('admin.students'))
+
+    try:
+        admin_role = db.session.execute(
+            db.select(Role).filter(func.lower(Role.name) == 'admin')
+        ).scalar_one_or_none()
+        if not admin_role:
+            flash('未找到管理员角色数据', 'warning')
+            return redirect(url_for('admin.students'))
+
+        admins = db.session.execute(
+            db.select(User).filter(User.role_id == admin_role.id).order_by(User.id.asc())
+        ).scalars().all()
+
+        output = io.BytesIO()
+        writer = pd.ExcelWriter(output, engine='openpyxl')
+
+        summary_rows = []
+        activity_rows = []
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+
+        def format_system_time_for_export(dt):
+            """将系统时间字段统一格式化为北京时间字符串。"""
+            if not dt:
+                return ''
+            if dt.tzinfo is None:
+                dt = pytz.utc.localize(dt)
+            return dt.astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M:%S')
+
+        for admin_user in admins:
+            managed_society = db.session.get(Society, admin_user.managed_society_id) if admin_user.managed_society_id else None
+
+            created_activities = db.session.execute(
+                db.select(Activity).filter(Activity.created_by == admin_user.id).order_by(Activity.created_at.desc())
+            ).scalars().all()
+
+            activity_names = [a.title for a in created_activities if getattr(a, 'title', None)]
+            latest_activity_at = created_activities[0].created_at if created_activities else None
+
+            summary_rows.append({
+                '管理员用户ID': admin_user.id,
+                '用户名': admin_user.username,
+                '邮箱': admin_user.email,
+                '是否总管理员': '是' if bool(getattr(admin_user, 'is_super_admin', False)) else '否',
+                '账号状态': '启用' if bool(getattr(admin_user, 'active', False)) else '禁用',
+                '管理社团ID': getattr(admin_user, 'managed_society_id', None) or '',
+                '管理社团名称': managed_society.name if managed_society else '',
+                '管理社团编码': managed_society.code if managed_society else '',
+                '管理社团状态': ('启用' if managed_society and managed_society.is_active else ('停用' if managed_society else '未绑定')),
+                '发布活动数量': len(created_activities),
+                '最近发布活动时间': format_system_time_for_export(latest_activity_at),
+                '发布活动名称列表': '\n'.join(activity_names),
+                '最近登录时间': format_system_time_for_export(admin_user.last_login),
+                '注册时间': format_system_time_for_export(admin_user.created_at)
+            })
+
+            for activity in created_activities:
+                activity_society = db.session.get(Society, getattr(activity, 'society_id', None)) if getattr(activity, 'society_id', None) else None
+                activity_rows.append({
+                    '管理员用户ID': admin_user.id,
+                    '管理员用户名': admin_user.username,
+                    '管理员邮箱': admin_user.email,
+                    '活动ID': activity.id,
+                    '活动名称': activity.title,
+                    '活动状态': activity.status,
+                    '所属社团': activity_society.name if activity_society else '',
+                    '活动开始时间': localize_time(activity.start_time).strftime('%Y-%m-%d %H:%M:%S') if activity.start_time else '',
+                    '活动结束时间': localize_time(activity.end_time).strftime('%Y-%m-%d %H:%M:%S') if activity.end_time else '',
+                    '活动创建时间': format_system_time_for_export(activity.created_at)
+                })
+
+        pd.DataFrame(summary_rows).to_excel(writer, sheet_name='社团管理员概览', index=False)
+        pd.DataFrame(activity_rows).to_excel(writer, sheet_name='管理员发布活动明细', index=False)
+
+        writer.close()
+        output.seek(0)
+
+        log_action('export_society_admins', '导出社团管理员信息与发布活动明细')
+
+        beijing_now = get_beijing_time()
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=f"社团管理员信息_{beijing_now.strftime('%Y%m%d%H%M%S')}.xlsx",
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    except Exception as e:
+        logger.error(f"Error exporting society admins: {e}", exc_info=True)
+        flash('导出社团管理员信息时出错', 'danger')
         return redirect(url_for('admin.students'))
 
 def _sync_published_announcements_to_notifications():
@@ -3659,6 +4289,22 @@ def ai_review_cluster_summary(id):
         logger.error(f"AI聚类总结失败: {e}")
         return jsonify({'success': False, 'message': f'生成失败: {str(e)}'}), 500
 
+
+@admin_bp.route('/activity/<int:id>/ai/review-cluster-summary-async', methods=['POST'])
+@admin_required
+def ai_review_cluster_summary_async(id):
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'message': '仅可分析所属社团活动'}), 403
+
+        job_id = _enqueue_text_job('review_cluster_summary', {'activity_id': id})
+        return jsonify({'success': True, 'done': False, 'job_id': job_id, 'message': '任务已提交，正在分析评价'})
+    except Exception as e:
+        logger.error(f"提交AI聚类总结异步任务失败: {e}")
+        return jsonify({'success': False, 'message': f'提交失败: {str(e)}'}), 500
+
 @admin_bp.route('/activity/<int:id>/ai/retrospective-report', methods=['POST'])
 @admin_required
 def ai_activity_retrospective_report(id):
@@ -3720,6 +4366,45 @@ def ai_activity_retrospective_report(id):
     except Exception as e:
         logger.error(f"AI复盘报告生成失败: {e}")
         return jsonify({'success': False, 'message': f'生成失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/activity/<int:id>/ai/retrospective-report-async', methods=['POST'])
+@admin_required
+def ai_activity_retrospective_report_async(id):
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'message': '仅可分析所属社团活动'}), 403
+
+        job_id = _enqueue_text_job('retrospective_report', {'activity_id': id})
+        return jsonify({'success': True, 'done': False, 'job_id': job_id, 'message': '任务已提交，正在生成复盘报告'})
+    except Exception as e:
+        logger.error(f"提交AI复盘报告异步任务失败: {e}")
+        return jsonify({'success': False, 'message': f'提交失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/ai/text-job-status/<job_id>', methods=['GET'])
+@admin_required
+def ai_text_job_status(job_id):
+    try:
+        _cleanup_expired_text_jobs(current_app)
+        payload = _read_text_job(current_app, job_id)
+        if not payload:
+            return jsonify({'success': False, 'message': '任务不存在或已过期'}), 404
+
+        owner_id = payload.get('owner_id')
+        if owner_id and int(owner_id) != current_user.id:
+            return jsonify({'success': False, 'message': '无权查看该任务'}), 403
+
+        response = jsonify(payload)
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        logger.error(f"查询AI文本任务状态失败: {e}")
+        return jsonify({'success': False, 'message': f'查询失败: {str(e)}'}), 500
 
 @admin_bp.route('/api/qrcode/checkin/<int:id>')
 @admin_required
@@ -4346,6 +5031,7 @@ def notifications():
 
 @admin_bp.route('/notification/create', methods=['GET', 'POST'])
 @admin_required
+@limiter.limit('15 per minute', methods=['POST'], error_message='提交过于频繁，请稍后再试')
 def create_notification():
     try:
         # 创建Flask-WTF表单对象
@@ -4354,8 +5040,8 @@ def create_notification():
         form = FlaskForm()
         
         if request.method == 'POST':
-            title = request.form.get('title')
-            content = request.form.get('content')
+            title = sanitize_plain_text(request.form.get('title'), max_length=120)
+            content = sanitize_rich_html(request.form.get('content'), max_length=6000)
             is_important = 'is_important' in request.form
             expiry_date_str = request.form.get('expiry_date')
             
@@ -4417,6 +5103,7 @@ def create_notification():
 
 @admin_bp.route('/notification/<int:id>/edit', methods=['GET', 'POST'])
 @admin_required
+@limiter.limit('20 per minute', methods=['POST'], error_message='提交过于频繁，请稍后再试')
 def edit_notification(id):
     try:
         notification = db.get_or_404(Notification, id)
@@ -4427,8 +5114,8 @@ def edit_notification(id):
         form = FlaskForm()
         
         if request.method == 'POST':
-            title = request.form.get('title')
-            content = request.form.get('content')
+            title = sanitize_plain_text(request.form.get('title'), max_length=120)
+            content = sanitize_rich_html(request.form.get('content'), max_length=6000)
             is_important = 'is_important' in request.form
             expiry_date_str = request.form.get('expiry_date')
             
@@ -4636,6 +5323,7 @@ def messages():
 
 @admin_bp.route('/message/create', methods=['GET', 'POST'])
 @admin_required
+@limiter.limit('20 per minute', methods=['POST'], error_message='提交过于频繁，请稍后再试')
 def create_message():
     try:
         logger.info("开始创建站内信")
@@ -4649,11 +5337,17 @@ def create_message():
             if form.validate_on_submit():
                 logger.info("CSRF验证通过")
                 receiver_id = request.form.get('receiver_id')
-                subject = request.form.get('subject')
-                content = request.form.get('content')
+                subject = sanitize_plain_text(request.form.get('subject'), max_length=120)
+                content = sanitize_plain_text(request.form.get('content'), allow_multiline=True, max_length=5000)
                 
                 if not receiver_id or not subject or not content:
                     flash('收件人、主题和内容不能为空', 'danger')
+                    return redirect(url_for('admin.create_message'))
+
+                try:
+                    receiver_id = int(receiver_id)
+                except (TypeError, ValueError):
+                    flash('收件人参数无效', 'danger')
                     return redirect(url_for('admin.create_message'))
                 
                 # 验证接收者是否存在
@@ -4686,8 +5380,8 @@ def create_message():
         students = db.session.execute(students_stmt).scalars().all()
         
         prefill_receiver_id = request.args.get('receiver_id', type=int)
-        prefill_subject = request.args.get('subject', '', type=str)
-        prefill_content = request.args.get('content', '', type=str)
+        prefill_subject = sanitize_plain_text(request.args.get('subject', '', type=str), max_length=120)
+        prefill_content = sanitize_plain_text(request.args.get('content', '', type=str), allow_multiline=True, max_length=5000)
 
         return render_template('admin/message_form.html', 
                       students=students,
@@ -4779,6 +5473,22 @@ def ai_generate_message_reply_draft(id):
     except Exception as e:
         logger.error(f"AI生成回复草稿失败: {e}")
         return jsonify({'success': False, 'message': f'生成失败: {str(e)}'}), 500
+
+
+@admin_bp.route('/message/<int:id>/ai-reply-draft-async', methods=['POST'])
+@admin_required
+def ai_generate_message_reply_draft_async(id):
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', '') or request.form.get('csrf_token', ''))
+        message = db.get_or_404(Message, id)
+        if message.receiver_id != current_user.id:
+            return jsonify({'success': False, 'message': '仅可为收到的消息生成回复草稿'}), 403
+
+        job_id = _enqueue_text_job('message_reply_draft', {'message_id': id})
+        return jsonify({'success': True, 'done': False, 'job_id': job_id, 'message': '任务已提交，正在生成回复草稿'})
+    except Exception as e:
+        logger.error(f"提交AI回复草稿异步任务失败: {e}")
+        return jsonify({'success': False, 'message': f'提交失败: {str(e)}'}), 500
 
 @admin_bp.route('/message/<int:id>')
 @admin_required
@@ -5301,6 +6011,7 @@ def announcements():
 
 @admin_bp.route('/announcement/create', methods=['GET', 'POST'])
 @admin_required
+@limiter.limit('12 per minute', methods=['POST'], error_message='提交过于频繁，请稍后再试')
 def create_announcement():
     try:
         # 创建Flask-WTF表单对象
@@ -5311,8 +6022,8 @@ def create_announcement():
             logger.info("收到公告创建POST请求")
             if form.validate_on_submit():
                 logger.info("CSRF验证通过")
-                title = request.form.get('title')
-                content = request.form.get('content')
+                title = sanitize_plain_text(request.form.get('title'), max_length=120)
+                content = sanitize_rich_html(request.form.get('content'), max_length=10000)
                 status = request.form.get('status', 'published')
                 
                 if not title or not content:
@@ -5363,6 +6074,7 @@ def create_announcement():
 
 @admin_bp.route('/announcement/<int:id>/edit', methods=['GET', 'POST'])
 @admin_required
+@limiter.limit('15 per minute', methods=['POST'], error_message='提交过于频繁，请稍后再试')
 def edit_announcement(id):
     try:
         announcement = db.get_or_404(Announcement, id)
@@ -5375,8 +6087,8 @@ def edit_announcement(id):
             logger.info("收到公告编辑POST请求")
             if form.validate_on_submit():
                 logger.info("CSRF验证通过")
-                title = request.form.get('title')
-                content = request.form.get('content')
+                title = sanitize_plain_text(request.form.get('title'), max_length=120)
+                content = sanitize_rich_html(request.form.get('content'), max_length=10000)
                 status = request.form.get('status', 'published')
                 
                 if not title or not content:
@@ -5705,8 +6417,8 @@ def approve_request(log_id):
                     except Exception:
                         expiry_date = None
                 db.session.add(Notification(
-                    title=(payload.get('title') or '').strip(),
-                    content=(payload.get('content') or '').strip(),
+                    title=sanitize_plain_text(payload.get('title'), max_length=120),
+                    content=sanitize_rich_html(payload.get('content'), max_length=6000),
                     is_important=bool(payload.get('is_important')),
                     created_at=datetime.now(pytz.utc),
                     created_by=details.get('requester_id'),
@@ -5717,8 +6429,8 @@ def approve_request(log_id):
                 nid = payload.get('id')
                 notice = db.session.get(Notification, nid)
                 if notice:
-                    notice.title = (payload.get('title') or '').strip()
-                    notice.content = (payload.get('content') or '').strip()
+                    notice.title = sanitize_plain_text(payload.get('title'), max_length=120)
+                    notice.content = sanitize_rich_html(payload.get('content'), max_length=6000)
                     notice.is_important = bool(payload.get('is_important'))
                     expiry_date_str = (payload.get('expiry_date') or '').strip()
                     if expiry_date_str:
@@ -5763,8 +6475,8 @@ def approve_request(log_id):
         elif req_type == 'announcement':
             if req_action == 'create':
                 ann = Announcement(
-                    title=(payload.get('title') or '').strip(),
-                    content=(payload.get('content') or '').strip(),
+                    title=sanitize_plain_text(payload.get('title'), max_length=120),
+                    content=sanitize_rich_html(payload.get('content'), max_length=10000),
                     status=(payload.get('status') or 'published').strip() or 'published',
                     created_by=details.get('requester_id'),
                     created_at=get_localized_now(),
@@ -5780,8 +6492,8 @@ def approve_request(log_id):
                     old_title = ann.title
                     old_content = ann.content
 
-                    ann.title = (payload.get('title') or '').strip()
-                    ann.content = (payload.get('content') or '').strip()
+                    ann.title = sanitize_plain_text(payload.get('title'), max_length=120)
+                    ann.content = sanitize_rich_html(payload.get('content'), max_length=10000)
                     ann.status = (payload.get('status') or ann.status or 'published').strip()
                     ann.updated_at = get_localized_now()
 

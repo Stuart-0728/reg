@@ -55,10 +55,24 @@
         border-radius: 14px;
     }
     .wide-page {
-        width: min(96vw, 1780px);
+        width: min(94vw, 1280px);
         margin: 0 auto;
     }
+    .feedback-card {
+        margin-left: auto;
+        margin-right: auto;
+    }
+    @media (max-width: 1199.98px) {
+        .wide-page {
+            width: min(96vw, 980px);
+        }
+    }
     @media (max-width: 991.98px) {
+        .wide-page {
+            width: min(96vw, 860px);
+        }
+    }
+    @media (max-width: 767.98px) {
         .wide-page {
             width: 100%;
         }
@@ -67,7 +81,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid wide-page py-4">
+<div class="container wide-page py-4">
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('student.dashboard') }}" class="text-decoration-none">个人中心</a></li>

@@ -39,7 +39,7 @@
         <div class="card-body p-4">
             <div class="notification-content mb-4">
                 <div class="bg-light p-4 rounded">
-                    {{ notification.content|striptags|replace('\n', '<br>')|safe }}
+                    {{ notification.content|safe }}
                 </div>
             </div>
             

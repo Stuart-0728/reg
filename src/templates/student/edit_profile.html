@@ -15,11 +15,17 @@
                         {{ form.hidden_tag() }}
 
                         <div class="alert alert-light border d-flex align-items-start gap-2" role="alert">
-                            <i class="fas fa-shield-alt text-primary mt-1"></i>
+                            <i class="fas fa-envelope-open-text text-primary mt-1"></i>
                             <div>
-                                <div class="fw-semibold">邮箱已锁定</div>
-                                <div class="small text-muted">当前登录邮箱：{{ current_user.email or '未设置' }}。为保障账号安全，邮箱验证后不支持用户自行修改，如需更换请联系管理员处理。</div>
+                                <div class="fw-semibold">邮箱变更需验证</div>
+                                <div class="small text-muted">当前登录邮箱：{{ current_user.email or '未设置' }}。如需更换，请填写新邮箱并保存，系统会向新邮箱发送验证链接，完成验证后才会生效。</div>
                             </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="email">新邮箱（选填）</label>
+                            <input type="email" class="form-control" id="email" name="email" placeholder="留空则不修改邮箱">
+                            <div class="form-text">仅当你填写新邮箱且与当前邮箱不同，才会触发邮箱变更验证。</div>
                         </div>
                         
                         <div class="mb-3">

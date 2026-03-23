@@ -123,7 +123,7 @@ def index():
 
 
 @main_bp.route('/api/home-activities')
-@cache.cached(timeout=20, query_string=False)
+@cache.memoize(timeout=20)
 @limiter.limit('180/minute')
 def home_activities_api():
     """首页活动预告实时接口：每次加载都应获取最新活动。"""
@@ -171,8 +171,8 @@ def home_activities_api():
             })
 
         response = jsonify({'success': True, 'activities': activities})
-        response.headers['Cache-Control'] = 'public, max-age=20, s-maxage=120, stale-while-revalidate=60'
-        response.headers['Surrogate-Control'] = 'max-age=120, stale-while-revalidate=60'
+        response.headers['Cache-Control'] = 'public, max-age=20, s-maxage=30, stale-while-revalidate=30'
+        response.headers['Surrogate-Control'] = 'max-age=30, stale-while-revalidate=30'
         response.headers['Vary'] = 'Accept-Encoding'
         return response
     except Exception as e:
@@ -529,7 +529,7 @@ def uploaded_file(filename):
 
 
 @main_bp.route('/api/public-notifications')
-@cache.cached(timeout=30, query_string=False)
+@cache.memoize(timeout=20)
 @limiter.limit('120/minute')
 def public_notifications_api():
     """公开通知接口：供所有访客读取首页头部通知条。"""
@@ -556,8 +556,8 @@ def public_notifications_api():
                 for n in notifications
             ]
         })
-        response.headers['Cache-Control'] = 'public, max-age=30, s-maxage=180, stale-while-revalidate=60'
-        response.headers['Surrogate-Control'] = 'max-age=180, stale-while-revalidate=60'
+        response.headers['Cache-Control'] = 'public, max-age=10, s-maxage=30, stale-while-revalidate=20'
+        response.headers['Surrogate-Control'] = 'max-age=30, stale-while-revalidate=20'
         response.headers['Vary'] = 'Accept-Encoding'
         return response
     except Exception as e:

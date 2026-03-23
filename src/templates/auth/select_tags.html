@@ -16,7 +16,7 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         
                         <div class="mb-4">
-                            <label class="form-label fw-semibold">加入社团（可多选）</label>
+                            <label class="form-label fw-semibold">加入社团（至少选择一个，可多选）</label>
                             <div class="d-flex flex-wrap gap-2 mb-2">
                                 {% for society in societies %}
                                 <input type="checkbox" class="btn-check" name="societies" id="society{{ society.id }}" value="{{ society.id }}" autocomplete="off"
@@ -27,7 +27,7 @@
                                 </label>
                                 {% endfor %}
                             </div>
-                            <div class="form-text">你仍可报名未选择社团的活动；未选择的社团不会出现在该社团学生管理名单。</div>
+                            <div class="form-text">至少选择一个社团用于个性化推荐与管理归属；后续可继续调整。</div>
                         </div>
 
                         <div class="mb-4">
@@ -83,8 +83,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const submitBtn = document.getElementById('submitBtn');
     
     function updateSubmitButton() {
-        const checked = document.querySelectorAll('input[name="tags"]:checked').length;
-        submitBtn.disabled = checked === 0;
+        const selectedTags = document.querySelectorAll('input[name="tags"]:checked').length;
+        const selectedSocieties = document.querySelectorAll('input[name="societies"]:checked').length;
+        submitBtn.disabled = selectedTags === 0 || selectedSocieties === 0;
     }
     
     checkboxes.forEach(checkbox => {

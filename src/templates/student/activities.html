@@ -88,7 +88,7 @@
                                                 <i class="fas fa-cog me-1"></i>管理活动
                                             </a>
                                         {% elif activity.status == 'active' and (not activity.registration_start_time or safe_less_than_equal(activity.registration_start_time, now)) and (not safe_less_than(activity.registration_deadline, now) or safe_compare(activity.registration_deadline, now)) %}
-                                            <button type="button" class="btn btn-primary register-btn" data-activity-id="{{ activity.id }}">
+                                            <button type="button" class="btn btn-primary register-btn" data-activity-id="{{ activity.id }}" data-no-loading="true" data-no-global-loading="true">
                                                 <i class="fas fa-user-plus me-1"></i>立即报名
                                             </button>
                                         {% endif %}
@@ -230,11 +230,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     // 显示成功消息
                     showToast(data.message || '报名成功！', 'success');
-                    
-                    // 重定向到活动详情页
-                    setTimeout(() => {
-                        window.location.href = `/student/activity/${activityId}`;
-                    }, 1000);
+
+                    // 原地更新按钮状态，避免强制跳转带来的额外加载时延
+                    this.classList.remove('btn-primary', 'register-btn');
+                    this.classList.add('btn-success');
+                    this.innerHTML = '<i class="fas fa-check-circle me-1"></i>已报名';
+                    this.disabled = true;
                 } else {
                     // 恢复按钮状态
                     this.innerHTML = originalHtml;

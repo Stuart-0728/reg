@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from src import db, limiter
 from src.models import User, Role, StudentInfo, Tag, AIUserPreferences, SystemLog, Society
 from flask_wtf import FlaskForm
+from flask_wtf.csrf import validate_csrf
 from wtforms import StringField, PasswordField, SubmitField, SelectField, ValidationError
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Regexp
 from datetime import datetime, timedelta
@@ -21,6 +22,34 @@ logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
 _last_unverified_cleanup_at = None
+
+
+def _student_needs_onboarding(user):
+    """学生首次登录分流判定：必须完成至少1个标签 + 至少1个社团选择。"""
+    try:
+        if not user or not getattr(user, 'role', None):
+            return False
+        if (getattr(user.role, 'name', '') or '').strip().lower() != 'student':
+            return False
+
+        student_info = db.session.execute(
+            db.select(StudentInfo).filter_by(user_id=user.id)
+        ).scalar_one_or_none()
+        if not student_info:
+            return True
+
+        selected_tags = list(getattr(student_info, 'tags', []) or [])
+        joined_societies = list(getattr(student_info, 'joined_societies', []) or [])
+
+        has_tag_flag = bool(getattr(student_info, 'has_selected_tags', False))
+        has_tags = len(selected_tags) > 0
+        has_society = bool(getattr(student_info, 'society_id', None)) or len(joined_societies) > 0
+
+        # 兼容历史脏数据：即使 has_selected_tags 被误置为 True，也要求真实标签与社团存在
+        return (not has_tag_flag) or (not has_tags) or (not has_society)
+    except Exception as e:
+        logger.warning(f"检查学生 onboarding 状态失败，按需引导标签页: {e}")
+        return True
 
 
 def _cleanup_unverified_accounts(max_age_days=7, min_interval_minutes=60):
@@ -66,9 +95,17 @@ def _cleanup_unverified_accounts(max_age_days=7, min_interval_minutes=60):
 
 
 def _build_reset_password_token(user_id):
+    user_obj = user_id if hasattr(user_id, 'id') else None
+    uid = int(user_obj.id if user_obj else user_id)
+    password_hash = (getattr(user_obj, 'password_hash', '') or '')
+    password_fingerprint = password_hash[-24:]
     serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
     return serializer.dumps(
-        {'uid': int(user_id), 'purpose': 'password-reset'},
+        {
+            'uid': uid,
+            'purpose': 'password-reset',
+            'ph': password_fingerprint
+        },
         salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:password-reset"
     )
 
@@ -103,52 +140,95 @@ def _verify_email_token(token, max_age=86400):
         return None, '邮箱验证链接无效，请重新发送验证邮件。'
 
 
+def _mail_provider_configs():
+    primary = {
+        'name': 'primary',
+        'server': current_app.config.get('MAIL_PRIMARY_SERVER', 'smtp.mailersend.net') or 'smtp.mailersend.net',
+        'port': int(current_app.config.get('MAIL_PRIMARY_PORT', 587) or 587),
+        'username': current_app.config.get('MAIL_PRIMARY_USERNAME') or '',
+        'password': current_app.config.get('MAIL_PRIMARY_PASSWORD') or '',
+        'use_tls': bool(current_app.config.get('MAIL_PRIMARY_USE_TLS', True)),
+        'use_ssl': bool(current_app.config.get('MAIL_PRIMARY_USE_SSL', False)),
+        'sender': current_app.config.get('MAIL_PRIMARY_DEFAULT_SENDER') or (current_app.config.get('MAIL_PRIMARY_USERNAME') or '')
+    }
+    fallback = {
+        'name': 'fallback',
+        'server': current_app.config.get('MAIL_SERVER') or current_app.config.get('MAIL_HOST') or '',
+        'port': int(current_app.config.get('MAIL_PORT', 25) or 25),
+        'username': current_app.config.get('MAIL_USERNAME') or '',
+        'password': current_app.config.get('MAIL_PASSWORD') or '',
+        'use_tls': bool(current_app.config.get('MAIL_USE_TLS', False)),
+        'use_ssl': bool(current_app.config.get('MAIL_USE_SSL', False)),
+        'sender': current_app.config.get('MAIL_DEFAULT_SENDER') or (current_app.config.get('MAIL_USERNAME') or '')
+    }
+
+    providers = []
+    if primary['server'] and primary['sender'] and primary['username'] and primary['password']:
+        providers.append(primary)
+
+    same_provider = (
+        primary['server'] == fallback['server']
+        and int(primary['port']) == int(fallback['port'])
+        and (primary['username'] or '') == (fallback['username'] or '')
+    )
+    if fallback['server'] and fallback['sender'] and not same_provider:
+        providers.append(fallback)
+
+    return providers
+
+
 def _send_html_email(subject, recipient, html_body):
-    mail_server = current_app.config.get('MAIL_SERVER') or current_app.config.get('MAIL_HOST')
-    mail_port = int(current_app.config.get('MAIL_PORT', 25) or 25)
-    mail_username = current_app.config.get('MAIL_USERNAME')
-    mail_password = current_app.config.get('MAIL_PASSWORD')
-    mail_use_tls = bool(current_app.config.get('MAIL_USE_TLS', False))
-    mail_use_ssl = bool(current_app.config.get('MAIL_USE_SSL', False))
     subject_prefix = current_app.config.get('MAIL_SUBJECT_PREFIX', '')
     # 兼容服务器环境变量中文乱码（如 [????]），回退到固定前缀
     if not subject_prefix or ('?' in str(subject_prefix) and '重庆师范大学智能社团+' not in str(subject_prefix)):
         subject_prefix = '[重庆师范大学智能社团+]'
 
-    sender = current_app.config.get('MAIL_DEFAULT_SENDER') or mail_username
-    if isinstance(sender, (list, tuple)):
-        sender = sender[1] if len(sender) > 1 else sender[0]
+    providers = _mail_provider_configs()
+    if not providers:
+        raise RuntimeError('邮件配置不完整，请检查 MAIL_PRIMARY_* 或 MAIL_* 配置')
 
-    if not (mail_server and sender and recipient):
-        raise RuntimeError('邮件配置不完整，请检查 MAIL_SERVER / MAIL_USERNAME / MAIL_DEFAULT_SENDER')
+    last_error = None
+    for provider in providers:
+        sender = provider.get('sender') or provider.get('username')
+        if isinstance(sender, (list, tuple)):
+            sender = sender[1] if len(sender) > 1 else sender[0]
+        if not (provider.get('server') and sender and recipient):
+            continue
 
-    message = MIMEMultipart('alternative')
-    message['Subject'] = Header(f"{subject_prefix}{subject}", 'utf-8').encode()
-    message['From'] = sender
-    message['To'] = recipient
-    message.attach(MIMEText(html_body, 'html', 'utf-8'))
+        message = MIMEMultipart('alternative')
+        message['Subject'] = Header(f"{subject_prefix}{subject}", 'utf-8').encode()
+        message['From'] = sender
+        message['To'] = recipient
+        message.attach(MIMEText(html_body, 'html', 'utf-8'))
 
-    smtp = None
-    try:
-        if mail_use_ssl:
-            smtp = smtplib.SMTP_SSL(mail_server, mail_port, timeout=20)
-        else:
-            smtp = smtplib.SMTP(mail_server, mail_port, timeout=20)
-            smtp.ehlo()
-            if mail_use_tls:
-                smtp.starttls()
+        smtp = None
+        try:
+            if provider.get('use_ssl'):
+                smtp = smtplib.SMTP_SSL(provider['server'], int(provider['port']), timeout=20)
+            else:
+                smtp = smtplib.SMTP(provider['server'], int(provider['port']), timeout=20)
                 smtp.ehlo()
+                if provider.get('use_tls'):
+                    smtp.starttls()
+                    smtp.ehlo()
 
-        if mail_username and mail_password:
-            smtp.login(mail_username, mail_password)
+            if provider.get('username') and provider.get('password'):
+                smtp.login(provider['username'], provider['password'])
 
-        smtp.sendmail(sender, [recipient], message.as_string())
-    finally:
-        if smtp:
-            try:
-                smtp.quit()
-            except Exception:
-                pass
+            smtp.sendmail(sender, [recipient], message.as_string())
+            logger.info(f"邮件发送成功: provider={provider.get('name')}, recipient={recipient}")
+            return
+        except Exception as e:
+            last_error = e
+            logger.warning(f"邮件发送失败，准备切换下一个提供商: provider={provider.get('name')}, error={e}")
+        finally:
+            if smtp:
+                try:
+                    smtp.quit()
+                except Exception:
+                    pass
+
+    raise RuntimeError(f"邮件发送失败: {last_error}")
 
 
 def _send_verification_email(user):
@@ -157,6 +237,14 @@ def _send_verification_email(user):
     html_body = render_template('email/verify_email.html', user=user, verify_url=verify_url)
     _send_html_email('邮箱验证', user.email, html_body)
     return verify_url
+
+
+def _send_password_reset_email(user):
+    token = _build_reset_password_token(user)
+    reset_url = url_for('auth.reset_password_with_token', token=token, _external=True)
+    html_body = render_template('email/reset_password.html', user=user, reset_url=reset_url)
+    _send_html_email('密码重置', user.email, html_body)
+    return reset_url
 
 
 def _verify_reset_password_token(token, max_age=7200):
@@ -168,19 +256,19 @@ def _verify_reset_password_token(token, max_age=7200):
             salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:password-reset"
         )
     except SignatureExpired:
-        return None, '重置链接已过期，请联系管理员重新发起重置。'
+        return None, '重置链接已过期，请重新提交邮箱重置申请。'
     except BadSignature:
-        return None, '重置链接无效，请联系管理员重新发起重置。'
+        return None, '重置链接无效，请重新提交邮箱重置申请。'
 
     if not isinstance(data, dict) or data.get('purpose') != 'password-reset':
-        return None, '重置链接无效，请联系管理员重新发起重置。'
+        return None, '重置链接无效，请重新提交邮箱重置申请。'
 
     uid = data.get('uid')
     password_fingerprint = str(data.get('ph') or '')
     try:
         return {'uid': int(uid), 'ph': password_fingerprint}, None
     except Exception:
-        return None, '重置链接无效，请联系管理员重新发起重置。'
+        return None, '重置链接无效，请重新提交邮箱重置申请。'
 
 def _is_safe_next_url(target):
     if not target:
@@ -272,6 +360,11 @@ class RegistrationForm(FlaskForm):
         stmt = db.select(StudentInfo).filter_by(student_id=field.data)
         if db.session.execute(stmt).scalar_one_or_none():
             raise ValidationError('该学号已被注册')
+
+    def validate_phone(self, field):
+        stmt = db.select(StudentInfo).filter(StudentInfo.phone == field.data)
+        if db.session.execute(stmt).scalar_one_or_none():
+            raise ValidationError('该手机号已被注册')
 
 # 登录表单
 class LoginForm(FlaskForm):
@@ -381,6 +474,8 @@ def login():
 
     # 如果用户已登录，直接重定向到主页
     if current_user.is_authenticated:
+        if _student_needs_onboarding(current_user):
+            return redirect(url_for('auth.select_tags'))
         return redirect(url_for('main.index'))
         
     form = LoginForm()
@@ -403,7 +498,9 @@ def login():
         logger.info(f"尝试登录: 账号标识={identifier}")
         
         try:
-            # 支持使用用户名、邮箱、学号、手机号登录
+            # 支持使用用户名、邮箱、学号、手机号登录。
+            # 安全修复：若登录标识在不同字段上命中多个账号，不再取“第一条”，
+            # 而是用密码在候选集中做唯一匹配，避免误登他人账号。
             stmt = (
                 db.select(User)
                 .outerjoin(StudentInfo, StudentInfo.user_id == User.id)
@@ -416,11 +513,20 @@ def login():
                     )
                 )
                 .order_by(User.id.asc())
-                .limit(1)
             )
-            user = db.session.execute(stmt).scalars().first()
-            
-            if user and user.verify_password(password):
+            candidates = db.session.execute(stmt).scalars().all()
+            matched_users = [u for u in candidates if u and u.verify_password(password)]
+
+            if len(matched_users) > 1:
+                logger.warning(
+                    f"登录歧义冲突: 标识={identifier}, 候选数={len(candidates)}, 密码匹配数={len(matched_users)}"
+                )
+                flash('检测到登录标识冲突，请改用邮箱或手机号登录。', 'danger')
+                return render_template('auth/login.html', form=form)
+
+            user = matched_users[0] if len(matched_users) == 1 else None
+
+            if user:
                 # 检查用户是否激活
                 if not user.active:
                     flash('账号尚未通过邮箱验证，请先完成邮箱验证。', 'warning')
@@ -467,14 +573,10 @@ def login():
 
                 # 学生首次登录（尚未选择标签）强制进入标签选择页
                 try:
-                    if user.role and (user.role.name or '').strip().lower() == 'student':
-                        student_info = db.session.execute(
-                            db.select(StudentInfo).filter_by(user_id=user.id)
-                        ).scalar_one_or_none()
-                        if student_info and not getattr(student_info, 'has_selected_tags', False):
-                            return redirect(url_for('auth.select_tags'))
+                    if _student_needs_onboarding(user):
+                        return redirect(url_for('auth.select_tags'))
                 except Exception as e:
-                    logger.warning(f"检查标签选择状态失败，继续常规登录跳转: {e}")
+                    logger.warning(f"检查标签/社团选择状态失败，继续常规登录跳转: {e}")
                 
                 # 如果有next参数，则重定向到next页面
                 if next_page and next_page != 'None' and next_page != url_for('auth.login') and _is_safe_next_url(next_page):
@@ -627,7 +729,7 @@ def reset_password_with_token(token):
 
     current_fingerprint = (user.password_hash or '')[-24:]
     if token_data.get('ph') != current_fingerprint:
-        flash('该重置链接已失效或已被使用，请联系管理员重新发起重置。', 'danger')
+        flash('该重置链接已失效或已被使用，请重新提交邮箱重置申请。', 'danger')
         return redirect(url_for('auth.login'))
 
     form = ResetPasswordForm()
@@ -643,6 +745,45 @@ def reset_password_with_token(token):
             flash('重置密码失败，请稍后重试。', 'danger')
 
     return render_template('auth/reset_password_by_token.html', form=form, user=user)
+
+
+@auth_bp.route('/request-password-reset', methods=['POST'])
+@limiter.limit('8 per hour', methods=['POST'], error_message='请求过于频繁，请稍后再试')
+def request_password_reset():
+    try:
+        validate_csrf(request.form.get('csrf_token', ''))
+    except Exception:
+        flash('请求校验失败，请刷新后重试。', 'danger')
+        return redirect(url_for('auth.login'))
+
+    identifier = (request.form.get('identifier') or '').strip()
+    if not identifier:
+        flash('请输入注册邮箱或用户名。', 'warning')
+        return redirect(url_for('auth.login'))
+
+    user = db.session.execute(
+        db.select(User).outerjoin(StudentInfo, StudentInfo.user_id == User.id).where(
+            or_(
+                User.email == identifier,
+                User.username == identifier,
+                StudentInfo.student_id == identifier,
+                StudentInfo.phone == identifier
+            )
+        ).limit(1)
+    ).scalars().first()
+
+    # 安全策略：避免账号枚举，对外统一提示
+    generic_message = '如果账号存在且已完成邮箱验证，重置链接已发送到该账号邮箱，请查收。'
+
+    if user and user.email and user.active:
+        try:
+            _send_password_reset_email(user)
+            logger.info(f"已发送密码重置邮件: user_id={user.id}, email={user.email}")
+        except Exception as e:
+            logger.error(f"发送密码重置邮件失败: user_id={user.id}, error={e}", exc_info=True)
+
+    flash(generic_message, 'info')
+    return redirect(url_for('auth.login'))
 
 @auth_bp.route('/setup-admin', methods=['GET', 'POST'])
 def setup_admin():
@@ -773,6 +914,14 @@ def select_tags():
             societies = db.session.execute(db.select(Society).filter_by(is_active=True).order_by(Society.name.asc())).scalars().all()
             selected_society_ids = [int(sid) for sid in selected_societies if sid and str(sid).isdigit()]
             return render_template('auth/select_tags.html', tags=tags, societies=societies, selected_society_ids=selected_society_ids)
+
+        if not selected_societies:
+            flash('请至少选择一个社团', 'warning')
+            tags_stmt = db.select(Tag)
+            tags = db.session.execute(tags_stmt).scalars().all()
+            societies = db.session.execute(db.select(Society).filter_by(is_active=True).order_by(Society.name.asc())).scalars().all()
+            selected_tag_ids = [int(tid) for tid in selected_tags if tid and str(tid).isdigit()]
+            return render_template('auth/select_tags.html', tags=tags, selected_tag_ids=selected_tag_ids, societies=societies, selected_society_ids=[])
         
         # 清除现有标签
         student_info.tags = []

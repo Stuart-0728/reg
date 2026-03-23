@@ -280,6 +280,45 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = '{{ csrf_token() }}';
+    const textJobStatusUrlTemplate = '{{ url_for("admin.ai_text_job_status", job_id="__JOB_ID__") }}';
+
+    function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function pollTextJob(jobId, maxAttempts = 90, intervalMs = 1200) {
+        for (let i = 0; i < maxAttempts; i += 1) {
+            await sleep(intervalMs);
+            const statusUrl = textJobStatusUrlTemplate.replace('__JOB_ID__', encodeURIComponent(jobId));
+            let resp;
+            try {
+                resp = await fetch(statusUrl, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
+                });
+            } catch (e) {
+                continue;
+            }
+
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.message || `查询任务失败（${resp.status}）`);
+            }
+            if (!data.done) {
+                continue;
+            }
+            if (!data.success) {
+                throw new Error(data.message || '任务执行失败');
+            }
+            return data;
+        }
+        throw new Error('AI生成耗时较长，请稍后重试');
+    }
 
     async function postJson(url) {
         const resp = await fetch(url, {
@@ -321,19 +360,31 @@ document.addEventListener('DOMContentLoaded', function() {
     const aiRetroResult = document.getElementById('aiRetroResult');
     const aiClusterResultWrap = document.getElementById('aiClusterResultWrap');
     const aiRetroResultWrap = document.getElementById('aiRetroResultWrap');
+    let aiClusterInFlight = false;
+    let aiRetroInFlight = false;
 
     if (aiClusterSummaryBtn) {
         aiClusterSummaryBtn.addEventListener('click', async function() {
+            if (aiClusterInFlight) {
+                return;
+            }
+            aiClusterInFlight = true;
             const original = aiClusterSummaryBtn.innerHTML;
             aiClusterSummaryBtn.disabled = true;
-            aiClusterSummaryBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+            aiClusterSummaryBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>提交任务...';
             try {
-                const data = await postJson('{{ url_for("admin.ai_review_cluster_summary", id=activity.id) }}');
+                const task = await postJson('{{ url_for("admin.ai_review_cluster_summary_async", id=activity.id) }}');
+                if (!task || !task.job_id) {
+                    throw new Error('任务创建失败，请稍后重试');
+                }
+                aiClusterSummaryBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>分析中...';
+                const data = await pollTextJob(task.job_id);
                 aiClusterResult.textContent = data.summary || '暂无结果';
                 aiClusterResultWrap.style.display = '';
             } catch (e) {
                 alert(e.message || '生成失败');
             } finally {
+                aiClusterInFlight = false;
                 aiClusterSummaryBtn.disabled = false;
                 aiClusterSummaryBtn.innerHTML = original;
             }
@@ -342,16 +393,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (aiRetroReportBtn) {
         aiRetroReportBtn.addEventListener('click', async function() {
+            if (aiRetroInFlight) {
+                return;
+            }
+            aiRetroInFlight = true;
             const original = aiRetroReportBtn.innerHTML;
             aiRetroReportBtn.disabled = true;
-            aiRetroReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+            aiRetroReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>提交任务...';
             try {
-                const data = await postJson('{{ url_for("admin.ai_activity_retrospective_report", id=activity.id) }}');
+                const task = await postJson('{{ url_for("admin.ai_activity_retrospective_report_async", id=activity.id) }}');
+                if (!task || !task.job_id) {
+                    throw new Error('任务创建失败，请稍后重试');
+                }
+                aiRetroReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+                const data = await pollTextJob(task.job_id);
                 aiRetroResult.textContent = data.report || '暂无结果';
                 aiRetroResultWrap.style.display = '';
             } catch (e) {
                 alert(e.message || '生成失败');
             } finally {
+                aiRetroInFlight = false;
                 aiRetroReportBtn.disabled = false;
                 aiRetroReportBtn.innerHTML = original;
             }

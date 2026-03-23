@@ -100,14 +100,15 @@ function loadMarkedLibrary() {
         }
 
         const sources = [
-            'https://cdn.bootcdn.net/ajax/libs/marked/12.0.2/marked.min.js',
+            'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
+            'https://unpkg.com/marked/marked.min.js',
             'https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/marked/12.0.2/marked.min.js',
-            'https://cdn.jsdelivr.net/npm/marked/marked.min.js'
+            'https://cdn.bootcdn.net/ajax/libs/marked/12.0.2/marked.min.js'
         ];
 
         for (const src of sources) {
             try {
-                await loadScriptWithTimeout(src, 5000);
+                await loadScriptWithTimeout(src, 2500);
                 if (window.marked && typeof window.marked.parse === 'function') {
                     resolve(window.marked);
                     return;
@@ -375,10 +376,14 @@ class AIChatUI {
         this.session = session;
         this.isOpen = false;
         this.isProcessing = false;
+        this.historyLoaded = false;
+        this.historyLoading = false;
         this.container = null;
         this.messagesContainer = null;
         this.inputField = null;
         this.sendButton = null;
+        this.stopButton = null;
+        this.activeStream = null;
     }
     
     initialize() {
@@ -391,27 +396,63 @@ class AIChatUI {
         // 设置事件监听器
         this.setupEventListeners();
         
-        // 加载历史消息
-        if (isLoggedIn) {
-            this.session.loadMessagesFromServer()
-                .then(messages => {
-                    if (messages && messages.length > 0) {
-                        this.session.messages = messages;
-                        this.refreshMessages();
-                    } else {
-                        // 如果没有历史消息或加载失败，显示初始消息
-                        this.addMessageToUI(AI_CHAT_CONFIG.initialBotMessage, 'bot');
-                    }
-                })
-                .catch(error => {
-                    console.error('加载历史消息失败:', error);
-                    // 显示初始消息
-                    this.addMessageToUI(AI_CHAT_CONFIG.initialBotMessage, 'bot');
-                });
-        } else {
+        // 未登录用户直接显示初始消息；登录用户延迟到“首次打开聊天窗口”再加载历史，降低首屏阻塞。
+        if (!isLoggedIn) {
             // 未登录用户显示初始消息
             this.addMessageToUI(AI_CHAT_CONFIG.initialBotMessage, 'bot');
+            this.historyLoaded = true;
+            return;
         }
+
+        if (this.container && this.container.classList.contains('visible')) {
+            this.ensureHistoryLoaded();
+        } else {
+            this.addMessageToUI(AI_CHAT_CONFIG.initialBotMessage, 'bot');
+        }
+
+        this.ensureWelcomeMessageVisible();
+    }
+
+    ensureWelcomeMessageVisible() {
+        const currentMessages = this.session.getMessages();
+        const hasMessages = Array.isArray(currentMessages) && currentMessages.length > 0;
+        const hasUiMessages = this.messagesContainer && this.messagesContainer.children.length > 0;
+
+        if (!hasMessages && !hasUiMessages) {
+            this.addMessageToUI(AI_CHAT_CONFIG.initialBotMessage, 'bot');
+        }
+    }
+
+    ensureHistoryLoaded() {
+        if (this.historyLoaded || this.historyLoading) {
+            return;
+        }
+
+        const isLoggedIn = document.body.getAttribute('data-user-logged-in') === 'true';
+        if (!isLoggedIn) {
+            this.historyLoaded = true;
+            return;
+        }
+
+        this.historyLoading = true;
+        this.session.loadMessagesFromServer()
+            .then(messages => {
+                if (messages && messages.length > 0) {
+                    this.session.messages = messages;
+                    this.refreshMessages();
+                } else {
+                    this.ensureWelcomeMessageVisible();
+                }
+            })
+            .catch(error => {
+                console.error('加载历史消息失败:', error);
+                this.ensureWelcomeMessageVisible();
+            })
+            .finally(() => {
+                this.historyLoaded = true;
+                this.historyLoading = false;
+                this.ensureWelcomeMessageVisible();
+            });
     }
     
     // 刷新消息显示
@@ -428,15 +469,55 @@ class AIChatUI {
         // 滚动到最新消息
         this.scrollToBottom();
     }
+
+    bindTapOrClick(element, handler) {
+        if (!element || typeof handler !== 'function') {
+            return;
+        }
+
+        let lastTouchTriggerAt = 0;
+        const invoke = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handler();
+        };
+
+        if (window.PointerEvent) {
+            element.addEventListener('pointerup', (e) => {
+                if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+                    lastTouchTriggerAt = Date.now();
+                    invoke(e);
+                }
+            }, { passive: false });
+        } else {
+            element.addEventListener('touchend', (e) => {
+                lastTouchTriggerAt = Date.now();
+                invoke(e);
+            }, { passive: false });
+        }
+
+        element.addEventListener('click', (e) => {
+            if (Date.now() - lastTouchTriggerAt < 450) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            invoke(e);
+        });
+    }
     
     // 设置事件监听器
     setupEventListeners() {
         // 发送按钮点击事件
         if (this.sendButton) {
-            this.sendButton.addEventListener('click', (e) => {
-                e.preventDefault(); // 防止表单提交
-                e.stopPropagation(); // 阻止事件冒泡
+            this.bindTapOrClick(this.sendButton, () => {
                 this.sendMessage();
+            });
+        }
+
+        if (this.stopButton) {
+            this.bindTapOrClick(this.stopButton, () => {
+                this.stopStreaming('已停止生成。');
             });
         }
         
@@ -452,7 +533,7 @@ class AIChatUI {
         
         // 切换聊天窗口按钮事件
         if (this.toggleButton) {
-            this.toggleButton.addEventListener('click', () => {
+            this.bindTapOrClick(this.toggleButton, () => {
                 // 防止快速多次点击
                 if (this.isToggling) return;
                 this.toggleChat();
@@ -462,9 +543,7 @@ class AIChatUI {
         // 添加关闭按钮事件监听
         const closeButton = document.getElementById('aiChatCloseBtn');
         if (closeButton) {
-            closeButton.addEventListener('click', (e) => {
-                e.preventDefault(); // 防止表单提交
-                e.stopPropagation(); // 阻止事件冒泡
+            this.bindTapOrClick(closeButton, () => {
                 this.closeChat();
             });
         }
@@ -499,6 +578,7 @@ class AIChatUI {
         
         this.session.isOpen = true;
         this.session.setCookie('chat_open', 'true', AI_CHAT_CONFIG.cookieExpireDays);
+        this.ensureHistoryLoaded();
         
         // 滚动到最新消息
         setTimeout(() => {
@@ -544,6 +624,8 @@ class AIChatUI {
     
     // 接收AI响应
     receiveAIResponse(userMessage) {
+        this.stopStreaming();
+
         // 创建AI消息容器
         const aiMessageDiv = document.createElement('div');
         aiMessageDiv.className = 'ai-message bot';
@@ -569,51 +651,112 @@ class AIChatUI {
         const role = 'student'; // 默认角色，可扩展
         const eventSource = new EventSource(`/utils/api/ai_chat?message=${encodeURIComponent(userMessage)}&role=${role}&session_id=${this.session.sessionId}`);
         
-        // 超时控制：若15秒内未收到数据则终止并提示
-        const TIMEOUT_MS = 15000;
-        const timeoutHandle = setTimeout(() => {
-            try { eventSource.close(); } catch (e) {}
-            aiMessageDiv.textContent = '响应超时，请稍后再试。';
+        // 超时控制：分“首包超时”和“流式空闲超时”两段，避免长回答被误判中断
+        const FIRST_TOKEN_TIMEOUT_MS = 120000;
+        const STREAM_IDLE_TIMEOUT_MS = 240000;
+        let timeoutHandle = null;
+        let hasReceivedToken = false;
+
+        const streamState = {
+            eventSource,
+            aiMessageDiv,
+            timeoutHandle: null,
+            fullResponse: '',
+            manuallyStopped: false,
+            finalized: false
+        };
+        this.activeStream = streamState;
+
+        const finalizeStream = (noteText) => {
+            if (streamState.finalized) {
+                return;
+            }
+            streamState.finalized = true;
+
+            if (streamState.timeoutHandle) {
+                clearTimeout(streamState.timeoutHandle);
+                streamState.timeoutHandle = null;
+            }
+
+            try {
+                streamState.eventSource.close();
+            } catch (e) {
+                // noop
+            }
+
+            const finalText = streamState.fullResponse || '';
+            if (finalText) {
+                this.session.addMessage(finalText, 'assistant');
+                this.session.saveMessagesToCookie();
+
+                if (noteText) {
+                    const note = document.createElement('div');
+                    note.className = 'text-muted small mt-2';
+                    note.textContent = noteText;
+                    streamState.aiMessageDiv.appendChild(note);
+                }
+            } else if (!hasError && !streamState.manuallyStopped) {
+                streamState.aiMessageDiv.textContent = '抱歉，AI没有返回响应。请重试。';
+            }
+
+            this.activeStream = null;
             this.disableInput(false);
             this.inputField.focus();
-        }, TIMEOUT_MS);
+        };
+
+        const armIdleTimeout = () => {
+            if (streamState.timeoutHandle) {
+                clearTimeout(streamState.timeoutHandle);
+            }
+
+            const timeoutMs = hasReceivedToken ? STREAM_IDLE_TIMEOUT_MS : FIRST_TOKEN_TIMEOUT_MS;
+            streamState.timeoutHandle = setTimeout(() => {
+                streamState.manuallyStopped = true;
+                if (streamState.fullResponse) {
+                    finalizeStream('响应中断：等待模型继续输出超时，请稍后重试。');
+                } else {
+                    streamState.aiMessageDiv.textContent = '响应超时，请稍后再试。';
+                    finalizeStream();
+                }
+            }, timeoutMs);
+        };
+        armIdleTimeout();
         
         // 完整的AI响应文本
-        let fullResponse = '';
         let hasError = false;
-        let retryCount = 0;
-        const MAX_RETRIES = 2;
         
         // 处理消息
         eventSource.onmessage = (event) => {
             try {
+                armIdleTimeout();
                 const data = JSON.parse(event.data);
                 if (data.error) {
                     hasError = true;
                     aiMessageDiv.textContent = `错误: ${data.error}`;
-                    eventSource.close();
-                    this.disableInput(false);
-                    this.inputField.focus();
+                    finalizeStream();
                 } else if (data.content) {
+                    hasReceivedToken = true;
+                    armIdleTimeout();
+
                     // 移除加载指示器
-                    if (fullResponse === '') {
+                    if (streamState.fullResponse === '') {
                         aiMessageDiv.innerHTML = '';
                     }
                     
-                    fullResponse += data.content;
+                    streamState.fullResponse += data.content;
                     
                     // 使用Markdown渲染响应
                     if (window.marked) {
-                        aiMessageDiv.innerHTML = window.marked.parse(fullResponse);
+                        aiMessageDiv.innerHTML = window.marked.parse(streamState.fullResponse);
                     } else {
                         // 如果marked未加载，尝试加载
                         loadMarkedLibrary()
                             .then(marked => {
-                                aiMessageDiv.innerHTML = marked.parse(fullResponse);
+                                aiMessageDiv.innerHTML = marked.parse(streamState.fullResponse);
                             })
                             .catch(err => {
                                 console.error('Markdown渲染失败:', err);
-                                aiMessageDiv.textContent = fullResponse;
+                                aiMessageDiv.textContent = streamState.fullResponse;
                             });
                     }
                     
@@ -632,50 +775,70 @@ class AIChatUI {
                 console.error('解析AI响应失败:', e);
             }
         };
+
+        eventSource.addEventListener('status', () => {
+            armIdleTimeout();
+        });
         
         // 处理结束
         eventSource.addEventListener('done', () => {
-            clearTimeout(timeoutHandle);
-            eventSource.close();
-            
-            // 存储AI响应到会话
-            if (fullResponse) {
-                this.session.addMessage(fullResponse, 'assistant');
-                // 备份到Cookie
-                this.session.saveMessagesToCookie();
-            } else if (!hasError) {
-                // 如果没有响应但也没有错误，显示一个提示
-                aiMessageDiv.textContent = '抱歉，AI没有返回响应。请重试。';
-            }
-            
-            this.disableInput(false);
-            this.inputField.focus();
+            finalizeStream();
         });
         
         // 处理错误
         eventSource.onerror = () => {
-            clearTimeout(timeoutHandle);
-            eventSource.close();
-            
-            if (retryCount < MAX_RETRIES && !hasError && !fullResponse) {
-                // 尝试重新连接
-                retryCount++;
-                aiMessageDiv.innerHTML = `<span class="loading-indicator">连接中断，正在重试 (${retryCount}/${MAX_RETRIES})<span class="dot-animation">...</span></span>`;
-                
-                setTimeout(() => {
-                    // 重新创建连接
-                    this.receiveAIResponse(userMessage);
-                }, 1000 * retryCount); // 逐步增加重试间隔
-                
+            if (streamState.manuallyStopped) {
                 return;
             }
             
-            if (!aiMessageDiv.textContent || aiMessageDiv.textContent.includes('AI思考中') || aiMessageDiv.textContent.includes('连接中断')) {
+            if (!streamState.fullResponse) {
                 aiMessageDiv.textContent = '抱歉，服务出现错误，请稍后再试。';
+                finalizeStream();
+                return;
             }
-            this.disableInput(false);
-            this.inputField.focus();
+
+            finalizeStream('连接中断：已保留已生成内容。');
         };
+    }
+
+    stopStreaming(noteText) {
+        const streamState = this.activeStream;
+        if (!streamState) {
+            return;
+        }
+
+        streamState.manuallyStopped = true;
+        if (streamState.timeoutHandle) {
+            clearTimeout(streamState.timeoutHandle);
+            streamState.timeoutHandle = null;
+        }
+
+        try {
+            streamState.eventSource.close();
+        } catch (e) {
+            // noop
+        }
+
+        if (!streamState.finalized) {
+            streamState.finalized = true;
+            const finalText = streamState.fullResponse || '';
+            if (finalText) {
+                this.session.addMessage(finalText, 'assistant');
+                this.session.saveMessagesToCookie();
+            }
+            if (noteText) {
+                const note = document.createElement('div');
+                note.className = 'text-muted small mt-2';
+                note.textContent = noteText;
+                streamState.aiMessageDiv.appendChild(note);
+            }
+        }
+
+        this.activeStream = null;
+        this.disableInput(false);
+        if (this.inputField) {
+            this.inputField.focus();
+        }
     }
     
     // 添加消息到UI
@@ -734,7 +897,14 @@ class AIChatUI {
     // 禁用/启用输入
     disableInput(disabled) {
         if (this.inputField) this.inputField.disabled = disabled;
-        if (this.sendButton) this.sendButton.disabled = disabled;
+        if (this.sendButton) {
+            this.sendButton.disabled = disabled;
+            this.sendButton.style.display = disabled ? 'none' : 'inline-flex';
+        }
+        if (this.stopButton) {
+            this.stopButton.disabled = !disabled;
+            this.stopButton.style.display = disabled ? 'inline-flex' : 'none';
+        }
     }
 
     // 创建聊天界面
@@ -749,7 +919,16 @@ class AIChatUI {
         this.messagesContainer = document.getElementById('aiChatMessages');
         this.inputField = document.getElementById('aiChatInput');
         this.sendButton = document.getElementById('aiSendButton');
+        this.stopButton = document.getElementById('aiStopButton');
         this.toggleButton = document.querySelector('.ai-chat-button');
+
+        if (this.stopButton) {
+            this.stopButton.disabled = true;
+            this.stopButton.style.display = 'none';
+        }
+        if (this.sendButton) {
+            this.sendButton.style.display = 'inline-flex';
+        }
         
         // 恢复聊天窗口状态
         const isOpen = this.session.getCookie('chat_open') === 'true';
@@ -769,10 +948,19 @@ class AIChatUI {
 }
 
 // 初始化
-document.addEventListener('DOMContentLoaded', () => {
-    // 检查是否已经加载过marked库
+function bootstrapAIChat() {
+    if (window.__aiChatBootstrapped) {
+        return;
+    }
+    window.__aiChatBootstrapped = true;
+
+    // 延后预热Markdown解析库，优先保证页面交互就绪。
     if (!window.marked) {
-        loadMarkedLibrary();
+        if (window.requestIdleCallback) {
+            window.requestIdleCallback(() => loadMarkedLibrary(), { timeout: 2000 });
+        } else {
+            setTimeout(() => loadMarkedLibrary(), 1200);
+        }
     }
     
     // 创建聊天会话实例
@@ -783,6 +971,93 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 初始化UI
     chatUI.initialize();
+
+    async function refreshCsrfToken() {
+        const response = await fetch('/utils/csrf_token', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
+        });
+
+        if (!response.ok) {
+            throw new Error(`刷新安全令牌失败 (${response.status})`);
+        }
+
+        const data = await response.json();
+        if (!data || !data.success || !data.csrf_token) {
+            throw new Error('刷新安全令牌失败：响应异常');
+        }
+
+        let tokenMeta = document.querySelector('meta[name="csrf-token"]');
+        if (!tokenMeta) {
+            tokenMeta = document.createElement('meta');
+            tokenMeta.setAttribute('name', 'csrf-token');
+            document.head.appendChild(tokenMeta);
+        }
+        tokenMeta.setAttribute('content', data.csrf_token);
+        return data.csrf_token;
+    }
+
+    async function postJsonWithCsrfRetry(url, bodyObject, csrfToken, retries = 1) {
+        let token = csrfToken || chatSession.getCsrfToken();
+
+        for (let attempt = 0; attempt <= retries; attempt += 1) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRFToken': token,
+                    'X-CSRF-Token': token,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(bodyObject || {}),
+                credentials: 'same-origin'
+            });
+
+            if (response.ok) {
+                return response.json();
+            }
+
+            const rawText = await response.text();
+            let errorMessage = rawText;
+            try {
+                const parsed = JSON.parse(rawText);
+                if (parsed && parsed.message) {
+                    errorMessage = parsed.message;
+                }
+            } catch (_) {
+                // 保持原始文本
+            }
+
+            const isCsrfFailure = response.status === 400 && String(errorMessage).includes('安全验证失败');
+            if (isCsrfFailure && attempt < retries) {
+                token = await refreshCsrfToken();
+                continue;
+            }
+
+            throw new Error(`请求失败 (${response.status}): ${String(errorMessage).substring(0, 120)}`);
+        }
+
+        throw new Error('请求失败：超过重试次数');
+    }
+
+    async function getFreshCsrfToken() {
+        try {
+            return await refreshCsrfToken();
+        } catch (e) {
+            console.warn('主动刷新CSRF令牌失败，回退使用当前页面令牌:', e);
+            const fallbackToken = chatSession.getCsrfToken();
+            if (!fallbackToken) {
+                throw e;
+            }
+            return fallbackToken;
+        }
+    }
     
     // 将实例保存到全局变量
     window.aiChat = {
@@ -806,30 +1081,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            // 获取CSRF令牌
-            const csrfToken = chatSession.getCsrfToken();
-            console.log("当前CSRF令牌:", csrfToken);
-            
-            // 先发送清除请求到后端
-            fetch(`/utils/ai_chat/clear?session_id=${chatSession.sessionId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken,
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify({ session_id: chatSession.sessionId }),
-                credentials: 'same-origin' // 确保包含Cookie
-            })
-            .then(response => {
-                console.log("响应状态:", response.status, response.statusText);
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        console.error("响应详情:", text);
-                        throw new Error(`清除历史记录失败 (${response.status}): ${text.substring(0, 100)}`);
-                    });
-                }
-                return response.json();
+            getFreshCsrfToken()
+            .then(csrfToken => {
+                console.log("当前CSRF令牌:", csrfToken);
+                return postJsonWithCsrfRetry(
+                    `/utils/ai_chat/clear?session_id=${chatSession.sessionId}`,
+                    { session_id: chatSession.sessionId },
+                    csrfToken,
+                    1
+                );
             })
             .then(data => {
                 console.log('清除历史记录成功:', data);
@@ -881,20 +1141,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            // 获取CSRF令牌
-            const csrfToken = chatSession.getCsrfToken();
-            console.log("当前CSRF令牌:", csrfToken);
-            
-            if (!csrfToken) {
-                console.error("无法获取CSRF令牌");
-                if (typeof showToast === 'function') {
-                    showToast("无法获取安全令牌，请刷新页面后重试", "error");
-                } else {
-                    alert("无法获取安全令牌，请刷新页面后重试");
-                }
-                return;
-            }
-            
             // 显示加载提示
             const originalButtonText = document.querySelector('.clear-history-btn') ? 
                                       document.querySelector('.clear-history-btn').innerHTML : 
@@ -904,31 +1150,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelector('.clear-history-btn').disabled = true;
             }
             
-            // 发送清除所有历史的请求到后端（使用表单编码，避免部分代理对JSON请求体处理异常）
-            const payload = new URLSearchParams();
-            payload.set('csrf_token', csrfToken);
-            payload.set('session_id', chatSession.sessionId || '');
-
-            fetch('/utils/ai_chat/clear_history', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRFToken': csrfToken,
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify({ csrf_token: csrfToken, session_id: chatSession.sessionId || '' }),
-                credentials: 'same-origin' // 确保包含Cookie
-            })
-            .then(response => {
-                console.log("响应状态:", response.status, response.statusText);
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        console.error("响应详情:", text);
-                        throw new Error(`清除历史记录失败 (${response.status}): ${text.substring(0, 100)}`);
-                    });
-                }
-                return response.json();
+            getFreshCsrfToken()
+            .then(csrfToken => {
+                console.log("当前CSRF令牌:", csrfToken);
+                return postJsonWithCsrfRetry(
+                    '/utils/ai_chat/clear_history',
+                    { csrf_token: csrfToken, session_id: chatSession.sessionId || '' },
+                    csrfToken,
+                    1
+                );
             })
             .then(data => {
                 console.log('清除所有历史记录成功:', data);
@@ -972,7 +1202,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         },
         
-        // 获取协会信息
+        // 获取平台信息
         getAssociationInfo: () => ASSOCIATION_INFO,
         
         // 设置初始消息
@@ -980,10 +1210,21 @@ document.addEventListener('DOMContentLoaded', () => {
             AI_CHAT_CONFIG.initialBotMessage = message;
         }
     };
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrapAIChat);
+} else {
+    bootstrapAIChat();
+}
 
 // 添加样式
-document.addEventListener('DOMContentLoaded', () => {
+function injectAIChatStyles() {
+    if (window.__aiChatStylesInjected) {
+        return;
+    }
+    window.__aiChatStylesInjected = true;
+
     // 创建样式元素
     const style = document.createElement('style');
     style.textContent = `
@@ -1041,4 +1282,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     `;
     document.head.appendChild(style);
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectAIChatStyles);
+} else {
+    injectAIChatStyles();
+}

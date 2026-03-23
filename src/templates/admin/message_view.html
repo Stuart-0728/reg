@@ -101,13 +101,58 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!aiReplyBtn) return;
 
     const csrfToken = '{{ csrf_token() }}';
+    const textJobStatusUrlTemplate = '{{ url_for("admin.ai_text_job_status", job_id="__JOB_ID__") }}';
+    let aiReplyInFlight = false;
+
+    function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function pollTextJob(jobId, maxAttempts = 90, intervalMs = 1200) {
+        for (let i = 0; i < maxAttempts; i += 1) {
+            await sleep(intervalMs);
+            const statusUrl = textJobStatusUrlTemplate.replace('__JOB_ID__', encodeURIComponent(jobId));
+            let resp;
+            try {
+                resp = await fetch(statusUrl, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
+                });
+            } catch (e) {
+                continue;
+            }
+
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                throw new Error(data.message || `查询任务失败（${resp.status}）`);
+            }
+            if (!data.done) {
+                continue;
+            }
+            if (!data.success) {
+                throw new Error(data.message || '任务执行失败');
+            }
+            return data;
+        }
+        throw new Error('AI生成耗时较长，请稍后重试');
+    }
+
     aiReplyBtn.addEventListener('click', async function() {
+        if (aiReplyInFlight) {
+            return;
+        }
+        aiReplyInFlight = true;
         const original = aiReplyBtn.innerHTML;
         aiReplyBtn.disabled = true;
-        aiReplyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+        aiReplyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>提交任务...';
 
         try {
-            const resp = await fetch('{{ url_for("admin.ai_generate_message_reply_draft", id=message.id) }}', {
+            const resp = await fetch('{{ url_for("admin.ai_generate_message_reply_draft_async", id=message.id) }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -120,14 +165,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(data.message || '生成失败');
             }
 
-            const receiverId = encodeURIComponent(data.receiver_id || '');
-            const subject = encodeURIComponent(data.reply_subject || '回复：你的反馈');
-            const content = encodeURIComponent(data.reply_content || '');
+            if (!data.job_id) {
+                throw new Error('任务创建失败，请稍后重试');
+            }
+
+            aiReplyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>生成中...';
+            const result = await pollTextJob(data.job_id);
+
+            const receiverId = encodeURIComponent(result.receiver_id || '');
+            const subject = encodeURIComponent(result.reply_subject || '回复：你的反馈');
+            const content = encodeURIComponent(result.reply_content || '');
             const targetUrl = `{{ url_for('admin.create_message') }}?receiver_id=${receiverId}&subject=${subject}&content=${content}`;
             window.location.href = targetUrl;
         } catch (error) {
             alert(error.message || '生成失败');
         } finally {
+            aiReplyInFlight = false;
             aiReplyBtn.disabled = false;
             aiReplyBtn.innerHTML = original;
         }

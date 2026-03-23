@@ -120,9 +120,16 @@
             <p class="text-muted">管理系统中注册的学生用户</p>
         </div>
         <div class="col-md-4 text-end">
-            <a href="{{ url_for('admin.export_students') }}" class="btn btn-success" id="exportBtn" data-no-global-loading="true">
-                <i class="fas fa-file-excel me-2"></i>导出学生信息
-            </a>
+            <div class="d-flex flex-wrap gap-2 justify-content-md-end justify-content-start">
+                <a href="{{ url_for('admin.export_students') }}" class="btn btn-success" id="exportBtn" data-no-global-loading="true">
+                    <i class="fas fa-file-excel me-2"></i>导出学生信息
+                </a>
+                {% if current_user.is_super_admin %}
+                <a href="{{ url_for('admin.export_society_admins') }}" class="btn btn-outline-primary" id="exportSocietyAdminsBtn" data-no-global-loading="true">
+                    <i class="fas fa-user-shield me-2"></i>导出社团管理员信息
+                </a>
+                {% endif %}
+            </div>
         </div>
     </div>
     
@@ -159,20 +166,18 @@
                         <col style="width: 180px;">
                         <col style="width: 110px;">
                         <col style="width: 140px;">
-                        <col style="width: 130px;">
                         <col style="width: 90px;">
                         <col style="width: 220px;">
                     </colgroup>
                     <thead class="table-light">
                         <tr>
-                            <th>ID</th>
+                            <th>排序</th>
                             <th>姓名</th>
                             <th>学号</th>
                             <th>年级</th>
                             <th>学院</th>
                             <th>专业</th>
                             <th>QQ</th>
-                            <th>标签状态</th>
                             <th>积分</th>
                             <th class="action-col">操作</th>
                         </tr>
@@ -180,20 +185,13 @@
                     <tbody>
                         {% for student in students.items %}
                         <tr>
-                            <td>{{ student.id }}</td>
+                            <td>{{ (students.page - 1) * students.per_page + loop.index }}</td>
                             <td class="fw-medium"><span class="cell-ellipsis" title="{{ student.real_name }}">{{ student.real_name }}</span></td>
                             <td><span class="cell-ellipsis" title="{{ student.student_id }}">{{ student.student_id }}</span></td>
                             <td><span class="cell-ellipsis" title="{{ student.grade }}">{{ student.grade }}</span></td>
                             <td><span class="cell-ellipsis" title="{{ student.college }}">{{ student.college }}</span></td>
                             <td><span class="cell-ellipsis" title="{{ student.major }}">{{ student.major }}</span></td>
                             <td><span class="cell-ellipsis" title="{{ student.qq or '-' }}">{{ student.qq or '-' }}</span></td>
-                            <td>
-                                {% if student.has_selected_tags %}
-                                <span class="badge bg-success">已选择</span>
-                                {% else %}
-                                <span class="badge bg-warning">未选择</span>
-                                {% endif %}
-                            </td>
                             <td>
                                 <span class="badge bg-light text-dark border rounded-pill">{{ student.points or 0 }}</span>
                             </td>

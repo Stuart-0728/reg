@@ -2,6 +2,11 @@
 
 {% block title %}{{ activity.title }} - 活动详情 - 重庆师范大学智能社团+{% endblock %}
 
+{% block styles %}
+{{ super() }}
+<link href="https://cdn.bootcdn.net/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css" rel="stylesheet">
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="row">
@@ -64,7 +69,7 @@
                                             </div>
                                             
                                             {% if activity.start_time and safe_greater_than(activity.start_time, now) %}
-                                                <button type="button" class="btn btn-outline-danger w-100" id="cancelBtn">
+                                                <button type="button" class="btn btn-outline-danger w-100" id="cancelBtn" data-no-loading="true" data-no-global-loading="true">
                                                     <i class="fas fa-times-circle me-2"></i> 取消报名
                                                 </button>
                                             {% endif %}
@@ -74,7 +79,7 @@
                                                 <p class="small mb-0">截止时间：{{ display_datetime(activity.registration_deadline, 'Asia/Shanghai') }}</p>
                                             </div>
                                             
-                                            <button type="button" class="btn btn-primary w-100" id="registerBtn">
+                                            <button type="button" class="btn btn-primary w-100" id="registerBtn" data-no-loading="true" data-no-global-loading="true">
                                                 <i class="fas fa-user-plus me-2"></i> 立即报名
                                             </button>
                                         {% else %}
@@ -97,7 +102,7 @@
                                                     <p class="small mb-0">可重新报名</p>
                                                 </div>
                                                 
-                                                <button type="button" class="btn btn-outline-primary w-100" id="reregisterBtn">
+                                                <button type="button" class="btn btn-outline-primary w-100" id="reregisterBtn" data-no-loading="true" data-no-global-loading="true">
                                                     <i class="fas fa-redo me-2"></i> 重新报名
                                                 </button>
                                             {% endif %}
@@ -261,28 +266,51 @@ document.addEventListener('DOMContentLoaded', function() {
     const reregisterBtn = document.getElementById('reregisterBtn');
     const cancelBtn = document.getElementById('cancelBtn');
     const csrfToken = "{{ csrf_token() }}";
+    let actionInFlight = false;
+
+    function setButtonBusy(button, busy, text) {
+        if (!button) return;
+        if (busy) {
+            if (!button.dataset.originalHtml) {
+                button.dataset.originalHtml = button.innerHTML;
+            }
+            button.disabled = true;
+            button.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>${text || '处理中...'}`;
+        } else {
+            button.disabled = false;
+            if (button.dataset.originalHtml) {
+                button.innerHTML = button.dataset.originalHtml;
+            }
+        }
+    }
 
     if (registerBtn) {
         registerBtn.addEventListener('click', function() {
-            handleRegistration('{{ url_for("student.register_activity", id=activity.id) }}', '报名');
+            handleRegistration('{{ url_for("student.register_activity", id=activity.id) }}', '报名', registerBtn);
         });
     }
 
     if (reregisterBtn) {
         reregisterBtn.addEventListener('click', function() {
-            handleRegistration('{{ url_for("student.register_activity", id=activity.id) }}', '重新报名');
+            handleRegistration('{{ url_for("student.register_activity", id=activity.id) }}', '重新报名', reregisterBtn);
         });
     }
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', function() {
             if (confirm('确定要取消报名吗？')) {
-                handleRegistration('{{ url_for("student.cancel_registration", id=activity.id) }}', '取消报名');
+                handleRegistration('{{ url_for("student.cancel_registration", id=activity.id) }}', '取消报名', cancelBtn);
             }
         });
     }
 
-    function handleRegistration(url, action) {
+    function handleRegistration(url, action, triggerBtn) {
+        if (actionInFlight) {
+            return;
+        }
+        actionInFlight = true;
+        setButtonBusy(triggerBtn, true, `${action}中...`);
+
         fetch(url, {
             method: 'POST',
             headers: {
@@ -304,11 +332,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 }, 1500);
             } else {
                 showToast(data.message, 'error');
+                actionInFlight = false;
+                setButtonBusy(triggerBtn, false);
             }
         })
         .catch(error => {
             console.error('Error:', error);
             showToast('发生错误，请稍后重试', 'error');
+            actionInFlight = false;
+            setButtonBusy(triggerBtn, false);
         });
     }
 });

@@ -4,7 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import json
 import pytz
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Float, Table, func, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Date, ForeignKey, Float, Table, func, UniqueConstraint, Index
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 from src import db
@@ -461,3 +461,23 @@ class AIUserPreferences(db.Model):
     
     def __repr__(self):
         return f'<AIUserPreferences {self.user_id}>'
+
+
+class WeatherDailyCache(db.Model):
+    __tablename__ = 'weather_daily_cache'
+    id = Column(Integer, primary_key=True)
+    city_adcode = Column(String(16), nullable=False, index=True)
+    weather_date = Column(Date, nullable=False, index=True)
+    extensions = Column(String(16), nullable=False, default='base')
+    payload = Column(Text, nullable=False)
+    source = Column(String(32), default='unknown')
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('city_adcode', 'weather_date', 'extensions', name='uq_weather_daily_cache_city_date_ext'),
+        Index('idx_weather_daily_cache_city_date', 'city_adcode', 'weather_date'),
+    )
+
+    def __repr__(self):
+        return f'<WeatherDailyCache {self.city_adcode} {self.weather_date} {self.extensions}>'

@@ -198,7 +198,8 @@ class Config:
     CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_TIMEOUT', 300))
     
     # Flask-Limiter配置
-    RATELIMIT_STORAGE_URL = _redis_url if _redis_url else "memory://"
+    RATELIMIT_STORAGE_URI = _redis_url if _redis_url else "memory://"
+    RATELIMIT_STORAGE_URL = RATELIMIT_STORAGE_URI
     RATELIMIT_DEFAULT = "200 per day, 50 per hour"
     RATELIMIT_STRATEGY = 'fixed-window'
     
@@ -212,6 +213,8 @@ class Config:
     # AI API配置
     VOLCANO_API_KEY = os.environ.get('VOLCANO_API_KEY', os.environ.get('ARK_API_KEY', ''))
     VOLCANO_API_URL = os.environ.get('VOLCANO_API_URL', 'https://ark.cn-beijing.volces.com/api/v3/chat/completions')
+    # 文本模型统一配置（悬浮窗AI对话、后台AI文案/解析共用）
+    AI_TEXT_MODEL = os.environ.get('AI_TEXT_MODEL', 'ep-20260320185026-9cc4w')
     
     # 应用时区配置
     APP_TIMEZONE = os.environ.get('APP_TIMEZONE') or 'Asia/Shanghai'
@@ -227,8 +230,19 @@ class Config:
     
     # AI聊天功能配置
     AI_CHAT_ENABLED = True
+    AI_CHAT_CONNECT_TIMEOUT = float(os.environ.get('AI_CHAT_CONNECT_TIMEOUT', 10))
+    AI_CHAT_READ_TIMEOUT = float(os.environ.get('AI_CHAT_READ_TIMEOUT', 180))
 
     # 邮件配置（用于邮箱验证、通知）
+    MAIL_PRIMARY_SERVER = os.environ.get('MAIL_PRIMARY_SERVER', 'smtp.mailersend.net')
+    MAIL_PRIMARY_PORT = int(os.environ.get('MAIL_PRIMARY_PORT', 587))
+    MAIL_PRIMARY_USE_TLS = os.environ.get('MAIL_PRIMARY_USE_TLS', 'true').lower() == 'true'
+    MAIL_PRIMARY_USE_SSL = os.environ.get('MAIL_PRIMARY_USE_SSL', 'false').lower() == 'true'
+    MAIL_PRIMARY_USERNAME = os.environ.get('MAIL_PRIMARY_USERNAME', '')
+    MAIL_PRIMARY_PASSWORD = os.environ.get('MAIL_PRIMARY_PASSWORD', '')
+    MAIL_PRIMARY_DEFAULT_SENDER = os.environ.get('MAIL_PRIMARY_DEFAULT_SENDER', MAIL_PRIMARY_USERNAME)
+
+    # 备用通道（沿用现有配置）
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.qq.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'

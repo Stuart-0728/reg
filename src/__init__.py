@@ -86,6 +86,12 @@ def create_app(config_name=None):
     
     limiter.init_app(app)
     cache.init_app(app)
+
+    limiter_storage = app.config.get('RATELIMIT_STORAGE_URI') or app.config.get('RATELIMIT_STORAGE_URL')
+    if limiter_storage:
+        app.logger.info(f"Flask-Limiter storage backend: {limiter_storage}")
+        if str(limiter_storage).startswith('memory://'):
+            app.logger.warning("当前限流后端为内存存储，生产并发场景建议配置REDIS_URL")
     
     # 配置登录管理器
     login_manager.login_view = 'auth.login'
@@ -185,6 +191,8 @@ def create_app(config_name=None):
 
             if is_dynamic_route or 'text/html' in content_type:
                 response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0'
+                response.headers['CDN-Cache-Control'] = 'no-store'
+                response.headers['Surrogate-Control'] = 'no-store'
                 response.headers['Pragma'] = 'no-cache'
                 response.headers['Expires'] = '0'
 
@@ -198,6 +206,8 @@ def create_app(config_name=None):
 
             if current_user.is_authenticated and 'text/html' in content_type:
                 response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+                response.headers['CDN-Cache-Control'] = 'no-store'
+                response.headers['Surrogate-Control'] = 'no-store'
 
             # 公共JSON接口允许短期边缘缓存，提升高并发命中率
             public_edge_paths = {

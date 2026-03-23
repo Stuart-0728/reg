@@ -1,7 +1,66 @@
 // 主要JavaScript功能
 document.addEventListener('DOMContentLoaded', function() {
-    // 先和服务端核对一次登录态，修复移动端偶发的缓存错位显示
-    syncLoginStateFromServer();
+    const pathname = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
+
+    const runNonCritical = (fn, timeout = 800) => {
+        if (window.requestIdleCallback) {
+            window.requestIdleCallback(() => {
+                try {
+                    fn();
+                } catch (_) {}
+            }, { timeout });
+            return;
+        }
+        setTimeout(() => {
+            try {
+                fn();
+            } catch (_) {}
+        }, Math.min(timeout, 1200));
+    };
+
+    const routeFlags = {
+        isHome: pathname === '/',
+        isAbout: pathname === '/about',
+        isAuth: pathname.startsWith('/auth'),
+        isAdmin: pathname.startsWith('/admin'),
+        isStudent: pathname.startsWith('/student'),
+        isEducation: pathname.startsWith('/education'),
+        isMainActivityDetail: /^\/activity\/\d+$/.test(pathname),
+        isStudentActivityDetail: /^\/student\/activity\/\d+$/.test(pathname)
+    };
+
+    const routeScopes = {
+        publicSite: routeFlags.isHome || routeFlags.isAbout || routeFlags.isEducation || routeFlags.isMainActivityDetail,
+        auth: routeFlags.isAuth,
+        admin: routeFlags.isAdmin,
+        student: routeFlags.isStudent,
+        activityDetail: routeFlags.isMainActivityDetail || routeFlags.isStudentActivityDetail,
+    };
+
+    const pageFlags = {
+        hasLoginLink: document.querySelector('a[href="/auth/login"]') !== null,
+        hasTooltip: document.querySelector('[data-bs-toggle="tooltip"]') !== null,
+        hasChartCanvas: document.querySelector('#registrationChart, #collegeChart, #activityChart') !== null,
+        hasAttendanceCheckin: document.getElementById('checkinForm') !== null,
+        hasSearchForm: document.querySelector('form[data-search-form]') !== null,
+        hasScrollableTable: document.querySelector('table.table-cell-scroll') !== null,
+        hasStickyActionTable: document.querySelector('.table-responsive table') !== null,
+        hasInlineNotificationBanner: document.querySelector('.notification-banner') !== null,
+        hasDeleteConfirm: document.querySelector('.delete-confirm') !== null,
+        hasCheckinForm: document.getElementById('checkin-form') !== null,
+        hasCountdown: document.querySelector('[data-countdown]') !== null,
+        hasLoginFormButton: document.querySelector('form[action*="/auth/login"] .login-btn, .login-btn') !== null
+    };
+
+    const scheduleIf = (condition, task, timeout = 900) => {
+        if (!condition) {
+            return;
+        }
+        runNonCritical(task, timeout);
+    };
+
+    // 非关键：登录态核对延后，优先释放首屏交互。
+    runNonCritical(() => syncLoginStateFromServer(), 700);
 
     // 退出登录：强制带时间戳跳转，避免缓存/下拉交互导致首击未生效
     document.querySelectorAll('a[href*="/auth/logout"]').forEach(link => {
@@ -12,28 +71,24 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // 若用户已登录但页面仍显示“登录”入口，点击时兜底跳转到对应面板
-    setupSmartLoginLink();
+    if ((routeScopes.publicSite || routeScopes.auth) && pageFlags.hasLoginLink) {
+        setupSmartLoginLink();
+    }
 
     // 初始化Bootstrap提示工具
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-    });
+    if (pageFlags.hasTooltip) {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
 
-    // 初始化图表（如果存在）
-    initializeCharts();
-
-    // 活动签到功能
-    setupAttendanceCheckin();
-
-    // 搜索功能优化
-    setupSearchOptimization();
-
-    // 移动端表格：单元格独立横向滑动
-    enableTableCellScroll();
-
-    // 表格最佳实践：自动固定“操作”列，避免横向滚动后找不到操作按钮
-    initStickyActionColumns();
+    // 首屏非关键初始化延后执行，优先让按钮点击与输入可用。
+    scheduleIf((routeScopes.admin || routeScopes.student || routeScopes.publicSite) && pageFlags.hasChartCanvas, () => initializeCharts(), 1200);
+    scheduleIf((routeScopes.admin || routeScopes.student) && pageFlags.hasAttendanceCheckin, () => setupAttendanceCheckin(), 900);
+    scheduleIf((routeScopes.admin || routeScopes.student) && pageFlags.hasSearchForm, () => setupSearchOptimization(), 900);
+    scheduleIf((routeScopes.admin || routeScopes.student) && pageFlags.hasScrollableTable, () => enableTableCellScroll(), 1200);
+    scheduleIf((routeScopes.admin || routeScopes.student) && pageFlags.hasStickyActionTable, () => initStickyActionColumns(), 1200);
 
     // 通知系统（学生 + 游客公开通知）
     const isStudent = document.body.dataset.userLoggedIn === 'true' && document.body.dataset.userRole === 'student';
@@ -45,15 +100,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    if (isStudent) {
-        // 学生：获取未读通知
-        fetchUnreadNotifications();
+    if (routeScopes.student && isStudent) {
+        // 学生：首屏先保证交互，未读通知稍后加载。
+        runNonCritical(() => fetchUnreadNotifications(), 1200);
 
         // 设置定时刷新（每10分钟，减少频率）
         setInterval(fetchUnreadNotifications, 10 * 60 * 1000);
-    } else {
-        // 游客/管理员：获取公开通知
-        fetchPublicNotifications();
+    } else if (routeScopes.publicSite || routeScopes.auth || routeScopes.admin) {
+        // 游客/管理员：公开通知延后加载，避免与首屏资源竞争。
+        runNonCritical(() => fetchPublicNotifications(), 1200);
         setInterval(fetchPublicNotifications, 10 * 60 * 1000);
     }
     
@@ -84,17 +139,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // 检查是否有通知需要显示
-    displayNotifications();
-    
-    // 处理删除确认
-    setupDeleteConfirmation();
-    
-    // 处理签到表单
-    setupCheckinForm();
-    
-    // 处理活动倒计时
-    setupCountdowns();
+    // 以下属于增强体验逻辑，延后执行即可。
+    scheduleIf((routeScopes.publicSite || routeScopes.auth || routeScopes.admin || routeScopes.student) && pageFlags.hasInlineNotificationBanner, () => displayNotifications(), 900);
+    scheduleIf((routeScopes.admin || routeScopes.student) && pageFlags.hasDeleteConfirm, () => setupDeleteConfirmation(), 900);
+    scheduleIf(routeScopes.activityDetail && pageFlags.hasCheckinForm, () => setupCheckinForm(), 900);
+    scheduleIf((routeScopes.publicSite || routeScopes.student) && pageFlags.hasCountdown, () => setupCountdowns(), 1200);
 
     // 初始化Toast通知系统
     initToastSystem();
@@ -107,14 +156,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 监听浏览器前进/后退事件
     window.addEventListener('pageshow', function(event) {
-        // 当页面从浏览器缓存中加载时（例如使用后退按钮）
-        if (event.persisted) {
-            console.log('页面从BFCache恢复，强制刷新以同步登录状态');
-            window.location.reload();
-            return;
-        }
-
+        // BFCache恢复时避免强制刷新，减少白屏与二次加载；只做状态修复。
         resetAllButtonStates();
+        if (event.persisted) {
+            runNonCritical(() => syncLoginStateFromServer(), 600);
+        }
     });
     
     // 监听popstate事件（浏览器前进/后退按钮）
@@ -132,10 +178,89 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // 特别处理登录按钮
-    setupLoginButton();
+    if (routeScopes.auth && pageFlags.hasLoginFormButton) {
+        setupLoginButton();
+    }
 
     // 初始化卡片倾斜动画（VanillaTilt）
     (function initCardTilt() {
+        if (!routeFlags.isAbout) {
+            return;
+        }
+
+        function loadVanillaTiltScript() {
+            return new Promise((resolve, reject) => {
+                if (typeof VanillaTilt !== 'undefined') {
+                    resolve();
+                    return;
+                }
+
+                const existed = document.querySelector('script[data-lib="vanilla-tilt"]');
+                if (existed) {
+                    existed.addEventListener('load', () => resolve(), { once: true });
+                    existed.addEventListener('error', () => reject(new Error('vanilla-tilt load failed')), { once: true });
+                    return;
+                }
+
+                const sources = [
+                    'https://cdn.jsdelivr.net/npm/vanilla-tilt@1.8.0/dist/vanilla-tilt.min.js',
+                    'https://unpkg.com/vanilla-tilt@1.8.0/dist/vanilla-tilt.min.js',
+                    'https://cdn.bootcdn.net/ajax/libs/vanilla-tilt/1.8.0/vanilla-tilt.min.js'
+                ];
+
+                const tryLoad = (idx) => {
+                    if (idx >= sources.length) {
+                        reject(new Error('vanilla-tilt load failed'));
+                        return;
+                    }
+
+                    const script = document.createElement('script');
+                    let done = false;
+                    const timeout = setTimeout(() => {
+                        if (done) return;
+                        done = true;
+                        script.remove();
+                        tryLoad(idx + 1);
+                    }, 2500);
+
+                    script.src = sources[idx];
+                    script.async = true;
+                    script.setAttribute('data-lib', 'vanilla-tilt');
+                    script.onload = () => {
+                        if (done) return;
+                        done = true;
+                        clearTimeout(timeout);
+                        resolve();
+                    };
+                    script.onerror = () => {
+                        if (done) return;
+                        done = true;
+                        clearTimeout(timeout);
+                        script.remove();
+                        tryLoad(idx + 1);
+                    };
+                    document.head.appendChild(script);
+                };
+
+                tryLoad(0);
+            });
+        }
+
+        function applyTilt(tiltCards) {
+            if (typeof VanillaTilt === 'undefined' || !tiltCards.length) {
+                return;
+            }
+            // 为符合条件的卡片打标，便于CSS优化
+            tiltCards.forEach(c => c.setAttribute('data-tilt', ''));
+            VanillaTilt.init(tiltCards, {
+                max: 12,       // 最大倾斜角度
+                speed: 400,    // 动画速度
+                glare: true,   // 高光
+                'max-glare': 0.15,
+                perspective: 1000,
+            });
+        }
+
         // 移动端（触控/窄屏）不启用3D倾斜效果
         const isMobile = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer:coarse)').matches;
         if (isMobile) return;
@@ -146,17 +271,21 @@ document.addEventListener('DOMContentLoaded', function() {
             const rect = c.getBoundingClientRect();
             return rect.width < 600 && rect.height < 600;
         });
+        if (!tiltCards.length) return;
 
-        if (typeof VanillaTilt !== 'undefined' && tiltCards.length) {
-            // 为符合条件的卡片打标，便于CSS优化
-            tiltCards.forEach(c => c.setAttribute('data-tilt', ''));
-            VanillaTilt.init(tiltCards, {
-                max: 12,       // 最大倾斜角度
-                speed: 400,    // 动画速度
-                glare: true,   // 高光
-                'max-glare': 0.15,
-                perspective: 1000,
-            });
+        if (typeof VanillaTilt !== 'undefined') {
+            applyTilt(tiltCards);
+            return;
+        }
+
+        const lazyLoad = () => {
+            loadVanillaTiltScript().then(() => applyTilt(tiltCards)).catch(() => {});
+        };
+
+        if (window.requestIdleCallback) {
+            window.requestIdleCallback(lazyLoad, { timeout: 2500 });
+        } else {
+            setTimeout(lazyLoad, 1200);
         }
     })();
 });
@@ -287,6 +416,9 @@ function initUnifiedLoadingSystem() {
     // 创建全局加载动画
     createGlobalLoading();
 
+    // 初始化请求状态跟踪器（统一管理按钮与全局loading生命周期）
+    initRequestStateTracker();
+
     // 设置按钮加载处理
     setupButtonLoading();
 
@@ -295,6 +427,129 @@ function initUnifiedLoadingSystem() {
 
     // 设置AJAX加载处理
     setupAjaxLoadingHandlers();
+}
+
+// 统一请求状态跟踪器
+function initRequestStateTracker() {
+    if (window.RequestStateTracker) {
+        return;
+    }
+
+    window.RequestStateTracker = {
+        requestIdSeed: 0,
+        pendingAction: null,
+        inflightRequests: new Map(),
+
+        isMobileLike: function() {
+            try {
+                return window.matchMedia('(max-width: 991.98px), (pointer: coarse)').matches;
+            } catch (_) {
+                return false;
+            }
+        },
+
+        markPendingAction: function(button, loadingText = '处理中...') {
+            if (!button || !document.body.contains(button)) {
+                return;
+            }
+
+            this.pendingAction = {
+                button,
+                loadingText,
+                createdAt: Date.now()
+            };
+        },
+
+        consumePendingAction: function() {
+            if (!this.pendingAction) {
+                return null;
+            }
+
+            const action = this.pendingAction;
+            this.pendingAction = null;
+
+            if (!action.button || !document.body.contains(action.button)) {
+                return null;
+            }
+
+            // 只消费最近的用户触发动作，避免误关联后台轮询请求
+            if (Date.now() - action.createdAt > 1800) {
+                return null;
+            }
+
+            return action;
+        },
+
+        beginRequest: function(meta = {}) {
+            const id = ++this.requestIdSeed;
+            const requestMeta = {
+                button: meta.button || null,
+                showGlobal: !!meta.showGlobal,
+                allowMobileOverlay: !!meta.allowMobileOverlay,
+                globalMessage: meta.globalMessage || '处理中...',
+                mobileOverlayTimer: null,
+                mobileOverlayShown: false
+            };
+
+            this.inflightRequests.set(id, requestMeta);
+
+            if (requestMeta.button && window.ButtonLoadingManager) {
+                window.ButtonLoadingManager.setLoading(requestMeta.button, meta.loadingText || '处理中...');
+            }
+
+            if (requestMeta.showGlobal && window.LoadingManager) {
+                window.LoadingManager.show(requestMeta.globalMessage, false);
+            } else if (requestMeta.allowMobileOverlay && this.isMobileLike() && window.LoadingManager) {
+                // 移动端若请求超过阈值仍未完成，自动显示全屏loading，避免“无反馈”体感
+                requestMeta.mobileOverlayTimer = setTimeout(() => {
+                    if (!this.inflightRequests.has(id)) {
+                        return;
+                    }
+                    requestMeta.mobileOverlayShown = true;
+                    window.LoadingManager.show(requestMeta.globalMessage || '处理中...', false);
+                }, 650);
+            }
+
+            return id;
+        },
+
+        endRequest: function(id) {
+            const requestMeta = this.inflightRequests.get(id);
+            if (!requestMeta) {
+                return;
+            }
+
+            this.inflightRequests.delete(id);
+
+            if (requestMeta.mobileOverlayTimer) {
+                clearTimeout(requestMeta.mobileOverlayTimer);
+                requestMeta.mobileOverlayTimer = null;
+            }
+
+            if (requestMeta.button && window.ButtonLoadingManager) {
+                window.ButtonLoadingManager.clearLoading(requestMeta.button);
+            }
+
+            const hasOverlayInflight = Array.from(this.inflightRequests.values()).some(meta => meta.showGlobal || meta.mobileOverlayShown);
+            if (!hasOverlayInflight && window.LoadingManager) {
+                window.LoadingManager.hide();
+            }
+        },
+
+        trackFetch: function(nativeFetch, input, init = {}, meta = {}) {
+            const requestId = this.beginRequest({
+                button: meta.button || null,
+                loadingText: meta.loadingText || '处理中...',
+                showGlobal: !!meta.showGlobal,
+                allowMobileOverlay: !!meta.allowMobileOverlay,
+                globalMessage: meta.globalMessage || '处理中...'
+            });
+
+            return nativeFetch(input, init).finally(() => {
+                this.endRequest(requestId);
+            });
+        }
+    };
 }
 
 // 创建全局加载动画
@@ -415,10 +670,22 @@ function createGlobalLoading() {
         }
     });
     
-    // 为所有链接添加全局加载动画监听
+    // 为链接添加全局加载动画监听（仅慢跳转时显示，避免快速切页闪烁）
+    let navigationLoadingTimer = null;
+
     document.addEventListener('click', function(e) {
         const link = e.target.closest('a');
         if (!link) return;
+
+        // 仅处理主按钮点击；带修饰键/中键通常是新标签打开，不应显示页面加载遮罩
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+            return;
+        }
+
+        // AI窗口区域点击不触发全局页面loading
+        if (link.closest('.ai-chat-container') || link.closest('.ai-chat-button')) {
+            return;
+        }
         
         const href = link.getAttribute('href');
         // 检查是否需要显示全局加载动画
@@ -432,16 +699,27 @@ function createGlobalLoading() {
             !link.hasAttribute('data-bs-toggle') && 
             !link.classList.contains('btn') && // 按钮链接已在其他地方处理
             link.getAttribute('target') !== '_blank') {
-            
-            // 显示全局加载动画
-            window.LoadingManager.show('页面加载中...', false);
-            
-            // 云端环境优化：确保加载动画显示足够长时间
-            setTimeout(() => {
-                if (window.LoadingManager) {
-                    window.LoadingManager.hide();
+
+            // 清理旧定时器，避免短时间多次点击产生叠加
+            if (navigationLoadingTimer) {
+                clearTimeout(navigationLoadingTimer);
+                navigationLoadingTimer = null;
+            }
+
+            // 慢跳转才显示全局loading；快速导航直接交给浏览器切页
+            navigationLoadingTimer = setTimeout(() => {
+                if (window.LoadingManager && document.visibilityState === 'visible') {
+                    window.LoadingManager.show('页面加载中...', false);
                 }
-            }, 6000); // 6秒后强制隐藏
+            }, 320);
+        }
+    });
+
+    // 页面离开或进入BFCache时清理定时器，避免历史页面残留触发
+    window.addEventListener('pagehide', function() {
+        if (navigationLoadingTimer) {
+            clearTimeout(navigationLoadingTimer);
+            navigationLoadingTimer = null;
         }
     });
 }
@@ -615,7 +893,9 @@ function setupButtonLoading() {
         else if (button.textContent.includes('下载')) loadingText = '下载中...';
 
         // 设置加载状态
-        window.ButtonLoadingManager.setLoading(button, loadingText);
+        if (window.RequestStateTracker) {
+            window.RequestStateTracker.markPendingAction(button, loadingText);
+        }
     });
 }
 
@@ -664,6 +944,10 @@ function setupFormLoadingHandlers() {
             if (form.action?.includes('/login')) loadingText = '登录中...';
             else if (form.action?.includes('/register')) loadingText = '注册中...';
 
+            if (window.RequestStateTracker) {
+                window.RequestStateTracker.markPendingAction(submitBtn, loadingText);
+            }
+
             // 使用统一的按钮管理器
             window.ButtonLoadingManager.setLoading(submitBtn, loadingText);
         });
@@ -672,31 +956,79 @@ function setupFormLoadingHandlers() {
 
 // 简化的AJAX加载处理
 function setupAjaxLoadingHandlers() {
-    // 简单的AJAX请求计数器
-    let activeRequests = 0;
-
     // 监听fetch请求
     const originalFetch = window.fetch;
-    window.fetch = function(...args) {
-        const url = args[0];
 
-        // 只对特定API显示全局加载
-        const showGlobalLoading = url.includes('/admin/api/') &&
-                                 (url.includes('sync') || url.includes('backup') || url.includes('restore'));
-
-        if (showGlobalLoading) {
-            activeRequests++;
-            if (activeRequests === 1) {
-                window.LoadingManager.show('处理中...');
-            }
+    // 供页面内脚本逐步替换手写fetch，直接获得请求态loading收敛
+    window.appFetchWithLoading = function(input, init = {}, meta = {}) {
+        if (!window.RequestStateTracker) {
+            return originalFetch.call(window, input, init);
         }
 
+        return window.RequestStateTracker.trackFetch(
+            originalFetch.bind(window),
+            input,
+            init,
+            {
+                button: meta.button || null,
+                loadingText: meta.loadingText || '处理中...',
+                showGlobal: !!meta.showGlobal,
+                allowMobileOverlay: !!meta.allowMobileOverlay,
+                globalMessage: meta.globalMessage || '处理中...'
+            }
+        );
+    };
+
+    window.fetch = function(...args) {
+        const requestInput = args[0];
+        const requestInit = args[1] || {};
+
+        const url = typeof requestInput === 'string'
+            ? requestInput
+            : (requestInput && requestInput.url) || '';
+        const requestMethod = String(
+            requestInit.method || (requestInput && requestInput.method) || 'GET'
+        ).toUpperCase();
+
+        const lowPriorityPatterns = [
+            '/student/api/notifications/unread',
+            '/api/public-notifications',
+            '/utils/check_login_status',
+            '/api/statistics/'
+        ];
+        const isLowPriorityRequest = lowPriorityPatterns.some(pattern => url.includes(pattern));
+
+        const aiEndpointPatterns = [
+            '/activity/ai/',
+            '/utils/ai_chat',
+            '/api/ai/chat',
+            '/api/ai_chat'
+        ];
+        const isAiEndpointRequest = aiEndpointPatterns.some(pattern => url.includes(pattern));
+
+        const pendingAction = window.RequestStateTracker
+            ? window.RequestStateTracker.consumePendingAction()
+            : null;
+
+        const isLongOpsRequest = url.includes('/admin/api/') && (url.includes('sync') || url.includes('backup') || url.includes('restore'));
+
+        // 默认不再为普通短请求弹全局遮罩，避免“频繁闪现”；AI请求只保留按钮动画。
+        const showGlobalLoading = !isLowPriorityRequest && !isAiEndpointRequest && isLongOpsRequest;
+        const allowMobileOverlay = !isAiEndpointRequest && showGlobalLoading;
+
+        const requestId = window.RequestStateTracker
+            ? window.RequestStateTracker.beginRequest({
+                button: pendingAction ? pendingAction.button : null,
+                loadingText: pendingAction ? pendingAction.loadingText : '处理中...',
+                showGlobal: showGlobalLoading,
+                allowMobileOverlay: allowMobileOverlay,
+                globalMessage: requestMethod === 'GET' ? '加载中...' : '处理中...'
+            })
+            : null;
+
         return originalFetch.apply(this, args).finally(() => {
-            if (showGlobalLoading) {
-                activeRequests--;
-                if (activeRequests === 0) {
-                    window.LoadingManager.hide();
-                }
+            if (window.RequestStateTracker && requestId !== null) {
+                window.RequestStateTracker.endRequest(requestId);
             }
         });
     };
@@ -1907,7 +2239,11 @@ function setupLoadingButtons() {
 
 // 重置所有按钮状态 - 简化版本
 function resetAllButtonStates() {
-    console.log('重置所有按钮状态');
+    const now = Date.now();
+    if (window.__lastButtonResetAt && now - window.__lastButtonResetAt < 250) {
+        return;
+    }
+    window.__lastButtonResetAt = now;
 
     // 使用统一的按钮管理器清理所有按钮
     if (window.ButtonLoadingManager) {

@@ -1338,6 +1338,7 @@ footer {
     z-index: 9999;
     opacity: 0;
     visibility: hidden;
+    pointer-events: none;
     transition: opacity 0.3s, visibility 0.3s;
     flex-direction: column;
 }
@@ -1345,6 +1346,7 @@ footer {
 .global-loading.show {
     opacity: 1;
     visibility: visible;
+    pointer-events: auto;
 }
 
 /* 书本翻页加载动画 */

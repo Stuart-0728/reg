@@ -147,3 +147,39 @@ def ensure_db_structure(app, db):
         app.logger.info('已补齐 activities.registration_start_time 字段')
     else:
         app.logger.info('字段 activities.registration_start_time 已存在，跳过补齐')
+
+    # 4) 每日天气缓存表（降低第三方API消耗并稳定详情页加载）
+    if 'weather_daily_cache' not in table_names:
+        if dialect == 'postgresql':
+            create_weather_cache_sql = """
+            CREATE TABLE weather_daily_cache (
+                id SERIAL PRIMARY KEY,
+                city_adcode VARCHAR(16) NOT NULL,
+                weather_date DATE NOT NULL,
+                extensions VARCHAR(16) NOT NULL DEFAULT 'base',
+                payload TEXT NOT NULL,
+                source VARCHAR(32) DEFAULT 'unknown',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_weather_daily_cache_city_date_ext UNIQUE (city_adcode, weather_date, extensions)
+            )
+            """
+        else:
+            create_weather_cache_sql = """
+            CREATE TABLE weather_daily_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                city_adcode VARCHAR(16) NOT NULL,
+                weather_date DATE NOT NULL,
+                extensions VARCHAR(16) NOT NULL DEFAULT 'base',
+                payload TEXT NOT NULL,
+                source VARCHAR(32) DEFAULT 'unknown',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_weather_daily_cache_city_date_ext UNIQUE (city_adcode, weather_date, extensions)
+            )
+            """
+
+        with engine.begin() as conn:
+            conn.execute(text(create_weather_cache_sql))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_weather_daily_cache_city_date ON weather_daily_cache (city_adcode, weather_date)"))
+        app.logger.info('已创建 weather_daily_cache 表')

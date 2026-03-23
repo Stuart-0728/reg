@@ -152,7 +152,7 @@
                   {{ form.max_participants.label(class="form-label fw-medium") }}
                   <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-users"></i></span>
-                    {{ form.max_participants(class="form-control" + (" is-invalid" if form.max_participants.errors else ""), type="number", min="1", placeholder="0表示不限制") }}
+                    {{ form.max_participants(class="form-control" + (" is-invalid" if form.max_participants.errors else ""), type="number", min="0", placeholder="0或留空表示不限制") }}
                   </div>
                   {% if form.max_participants.errors %}
                     <div class="invalid-feedback">
@@ -161,6 +161,7 @@
                       {% endfor %}
                     </div>
                   {% endif %}
+                  <small class="form-text text-muted">填写 0 或留空均表示不限人数。</small>
                 </div>
               </div>
             </div>
@@ -343,9 +344,12 @@
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
           'X-CSRFToken': csrfToken
         },
         body: JSON.stringify(payload),
+        credentials: 'same-origin',
         signal: controller ? controller.signal : undefined
       });
       } catch (error) {
@@ -360,15 +364,34 @@
       }
 
       let data = {};
+      let rawText = '';
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
       try {
-        data = await response.json();
+        if (contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          rawText = await response.text();
+        }
       } catch (e) {
         data = {};
       }
-      if (!response.ok || !data.success) {
+
+      // 兼容老返回结构：只要拿到任务ID并处于未完成，即视为提交成功
+      const acceptedAsyncTask = !!(data && data.job_id && data.done === false);
+      const successFlag = !!(data && data.success === true);
+
+      if (!response.ok || (!successFlag && !acceptedAsyncTask)) {
         if (response.status === 524) {
           throw new Error('AI生成超时（524），请稍后重试');
         }
+
+        if (response.ok && !contentType.includes('application/json')) {
+          const maybeHtml = (rawText || '').toLowerCase().includes('<!doctype html') || (rawText || '').toLowerCase().includes('<html');
+          if (maybeHtml || response.redirected) {
+            throw new Error('请求已被重定向到页面，可能是登录态失效或权限状态变更，请刷新后重试');
+          }
+        }
+
         throw new Error(data.message || `请求失败（${response.status}）`);
       }
       return data;
@@ -413,6 +436,8 @@
     const aiPosterQuality = document.getElementById('aiPosterQuality');
     const buttonSnapshots = new Map();
     const posterJobStatusUrlTemplate = '{{ url_for("admin.ai_generate_activity_poster_async_status", job_id="__JOB_ID__") }}';
+    const parseJobStatusUrlTemplate = '{{ url_for("admin.ai_parse_activity_content_status", job_id="__JOB_ID__") }}';
+    const textJobStatusUrlTemplate = '{{ url_for("admin.ai_text_job_status", job_id="__JOB_ID__") }}';
 
     function sleep(ms) {
       return new Promise((resolve) => setTimeout(resolve, ms));
@@ -452,6 +477,86 @@
         }
         if (!data.success) {
           throw new Error(data.message || 'AI海报生成失败');
+        }
+        return data;
+      }
+      throw new Error('AI生成耗时较长，请稍后重试');
+    }
+
+    async function pollParseJob(jobId, maxAttempts = 60, intervalMs = 1000) {
+      for (let i = 0; i < maxAttempts; i += 1) {
+        await sleep(intervalMs);
+        const statusUrl = parseJobStatusUrlTemplate.replace('__JOB_ID__', encodeURIComponent(jobId));
+        let response;
+        try {
+          response = await fetch(statusUrl, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+        } catch (e) {
+          continue;
+        }
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (e) {
+          data = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(data.message || `查询任务失败（${response.status}）`);
+        }
+        if (!data.done) {
+          continue;
+        }
+        if (!data.success) {
+          throw new Error(data.message || 'AI解析失败');
+        }
+        return data;
+      }
+      throw new Error('AI解析耗时较长，请稍后重试');
+    }
+
+    async function pollTextJob(jobId, maxAttempts = 90, intervalMs = 1200) {
+      for (let i = 0; i < maxAttempts; i += 1) {
+        await sleep(intervalMs);
+        const statusUrl = textJobStatusUrlTemplate.replace('__JOB_ID__', encodeURIComponent(jobId));
+        let response;
+        try {
+          response = await fetch(statusUrl, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache'
+            }
+          });
+        } catch (e) {
+          continue;
+        }
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (e) {
+          data = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(data.message || `查询任务失败（${response.status}）`);
+        }
+        if (!data.done) {
+          continue;
+        }
+        if (!data.success) {
+          throw new Error(data.message || 'AI任务失败');
         }
         return data;
       }
@@ -557,6 +662,51 @@
     const statusInput = document.getElementById('status');
     const isFeaturedInput = document.getElementById('is_featured');
 
+    function toTwoDigits(num) {
+      return String(num).padStart(2, '0');
+    }
+
+    function normalizeAIFormDateTime(rawValue) {
+      const text = String(rawValue || '').trim();
+      if (!text) {
+        return '';
+      }
+
+      const dateOnlyMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (dateOnlyMatch) {
+        const y = dateOnlyMatch[1];
+        const m = toTwoDigits(dateOnlyMatch[2]);
+        const d = toTwoDigits(dateOnlyMatch[3]);
+        return `${y}-${m}-${d} 00:00`;
+      }
+
+      const normalized = text.replace(/\//g, '-');
+      const hasTimezone = /Z$|[+-]\d{2}:?\d{2}$/.test(normalized);
+      const maybeIso = hasTimezone || normalized.includes('T');
+
+      if (maybeIso) {
+        const isoText = normalized.replace(' ', 'T');
+        const dateObj = new Date(isoText);
+        if (!Number.isNaN(dateObj.getTime())) {
+          const y = dateObj.getFullYear();
+          const m = toTwoDigits(dateObj.getMonth() + 1);
+          const d = toTwoDigits(dateObj.getDate());
+          const hh = toTwoDigits(dateObj.getHours());
+          const mm = toTwoDigits(dateObj.getMinutes());
+          return `${y}-${m}-${d} ${hh}:${mm}`;
+        }
+      }
+
+      const plainMatch = normalized.match(/^(\d{4}-\d{1,2}-\d{1,2})[ T](\d{1,2}:\d{2})(?::\d{2})?(?:\.\d+)?$/);
+      if (plainMatch) {
+        const [y, m, d] = plainMatch[1].split('-');
+        const [hh, mm] = plainMatch[2].split(':');
+        return `${y}-${toTwoDigits(m)}-${toTwoDigits(d)} ${toTwoDigits(hh)}:${toTwoDigits(mm)}`;
+      }
+
+      return text;
+    }
+
     if (aiGenerateDescBtn && titleInput && descriptionInput) {
       aiGenerateDescBtn.addEventListener('click', async function() {
         const title = (titleInput.value || '').trim();
@@ -564,9 +714,14 @@
           alert('请先输入活动标题');
           return;
         }
-        setButtonLoading(aiGenerateDescBtn, '生成中...');
+        setButtonLoading(aiGenerateDescBtn, '提交任务...');
         try {
-          const data = await postJson('{{ url_for("admin.ai_generate_activity_description") }}', { title });
+          const task = await postJson('{{ url_for("admin.ai_generate_activity_description_async") }}', { title }, { timeoutMs: 10000 });
+          if (!task || !task.job_id) {
+            throw new Error('任务创建失败，请稍后重试');
+          }
+          setButtonLoading(aiGenerateDescBtn, '生成中...');
+          const data = await pollTextJob(task.job_id);
           descriptionInput.value = data.description || '';
           if (window.showToast) {
             showToast('AI已生成活动描述', 'success');
@@ -586,17 +741,22 @@
           alert('请先粘贴活动内容');
           return;
         }
-        setButtonLoading(aiParseContentBtn, '解析中...');
+        setButtonLoading(aiParseContentBtn, '提交任务...');
         try {
-          const data = await postJson('{{ url_for("admin.ai_parse_activity_content") }}', { content });
+          const task = await postJson('{{ url_for("admin.ai_parse_activity_content") }}', { content }, { timeoutMs: 10000 });
+          let data = task;
+          if (task && task.job_id) {
+            setButtonLoading(aiParseContentBtn, '解析中...');
+            data = await pollParseJob(task.job_id);
+          }
           const parsed = data.data || {};
           if (parsed.title && titleInput) titleInput.value = parsed.title;
           if (parsed.description && descriptionInput) descriptionInput.value = parsed.description;
           if (parsed.location && locationInput) locationInput.value = parsed.location;
-          if (parsed.start_time && startTimeInput) startTimeInput.value = parsed.start_time;
-          if (parsed.end_time && endTimeInput) endTimeInput.value = parsed.end_time;
-          if (parsed.registration_start_time && regStartInput) regStartInput.value = parsed.registration_start_time;
-          if (parsed.registration_deadline && regDeadlineInput) regDeadlineInput.value = parsed.registration_deadline;
+          if (parsed.start_time && startTimeInput) startTimeInput.value = normalizeAIFormDateTime(parsed.start_time);
+          if (parsed.end_time && endTimeInput) endTimeInput.value = normalizeAIFormDateTime(parsed.end_time);
+          if (parsed.registration_start_time && regStartInput) regStartInput.value = normalizeAIFormDateTime(parsed.registration_start_time);
+          if (parsed.registration_deadline && regDeadlineInput) regDeadlineInput.value = normalizeAIFormDateTime(parsed.registration_deadline);
           if (parsed.max_participants !== '' && maxParticipantsInput) maxParticipantsInput.value = parsed.max_participants;
           if (parsed.points !== '' && pointsInputForAI) pointsInputForAI.value = parsed.points;
           if (parsed.status && statusInput) statusInput.value = parsed.status;
@@ -718,6 +878,58 @@
     const form = document.getElementById('activityForm');
     const submitBtn = document.getElementById('submitBtn');
     const submitText = document.getElementById('submitText');
+    const maxParticipantsInputForValidation = document.getElementById('max_participants');
+
+    function clearFormValidationState() {
+      if (!form) {
+        return;
+      }
+      const invalidFields = form.querySelectorAll('.is-invalid');
+      invalidFields.forEach((field) => field.classList.remove('is-invalid'));
+    }
+
+    function showValidationHint(message, focusEl) {
+      if (window.showToast) {
+        showToast(message, 'warning');
+      } else {
+        alert(message);
+      }
+      if (focusEl && typeof focusEl.focus === 'function') {
+        focusEl.focus();
+      }
+    }
+
+    function validateBeforeSubmit() {
+      if (!form) {
+        return true;
+      }
+
+      clearFormValidationState();
+
+      if (maxParticipantsInputForValidation) {
+        const raw = (maxParticipantsInputForValidation.value || '').trim();
+        if (raw !== '') {
+          const count = Number(raw);
+          if (!Number.isInteger(count) || count < 0) {
+            maxParticipantsInputForValidation.classList.add('is-invalid');
+            showValidationHint('最大参与人数填写错误：只能填写大于等于 0 的整数（0 表示不限制）。', maxParticipantsInputForValidation);
+            return false;
+          }
+        }
+      }
+
+      if (!form.checkValidity()) {
+        const firstInvalid = form.querySelector(':invalid');
+        if (firstInvalid) {
+          firstInvalid.classList.add('is-invalid');
+        }
+        form.reportValidity();
+        showValidationHint('表单有未填写或填写错误的字段，请先修正后再保存。', firstInvalid);
+        return false;
+      }
+
+      return true;
+    }
     
     console.log('表单元素检查:', {
       form: form,
@@ -733,8 +945,9 @@
         console.log('提交按钮被点击');
         
         // 检查表单是否有效
-        if (!form.checkValidity()) {
+        if (!validateBeforeSubmit()) {
           console.log('表单验证失败');
+          e.preventDefault();
           return;
         }
         
@@ -752,6 +965,11 @@
       
       form.addEventListener('submit', function(e) {
         console.log('表单提交事件触发');
+
+        if (!validateBeforeSubmit()) {
+          e.preventDefault();
+          return;
+        }
         
         // 显示加载状态
         submitBtn.disabled = true;

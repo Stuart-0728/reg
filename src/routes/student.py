@@ -13,10 +13,13 @@ from wtforms.validators import DataRequired, Length, Optional, NumberRange, Emai
 from flask_wtf import FlaskForm
 from src.utils.time_helpers import get_localized_now, ensure_timezone_aware, display_datetime, safe_compare, safe_less_than, safe_greater_than, safe_greater_than_equal, safe_less_than_equal, get_activity_status, is_activity_completed
 from src.utils import get_compatible_paginate
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, defer
 import pytz
 import os
 from flask_wtf.csrf import CSRFProtect
+from src import cache, limiter
+from src.utils.input_safety import sanitize_plain_text
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,70 @@ student_bp = Blueprint('student', __name__, url_prefix='/student')
 
 # 创建CSRF保护实例
 csrf = CSRFProtect()
+
+
+def _build_email_change_token(user_id, old_email, new_email):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return serializer.dumps(
+        {
+            'uid': int(user_id),
+            'old_email': str(old_email or ''),
+            'new_email': str(new_email or ''),
+            'purpose': 'email-change'
+        },
+        salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:email-change"
+    )
+
+
+def _verify_email_change_token(token, max_age=86400):
+    serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    try:
+        data = serializer.loads(
+            token,
+            max_age=max_age,
+            salt=f"{current_app.config.get('SECURITY_PASSWORD_SALT', 'cqnu-association-salt')}:email-change"
+        )
+    except SignatureExpired:
+        return None, '邮箱更换链接已过期，请重新提交邮箱变更申请。'
+    except BadSignature:
+        return None, '邮箱更换链接无效，请重新提交邮箱变更申请。'
+
+    if not isinstance(data, dict) or data.get('purpose') != 'email-change':
+        return None, '邮箱更换链接无效，请重新提交邮箱变更申请。'
+
+    try:
+        return {
+            'uid': int(data.get('uid')),
+            'old_email': str(data.get('old_email') or ''),
+            'new_email': str(data.get('new_email') or '')
+        }, None
+    except Exception:
+        return None, '邮箱更换链接无效，请重新提交邮箱变更申请。'
+
+
+def _send_email_change_verification_email(user, new_email):
+    from src.routes.auth import _send_html_email
+
+    token = _build_email_change_token(user.id, user.email, new_email)
+    verify_url = url_for('student.verify_email_change', token=token, _external=True)
+    html_body = render_template(
+        'email/change_email_verify.html',
+        user=user,
+        new_email=new_email,
+        verify_url=verify_url
+    )
+    _send_html_email('邮箱变更验证', new_email, html_body)
+    return verify_url
+
+
+@cache.memoize(timeout=30)
+def _cached_registered_activity_ids(user_id):
+    reg_stmt = db.select(Registration.activity_id).filter(
+        Registration.user_id == user_id,
+        Registration.status.in_(['registered', 'attended'])
+    )
+    registered = db.session.execute(reg_stmt).all()
+    return [r[0] for r in registered]
 
 def _ensure_activity_start_reminders(user_id):
     """为学生生成活动开始前提醒：提前1天、3小时、1小时。"""
@@ -162,6 +229,12 @@ def dashboard():
         student_info = db.session.execute(stmt).scalar_one_or_none()
         if not student_info:
             return redirect(url_for('auth.register'))
+
+        has_tags = bool(getattr(student_info, 'tags', []) or [])
+        has_society = bool(getattr(student_info, 'society_id', None)) or bool(getattr(student_info, 'joined_societies', []) or [])
+        if (not getattr(student_info, 'has_selected_tags', False)) or (not has_tags) or (not has_society):
+            flash('请先完成社团和兴趣标签选择后再继续使用。', 'warning')
+            return redirect(url_for('auth.select_tags'))
         
         # 获取学生已报名的活动，并预加载活动信息
         reg_stmt = db.select(Registration).filter(
@@ -274,7 +347,7 @@ def activities():
         page = request.args.get('page', 1, type=int)
         
         # 基本查询 - 所有活动
-        query = db.select(Activity)
+        query = db.select(Activity).options(defer(Activity.poster_data))
 
         # 根据状态筛选，使用北京时间进行比较
         if current_status == 'active':
@@ -297,12 +370,7 @@ def activities():
         activities = get_compatible_paginate(db, query, page=page, per_page=10, error_out=False)
         
         # 查询用户已报名的活动ID（只包含已报名和已签到的，不包括已取消的）
-        reg_stmt = db.select(Registration.activity_id).filter(
-            Registration.user_id == current_user.id,
-            Registration.status.in_(['registered', 'attended'])  # 排除已取消的报名
-        )
-        registered = db.session.execute(reg_stmt).all()
-        registered_activity_ids = [r[0] for r in registered]
+        registered_activity_ids = _cached_registered_activity_ids(current_user.id)
         
         # 从time_helpers导入时间比较函数
         from src.utils.time_helpers import safe_less_than, safe_greater_than, safe_compare, safe_less_than_equal, display_datetime
@@ -328,7 +396,11 @@ def activities():
 @login_required
 def activity_detail(id):
     try:
-        activity = db.get_or_404(Activity, id)
+        activity = db.session.execute(
+            db.select(Activity).where(Activity.id == id).options(defer(Activity.poster_data))
+        ).scalar_one_or_none()
+        if not activity:
+            abort(404)
         now = get_localized_now()
 
         registration = db.session.execute(db.select(Registration).filter_by(user_id=current_user.id, activity_id=id)).scalar_one_or_none()
@@ -359,7 +431,28 @@ def activity_detail(id):
         )
 
         current_user_review = db.session.execute(db.select(ActivityReview).filter_by(activity_id=id, user_id=current_user.id)).scalar_one_or_none()
-        reviews = db.session.execute(db.select(ActivityReview).filter_by(activity_id=id)).scalars().all()
+        review_count = db.session.execute(
+            db.select(func.count()).select_from(ActivityReview).filter_by(activity_id=id)
+        ).scalar() or 0
+
+        reviews = db.session.execute(
+            db.select(ActivityReview)
+            .filter_by(activity_id=id)
+            .order_by(ActivityReview.created_at.desc())
+            .limit(5)
+        ).scalars().all()
+
+        agg_stats = None
+        if review_count > 0:
+            agg_stats = db.session.execute(
+                db.select(
+                    func.avg(ActivityReview.rating),
+                    func.avg(ActivityReview.content_quality),
+                    func.avg(ActivityReview.organization),
+                    func.avg(ActivityReview.facility)
+                ).filter_by(activity_id=id)
+            ).one()
+
         beijing_tz = pytz.timezone('Asia/Shanghai')
         for review in reviews:
             if review.created_at:
@@ -369,12 +462,11 @@ def activity_detail(id):
                     review.display_created_at = review.created_at.astimezone(beijing_tz).strftime('%Y-%m-%d %H:%M')
             else:
                 review.display_created_at = '未设置'
-        review_count = len(reviews)
 
-        average_rating = sum(r.rating for r in reviews) / review_count if review_count > 0 else 0
-        avg_content_quality = sum(r.content_quality for r in reviews if r.content_quality) / review_count if review_count > 0 else 0
-        avg_organization = sum(r.organization for r in reviews if r.organization) / review_count if review_count > 0 else 0
-        avg_facility = sum(r.facility for r in reviews if r.facility) / review_count if review_count > 0 else 0
+        average_rating = float(agg_stats[0] or 0) if agg_stats else 0
+        avg_content_quality = float(agg_stats[1] or 0) if agg_stats else 0
+        avg_organization = float(agg_stats[2] or 0) if agg_stats else 0
+        avg_facility = float(agg_stats[3] or 0) if agg_stats else 0
 
         form = FlaskForm()
 
@@ -391,7 +483,10 @@ def activity_detail(id):
             from src.utils.weather_api import get_activity_weather
             if activity.start_time:
                 weather_data = get_activity_weather(activity.start_time)
-                logger.info(f"获取活动天气数据成功: {weather_data.get('description', 'N/A')}")
+                if weather_data:
+                    logger.info(f"获取活动天气数据成功: {weather_data.get('description', 'N/A')}")
+                else:
+                    logger.info("本次未获取到活动天气数据（已降级为无天气展示）")
         except Exception as e:
             logger.warning(f"获取天气数据失败: {e}")
             weather_data = None
@@ -450,6 +545,29 @@ def register_activity(id):
         if activity.registration_deadline and safe_less_than(activity.registration_deadline, now):
             return jsonify({'success': False, 'message': '该活动已过报名截止时间'})
 
+        existing_reg = db.session.execute(db.select(Registration).filter_by(user_id=current_user.id, activity_id=id)).scalar_one_or_none()
+        if existing_reg:
+            if existing_reg.status == 'registered':
+                return jsonify({'success': False, 'message': '您已报名此活动'})
+            elif existing_reg.status == 'cancelled':
+                if activity.max_participants > 0:
+                    reg_count = db.session.execute(
+                        db.select(func.count()).select_from(Registration).filter(
+                            Registration.activity_id == id,
+                            Registration.status.in_(['registered', 'attended'])
+                        )
+                    ).scalar() or 0
+                    if reg_count >= activity.max_participants:
+                        return jsonify({'success': False, 'message': '该活动报名人数已满'})
+
+                existing_reg.status = 'registered'
+                existing_reg.register_time = now
+                student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
+                if student_info and activity.society_id:
+                    _ensure_student_join_society(student_info, activity.society_id)
+                db.session.commit()
+                return jsonify({'success': True, 'message': '已成功重新报名活动'})
+
         if activity.max_participants > 0:
             reg_count = db.session.execute(
                 db.select(func.count()).select_from(Registration).filter(
@@ -459,19 +577,6 @@ def register_activity(id):
             ).scalar() or 0
             if reg_count >= activity.max_participants:
                 return jsonify({'success': False, 'message': '该活动报名人数已满'})
-
-        existing_reg = db.session.execute(db.select(Registration).filter_by(user_id=current_user.id, activity_id=id)).scalar_one_or_none()
-        if existing_reg:
-            if existing_reg.status == 'registered':
-                return jsonify({'success': False, 'message': '您已报名此活动'})
-            elif existing_reg.status == 'cancelled':
-                existing_reg.status = 'registered'
-                existing_reg.register_time = now
-                student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
-                if student_info and activity.society_id:
-                    _ensure_student_join_society(student_info, activity.society_id)
-                db.session.commit()
-                return jsonify({'success': True, 'message': '已成功重新报名活动'})
 
         new_registration = Registration(
             user_id=current_user.id,
@@ -486,6 +591,7 @@ def register_activity(id):
             _ensure_student_join_society(student_info, activity.society_id)
 
         db.session.commit()
+        cache.delete_memoized(_cached_registered_activity_ids, current_user.id)
 
         return jsonify({'success': True, 'message': '报名成功！'})
     except IntegrityError:
@@ -519,6 +625,7 @@ def cancel_registration(id):
 
         registration.status = 'cancelled'
         db.session.commit()
+        cache.delete_memoized(_cached_registered_activity_ids, current_user.id)
 
         return jsonify({'success': True, 'message': '已成功取消报名'})
     except Exception as e:
@@ -677,14 +784,31 @@ def edit_profile():
         
         if form.validate_on_submit():
             requested_email = (request.form.get('email') or '').strip()
-            if requested_email and requested_email != (current_user.email or ''):
-                flash('邮箱已验证且不可自行修改，请联系管理员处理。', 'warning')
+            email_change_requested = requested_email and requested_email != (current_user.email or '')
+            if email_change_requested:
+                email_exists = db.session.execute(
+                    db.select(User).filter(User.email == requested_email, User.id != current_user.id)
+                ).scalar_one_or_none()
+                if email_exists:
+                    flash('该邮箱已被其他账号使用，请更换。', 'warning')
+                    return redirect(url_for('student.edit_profile'))
+
+            phone = (form.phone.data or '').strip()
+            phone_exists = db.session.execute(
+                db.select(StudentInfo).filter(
+                    StudentInfo.phone == phone,
+                    StudentInfo.user_id != current_user.id
+                )
+            ).scalar_one_or_none()
+            if phone_exists:
+                flash('该手机号已被其他账号使用，请更换。', 'warning')
+                return redirect(url_for('student.edit_profile'))
 
             student_info.real_name = form.real_name.data
             student_info.grade = form.grade.data
             student_info.major = form.major.data
             student_info.college = form.college.data
-            student_info.phone = form.phone.data
+            student_info.phone = phone
             student_info.qq = form.qq.data
 
             selected_society_ids = [int(sid) for sid in request.form.getlist('societies') if sid and str(sid).isdigit()]
@@ -710,6 +834,15 @@ def edit_profile():
                 student_info.has_selected_tags = True
             
             db.session.commit()
+            if email_change_requested:
+                try:
+                    _send_email_change_verification_email(current_user, requested_email)
+                    flash('资料更新成功！邮箱变更验证链接已发送到新邮箱，完成验证后才会生效。', 'success')
+                except Exception as e:
+                    logger.error(f"发送邮箱变更验证邮件失败: user_id={current_user.id}, error={e}", exc_info=True)
+                    flash('资料更新成功！但邮箱变更验证邮件发送失败，请稍后重试。', 'warning')
+                return redirect(url_for('student.profile'))
+
             flash('个人信息更新成功！', 'success')
             return redirect(url_for('student.profile'))
         
@@ -735,6 +868,46 @@ def edit_profile():
         logger.error(f"Error in edit profile: {e}")
         flash('编辑个人资料时发生错误', 'danger')
         return redirect(url_for('student.profile'))
+
+
+@student_bp.route('/verify-email-change/<token>')
+def verify_email_change(token):
+    token_data, error = _verify_email_change_token(token)
+    if error:
+        flash(error, 'danger')
+        return redirect(url_for('auth.login'))
+
+    user = db.session.get(User, token_data['uid'])
+    if not user:
+        flash('账号不存在或已被删除。', 'danger')
+        return redirect(url_for('auth.login'))
+
+    if (user.email or '') != token_data.get('old_email', ''):
+        flash('当前账号邮箱已变更，此链接已失效，请重新提交邮箱变更申请。', 'warning')
+        return redirect(url_for('student.edit_profile') if current_user.is_authenticated else url_for('auth.login'))
+
+    new_email = (token_data.get('new_email') or '').strip()
+    if not new_email:
+        flash('新邮箱信息无效，请重新提交邮箱变更申请。', 'danger')
+        return redirect(url_for('student.edit_profile') if current_user.is_authenticated else url_for('auth.login'))
+
+    email_exists = db.session.execute(
+        db.select(User).filter(User.email == new_email, User.id != user.id)
+    ).scalar_one_or_none()
+    if email_exists:
+        flash('该邮箱已被其他账号使用，请更换后重试。', 'warning')
+        return redirect(url_for('student.edit_profile') if current_user.is_authenticated else url_for('auth.login'))
+
+    try:
+        user.email = new_email
+        db.session.commit()
+        flash('新邮箱验证成功，账号邮箱已更新。', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"邮箱变更落库失败: user_id={user.id}, error={e}", exc_info=True)
+        flash('邮箱更新失败，请稍后重试。', 'danger')
+
+    return redirect(url_for('student.profile') if current_user.is_authenticated else url_for('auth.login'))
 
 @student_bp.route('/delete_account', methods=['POST'])
 @student_required
@@ -1397,14 +1570,15 @@ def view_message(id):
 
 @student_bp.route('/message/create', methods=['GET', 'POST'])
 @student_required
+@limiter.limit('12 per minute', methods=['POST'], error_message='提交过于频繁，请稍后再试')
 def create_message():
     try:
         # 创建一个空表单对象用于CSRF保护
         class MessageForm(FlaskForm):
             target_type = SelectField('接收对象', choices=[('super', '总管理员'), ('society', '指定社团管理员')], default='super')
             target_society_id = SelectField('目标社团', choices=[], coerce=int, validators=[Optional()])
-            subject = StringField('主题', validators=[DataRequired(message='主题不能为空')])
-            content = TextAreaField('内容', validators=[DataRequired(message='内容不能为空')])
+            subject = StringField('主题', validators=[DataRequired(message='主题不能为空'), Length(max=120, message='主题最多120字')])
+            content = TextAreaField('内容', validators=[DataRequired(message='内容不能为空'), Length(max=5000, message='内容最多5000字')])
             submit = SubmitField('提交反馈')
         
         form = MessageForm()
@@ -1412,10 +1586,13 @@ def create_message():
         form.target_society_id.choices = [(0, '请选择社团')] + [(s.id, s.name) for s in societies]
         
         if request.method == 'POST' and form.validate_on_submit():
-            subject = form.subject.data
-            content = form.content.data
+            subject = sanitize_plain_text(form.subject.data, max_length=120)
+            content = sanitize_plain_text(form.content.data, allow_multiline=True, max_length=5000)
             target_type = (form.target_type.data or 'super').strip()
             target_society_id = form.target_society_id.data if form.target_society_id.data and form.target_society_id.data > 0 else None
+            if not subject or not content:
+                flash('主题和内容不能为空（不支持HTML脚本内容）', 'warning')
+                return render_template('student/message_form.html', title='提交问题反馈', form=form)
             if target_type == 'society' and not target_society_id:
                 flash('请选择要发送的社团', 'warning')
                 return render_template('student/message_form.html', title='提交问题反馈', form=form)

@@ -53,7 +53,7 @@
 
 
 
-    <!-- 协会介绍 -->
+    <!-- 平台介绍 -->
     <style>
     .about-portal-card {
         position: relative;
@@ -370,6 +370,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         studentActivities: '{{ url_for("student.activities") }}'
     };
 
+    let lastHomeAuthSignature = '';
+    let lastHomeAuthSeq = 0;
+
+    const buildHomeAuthSignature = (state) => {
+        const authenticated = !!(state && state.authenticated);
+        const role = String((state && state.role) || '').toLowerCase();
+        const displayName = String((state && state.display_name) || '');
+        return `${authenticated ? 1 : 0}|${role}|${displayName}`;
+    };
+
     const renderHomeAuthBlocks = (state) => {
         const authenticated = !!(state && state.authenticated);
         const role = String((state && state.role) || '').toLowerCase();
@@ -418,6 +428,26 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const applyAuthStateToHome = (state) => {
         if (!state || !state.success) return;
+
+        const seq = Number(state.__seq || 0);
+        const signature = String(state.__signature || buildHomeAuthSignature(state));
+
+        if (seq > 0 && seq <= lastHomeAuthSeq) {
+            return;
+        }
+
+        if (signature === lastHomeAuthSignature) {
+            if (seq > 0) {
+                lastHomeAuthSeq = seq;
+            }
+            return;
+        }
+
+        lastHomeAuthSignature = signature;
+        if (seq > 0) {
+            lastHomeAuthSeq = seq;
+        }
+
         renderHomeAuthBlocks(state);
     };
 
