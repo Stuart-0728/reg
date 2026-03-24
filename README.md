@@ -1,6 +1,6 @@
-# 重庆师范大学师能素质协会活动报名系统
+# 智能社团+社团管理系统
 
-这是一个为重庆师范大学师能素质协会开发的活动报名管理系统，旨在帮助协会高效管理活动和学生报名流程。
+这是一个为高校社团开发的活动报名管理系统，旨在帮助高校社团高效管理活动和学生报名流程。
 
 ## 系统功能
 
@@ -68,11 +68,9 @@ export DB_USERNAME="数据库用户名"
 export DB_PASSWORD="数据库密码"
 export DB_HOST="数据库主机"
 export DB_PORT="数据库端口"
-export DB_NAME="cqnu_association"
+export DB_NAME="DB"
 export ARK_API_KEY="你的火山方舟API Key"
 export GEMINI_API_KEY="你的Gemini API Key"
-# 可选：如果你习惯使用Google官方命名，也可仅设置
-# export GOOGLE_API_KEY="你的Gemini API Key"
 ```
 
 4. 初始化数据库：
@@ -116,6 +114,4 @@ cqnu_association/
 └── README.md               # 项目说明文档
 ```
 
-## 联系方式
 
-如有任何问题或需要进一步的功能扩展，请联系系统管理员。

@@ -115,22 +115,12 @@ class Config:
     INSTANCE_PATH = INSTANCE_PATH
     DB_PATH = DB_PATH
 
-    # 双数据库配置
-    # 主数据库 (Render PostgreSQL)
+    # 单数据库配置（已移除历史双库同步方案）
     PRIMARY_DATABASE_URL = os.environ.get('DATABASE_URL') or os.environ.get('RENDER_DATABASE_URL')
-    # 备份数据库 (ClawCloud)
-    BACKUP_DATABASE_URL = os.environ.get('BACKUP_DATABASE_URL') or os.environ.get('CLAWCLOUD_DATABASE_URL')
+    SQLALCHEMY_DATABASE_URI = PRIMARY_DATABASE_URL or f'sqlite:///{DB_PATH}'
 
-    # 优先使用主数据库，如果不可用则使用备份数据库，最后使用SQLite
-    SQLALCHEMY_DATABASE_URI = PRIMARY_DATABASE_URL or BACKUP_DATABASE_URL or f'sqlite:///{DB_PATH}'
-
-    # 打印当前使用的数据库URL（隐藏敏感信息）
-    db_type = "主数据库" if PRIMARY_DATABASE_URL and SQLALCHEMY_DATABASE_URI == PRIMARY_DATABASE_URL else \
-              "备份数据库" if BACKUP_DATABASE_URL and SQLALCHEMY_DATABASE_URI == BACKUP_DATABASE_URL else "SQLite"
+    db_type = "主数据库" if PRIMARY_DATABASE_URL else "SQLite"
     logger.info(f"使用{db_type}: {SQLALCHEMY_DATABASE_URI[:50] + '...' if len(SQLALCHEMY_DATABASE_URI) > 50 else SQLALCHEMY_DATABASE_URI}")
-
-    # 双数据库启用标志
-    DUAL_DATABASE_ENABLED = bool(PRIMARY_DATABASE_URL and BACKUP_DATABASE_URL)
     
     # SQLAlchemy配置 - 优化连接池以减少延迟
     SQLALCHEMY_TRACK_MODIFICATIONS = False

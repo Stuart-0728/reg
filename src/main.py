@@ -6,14 +6,6 @@ import logging
 import argparse
 from src import create_app
 
-# 导入自动备份服务
-try:
-    from src.auto_backup import start_auto_backup_thread
-    AUTO_BACKUP_AVAILABLE = True
-except ImportError as e:
-    print(f"自动备份功能不可用: {e}")
-    AUTO_BACKUP_AVAILABLE = False
-
 # 获取当前文件目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # 设置日志文件的绝对路径
@@ -45,15 +37,5 @@ if __name__ == '__main__':
     
     print(f"启动服务器: {host}:{port}")
     app = create_app()
-
-    # 启动自动备份服务
-    if AUTO_BACKUP_AVAILABLE:
-        try:
-            backup_service = start_auto_backup_thread()
-            logger.info("自动备份服务已启动（每6小时备份一次）")
-        except Exception as e:
-            logger.error(f"启动自动备份服务失败: {e}")
-    else:
-        logger.warning("自动备份服务不可用")
 
     app.run(host=host, port=port)
