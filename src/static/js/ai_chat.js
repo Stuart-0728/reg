@@ -13,7 +13,7 @@ const AI_CHAT_CONFIG = {
     cookiePrefix: 'cqnu_ai_chat_',
     maxStoredMessages: 50,  // 最大存储消息数
     cookieExpireDays: 7,    // Cookie保存天数
-    initialBotMessage: '您好，欢迎来到重庆师范大学智能社团+平台，我是基于DeepSeek大语言模型的智能助手，有什么可以帮助您的吗？',
+    initialBotMessage: '您好，欢迎来到智能社团+平台，我是基于DeepSeek大语言模型的智能助手，有什么可以帮助您的吗？',
     notLoggedInMessage: '您好！AI助手功能需要登录后使用。请先<a href="/auth/login" class="ai-chat-link">登录</a>或<a href="/auth/register" class="ai-chat-link">注册</a>。'
 };
 

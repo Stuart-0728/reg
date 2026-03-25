@@ -153,6 +153,30 @@ def _ensure_activity_start_reminders(user_id):
         db.session.rollback()
         logger.error(f"生成活动开始提醒失败: {e}")
 
+
+def _create_registration_success_notification(user_id, activity):
+    """在报名成功后给学生发送活动额外提示（若管理员配置了文案）。"""
+    if not activity:
+        return
+
+    extra_message = sanitize_plain_text(
+        getattr(activity, 'registration_success_message', None),
+        allow_multiline=True,
+        max_length=1000
+    )
+    if not extra_message:
+        return
+
+    notice = Notification(
+        title=f"活动报名成功：{activity.title}",
+        content=f"你已成功报名《{activity.title}》。\n\n{extra_message}",
+        is_important=True,
+        created_at=get_localized_now(),
+        created_by=user_id,
+        is_public=False
+    )
+    db.session.add(notice)
+
 # 检查是否为学生的装饰器
 def student_required(func):
     @login_required
@@ -282,6 +306,11 @@ def dashboard():
         # 获取最近的通知
         notifications = []
         try:
+            deleted_notification_ids_subq = db.session.query(NotificationRead.notification_id).filter(
+                NotificationRead.user_id == current_user.id,
+                NotificationRead.is_deleted.is_(True)
+            )
+
             # 获取公开通知和针对当前用户的通知
             notif_stmt = db.select(Notification).filter(
                 or_(
@@ -289,6 +318,14 @@ def dashboard():
                     and_(
                         Notification.is_public == False,  # 私人通知
                         Notification.created_by == current_user.id  # 发给当前用户的
+                    )
+                ),
+                Notification.title.isnot(None),
+                Notification.content.isnot(None),
+                ~Notification.id.in_(deleted_notification_ids_subq),
+                ~Notification.id.in_(
+                    db.session.query(NotificationRead.notification_id).filter(
+                        NotificationRead.user_id == current_user.id
                     )
                 )
             ).order_by(Notification.created_at.desc()).limit(5)
@@ -345,9 +382,37 @@ def activities():
         now = get_localized_now()
         current_status = request.args.get('status', 'active')
         page = request.args.get('page', 1, type=int)
+        keyword = (request.args.get('q', '', type=str) or '').strip()
+        selected_tag_id = request.args.get('tag_id', type=int)
+        selected_society_id = request.args.get('society_id', type=int)
+
+        tags = db.session.execute(db.select(Tag).order_by(Tag.name.asc())).scalars().all()
+        societies = db.session.execute(
+            db.select(Society).order_by(Society.is_active.desc(), Society.name.asc())
+        ).scalars().all()
         
         # 基本查询 - 所有活动
-        query = db.select(Activity).options(defer(Activity.poster_data))
+        query = db.select(Activity).options(
+            defer(Activity.poster_data),
+            joinedload(Activity.tags),
+            joinedload(Activity.society)
+        )
+
+        if selected_tag_id:
+            query = query.join(Activity.tags).filter(Tag.id == selected_tag_id)
+
+        if selected_society_id:
+            query = query.filter(Activity.society_id == selected_society_id)
+
+        if keyword:
+            keyword_like = f"%{keyword}%"
+            query = query.outerjoin(Society, Activity.society_id == Society.id).filter(
+                or_(
+                    Activity.title.ilike(keyword_like),
+                    Activity.description.ilike(keyword_like),
+                    Society.name.ilike(keyword_like)
+                )
+            )
 
         # 根据状态筛选，使用北京时间进行比较
         if current_status == 'active':
@@ -364,7 +429,7 @@ def activities():
             )
             
         # 排序
-        query = query.order_by(Activity.start_time)
+        query = query.distinct().order_by(Activity.start_time)
             
         # 分页
         activities = get_compatible_paginate(db, query, page=page, per_page=10, error_out=False)
@@ -381,6 +446,11 @@ def activities():
             registered_activity_ids=registered_activity_ids,
             now=now,
             current_status=current_status,
+            keyword=keyword,
+            selected_tag_id=selected_tag_id,
+            selected_society_id=selected_society_id,
+            tags=tags,
+            societies=societies,
             safe_less_than=safe_less_than,
             safe_greater_than=safe_greater_than,
             safe_compare=safe_compare,
@@ -424,10 +494,7 @@ def activity_detail(id):
         can_checkin = (
             has_registered and 
             not has_checked_in and 
-            (
-                (safe_less_than_equal(activity.start_time, now) and safe_greater_than(activity.end_time, now)) or 
-                activity.checkin_enabled
-            )
+            activity.checkin_enabled
         )
 
         current_user_review = db.session.execute(db.select(ActivityReview).filter_by(activity_id=id, user_id=current_user.id)).scalar_one_or_none()
@@ -565,6 +632,7 @@ def register_activity(id):
                 student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
                 if student_info and activity.society_id:
                     _ensure_student_join_society(student_info, activity.society_id)
+                _create_registration_success_notification(current_user.id, activity)
                 db.session.commit()
                 return jsonify({'success': True, 'message': '已成功重新报名活动'})
 
@@ -589,6 +657,8 @@ def register_activity(id):
         student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
         if student_info and activity.society_id:
             _ensure_student_join_society(student_info, activity.society_id)
+
+        _create_registration_success_notification(current_user.id, activity)
 
         db.session.commit()
         cache.delete_memoized(_cached_registered_activity_ids, current_user.id)
@@ -639,6 +709,9 @@ def my_activities():
     try:
         page = request.args.get('page', 1, type=int)
         status = request.args.get('status', 'all')
+        keyword = (request.args.get('q', '', type=str) or '').strip()
+        selected_tag_id = request.args.get('tag_id', type=int)
+        selected_society_id = request.args.get('society_id', type=int)
         
         # 使用北京时间进行状态判定
         from src.utils.time_helpers import get_localized_now, display_datetime, safe_less_than, safe_greater_than, safe_compare, get_activity_status, is_activity_completed
@@ -649,9 +722,16 @@ def my_activities():
         # 使用别名避免表连接问题
         from sqlalchemy.orm import aliased
         ActivityAlias = aliased(Activity)
+        SocietyAlias = aliased(Society)
+        TagAlias = aliased(Tag)
+
+        tags = db.session.execute(db.select(Tag).order_by(Tag.name.asc())).scalars().all()
+        societies = db.session.execute(
+            db.select(Society).order_by(Society.is_active.desc(), Society.name.asc())
+        ).scalars().all()
         
         # 基本查询 - 获取用户的所有报名记录
-        query = Registration.query.filter_by(user_id=current_user.id)
+        query = Registration.query.filter_by(user_id=current_user.id).join(ActivityAlias, ActivityAlias.id == Registration.activity_id)
         
         # 记录查询到的报名记录数量
         count = query.count()
@@ -659,20 +739,33 @@ def my_activities():
         
         # 根据状态筛选
         if status == 'active':
-            query = query.join(ActivityAlias, ActivityAlias.id == Registration.activity_id)
             query = query.filter(ActivityAlias.status == 'active')
         elif status == 'completed':
-            query = query.join(ActivityAlias, ActivityAlias.id == Registration.activity_id)
             query = query.filter(ActivityAlias.status == 'completed')
         elif status == 'cancelled':
             query = query.filter_by(status='cancelled')
+
+        if selected_tag_id:
+            query = query.join(ActivityAlias.tags.of_type(TagAlias)).filter(TagAlias.id == selected_tag_id)
+
+        if selected_society_id:
+            query = query.filter(ActivityAlias.society_id == selected_society_id)
+
+        if keyword:
+            keyword_like = f"%{keyword}%"
+            query = query.outerjoin(SocietyAlias, ActivityAlias.society_id == SocietyAlias.id).filter(
+                or_(
+                    ActivityAlias.title.ilike(keyword_like),
+                    ActivityAlias.description.ilike(keyword_like),
+                    SocietyAlias.name.ilike(keyword_like)
+                )
+            )
         
         # 获取报名记录，并预加载活动信息
-        query = query.options(joinedload(Registration.activity))
-        
-        # 确保在所有情况下都添加连接，并使用正确的表别名进行排序
-        if not any(status == s for s in ['active', 'completed']):
-            query = query.join(ActivityAlias, ActivityAlias.id == Registration.activity_id)
+        query = query.options(
+            joinedload(Registration.activity).joinedload(Activity.tags),
+            joinedload(Registration.activity).joinedload(Activity.society)
+        )
         
         # 执行查询并分页 - 按距离当前时间最近的活动排序
         try:
@@ -725,6 +818,11 @@ def my_activities():
         return render_template('student/my_activities.html', 
                               registrations=registrations,
                               current_status=status,
+                              keyword=keyword,
+                              selected_tag_id=selected_tag_id,
+                              selected_society_id=selected_society_id,
+                              tags=tags,
+                              societies=societies,
                               pending_reviews=pending_reviews,
                               reviewed_activity_ids=reviewed_activity_ids,
                               now=now,
@@ -1702,7 +1800,12 @@ def notifications():
         # 获取当前时间，确保带有时区信息
         now = ensure_timezone_aware(datetime.now())
         
-        # 获取有效的通知（未过期或无过期日期）
+        deleted_notification_ids_subq = db.session.query(NotificationRead.notification_id).filter(
+            NotificationRead.user_id == current_user.id,
+            NotificationRead.is_deleted.is_(True)
+        )
+
+        # 获取有效的通知（未过期或无过期日期），并排除当前用户已删除通知
         notifications = Notification.query.filter(
             or_(
                 Notification.is_public == True,
@@ -1713,12 +1816,14 @@ def notifications():
                 Notification.expiry_date >= now
             ),
             Notification.title.isnot(None),
-            Notification.content.isnot(None)
+            Notification.content.isnot(None),
+            ~Notification.id.in_(deleted_notification_ids_subq)
         ).order_by(Notification.is_important.desc(), Notification.created_at.desc()).paginate(page=page, per_page=10)
         
         # 获取当前用户已读通知的ID列表
         read_notification_ids = db.session.query(NotificationRead.notification_id).filter(
-            NotificationRead.user_id == current_user.id
+            NotificationRead.user_id == current_user.id,
+            or_(NotificationRead.is_deleted == False, NotificationRead.is_deleted.is_(None))
         ).all()
         read_notification_ids = [r[0] for r in read_notification_ids]
         
@@ -1736,6 +1841,18 @@ def notifications():
 def view_notification(id):
     try:
         now = ensure_timezone_aware(datetime.now())
+        deleted_read = db.session.execute(
+            db.select(NotificationRead).filter(
+                NotificationRead.notification_id == id,
+                NotificationRead.user_id == current_user.id,
+                NotificationRead.is_deleted.is_(True)
+            )
+        ).scalar_one_or_none()
+
+        if deleted_read:
+            flash('该通知已删除，无法查看详情', 'warning')
+            return redirect(url_for('student.notifications'))
+
         notification = Notification.query.filter(
             Notification.id == id,
             or_(
@@ -1749,18 +1866,28 @@ def view_notification(id):
         ).first_or_404()
         
         # 标记为已读
-        read_record = db.session.execute(db.select(NotificationRead).filter_by(
-            notification_id=id,
-            user_id=current_user.id
-        )).scalar_one_or_none()
+        read_record = db.session.execute(
+            db.select(NotificationRead)
+            .filter(
+                NotificationRead.notification_id == id,
+                NotificationRead.user_id == current_user.id
+            )
+            .order_by(NotificationRead.id.desc())
+        ).scalars().first()
         
         if not read_record:
             read_record = NotificationRead(
                 notification_id=id,
-                user_id=current_user.id
+                user_id=current_user.id,
+                read_at=get_localized_now(),
+                is_deleted=False
             )
             db.session.add(read_record)
-            db.session.commit()
+        else:
+            if not read_record.read_at:
+                read_record.read_at = get_localized_now()
+
+        db.session.commit()
         
         return render_template('student/notification_view.html', 
                               notification=notification,
@@ -1788,23 +1915,138 @@ def mark_notification_read(id):
         ).first_or_404()
         
         # 检查是否已经标记为已读
-        read_record = db.session.execute(db.select(NotificationRead).filter_by(
-            notification_id=id,
-            user_id=current_user.id
-        )).scalar_one_or_none()
+        read_record = db.session.execute(
+            db.select(NotificationRead)
+            .filter(
+                NotificationRead.notification_id == id,
+                NotificationRead.user_id == current_user.id
+            )
+            .order_by(NotificationRead.id.desc())
+        ).scalars().first()
+
+        if read_record and read_record.is_deleted:
+            return jsonify({'success': False, 'deleted': True, 'message': '通知已删除，无法标记已读'}), 410
         
         if not read_record:
             read_record = NotificationRead(
                 notification_id=id,
-                user_id=current_user.id
+                user_id=current_user.id,
+                read_at=get_localized_now(),
+                is_deleted=False
             )
             db.session.add(read_record)
-            db.session.commit()
+        else:
+            if not read_record.read_at:
+                read_record.read_at = get_localized_now()
+
+        db.session.commit()
         
         return jsonify({'success': True})
     except Exception as e:
         logger.error(f"Error in mark_notification_read: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@student_bp.route('/notifications/mark_all_read', methods=['POST'])
+@student_required
+def mark_all_notifications_read():
+    try:
+        now = ensure_timezone_aware(datetime.now())
+        deleted_notification_ids_subq = db.session.query(NotificationRead.notification_id).filter(
+            NotificationRead.user_id == current_user.id,
+            NotificationRead.is_deleted.is_(True)
+        )
+        accessible_notification_ids = db.session.query(Notification.id).filter(
+            or_(
+                Notification.is_public == True,
+                and_(Notification.is_public == False, Notification.created_by == current_user.id)
+            ),
+            or_(
+                Notification.expiry_date == None,
+                Notification.expiry_date >= now
+            ),
+            Notification.title.isnot(None),
+            Notification.content.isnot(None),
+            ~Notification.id.in_(deleted_notification_ids_subq)
+        ).all()
+        accessible_notification_ids = [row[0] for row in accessible_notification_ids]
+
+        if not accessible_notification_ids:
+            flash('当前没有可标记的通知', 'info')
+            return redirect(url_for('student.notifications', page=request.args.get('page', 1, type=int)))
+
+        existing_reads = db.session.query(NotificationRead).filter(
+            NotificationRead.user_id == current_user.id,
+            NotificationRead.notification_id.in_(accessible_notification_ids),
+            or_(NotificationRead.is_deleted == False, NotificationRead.is_deleted.is_(None))
+        ).all()
+        existing_map = {r.notification_id: r for r in existing_reads}
+
+        updated = 0
+        for nid in accessible_notification_ids:
+            record = existing_map.get(nid)
+            if record:
+                changed = False
+                if not record.read_at:
+                    record.read_at = get_localized_now()
+                    changed = True
+                if changed:
+                    updated += 1
+            else:
+                db.session.add(NotificationRead(
+                    user_id=current_user.id,
+                    notification_id=nid,
+                    read_at=get_localized_now(),
+                    is_deleted=False
+                ))
+                updated += 1
+
+        db.session.commit()
+        flash(f'已标记 {updated} 条通知为已读', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in mark_all_notifications_read: {e}")
+        flash('一键已读通知失败，请稍后重试', 'danger')
+    return redirect(url_for('student.notifications', page=request.args.get('page', 1, type=int)))
+
+
+@student_bp.route('/notifications/delete_read', methods=['POST'])
+@student_required
+def delete_read_notifications():
+    try:
+        now = ensure_timezone_aware(datetime.now())
+        accessible_notification_ids = db.session.query(Notification.id).filter(
+            or_(
+                Notification.is_public == True,
+                and_(Notification.is_public == False, Notification.created_by == current_user.id)
+            ),
+            or_(
+                Notification.expiry_date == None,
+                Notification.expiry_date >= now
+            ),
+            Notification.title.isnot(None),
+            Notification.content.isnot(None)
+        ).all()
+        accessible_notification_ids = [row[0] for row in accessible_notification_ids]
+
+        if not accessible_notification_ids:
+            flash('当前没有可删除的通知', 'info')
+            return redirect(url_for('student.notifications', page=request.args.get('page', 1, type=int)))
+
+        updated = db.session.query(NotificationRead).filter(
+            NotificationRead.user_id == current_user.id,
+            NotificationRead.notification_id.in_(accessible_notification_ids),
+            or_(NotificationRead.is_deleted == False, NotificationRead.is_deleted.is_(None)),
+            NotificationRead.read_at.isnot(None)
+        ).update({NotificationRead.is_deleted: True}, synchronize_session=False)
+
+        db.session.commit()
+        flash(f'已删除 {updated} 条已读通知', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in delete_read_notifications: {e}")
+        flash('删除已读通知失败，请稍后重试', 'danger')
+    return redirect(url_for('student.notifications', page=request.args.get('page', 1, type=int)))
 
 @student_bp.route('/api/notifications/unread')
 @student_required
@@ -1844,10 +2086,17 @@ def get_unread_notifications():
                 'created_at': display_datetime(notification.created_at, None, '%Y-%m-%d %H:%M') if notification.created_at else ''
             })
         
-        return jsonify({
+        response = jsonify({
             'success': True,
             'notifications': notifications_data
         })
+        # 显式禁止浏览器与中间层缓存，避免跨页面切换读取旧通知状态
+        response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['CDN-Cache-Control'] = 'no-store'
+        response.headers['Surrogate-Control'] = 'no-store'
+        return response
     except Exception as e:
         logger.error(f"Error in get_unread_notifications: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500

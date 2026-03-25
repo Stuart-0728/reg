@@ -3,7 +3,6 @@ from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 import logging
 from sqlalchemy import func, desc, text, and_, or_, case
-from sqlalchemy.orm import joinedload
 from src import db, cache, limiter
 from src.models import Activity, Registration, User, Tag, Notification, Announcement, Role
 from src.utils.time_helpers import get_localized_now, ensure_timezone_aware, safe_less_than, safe_greater_than, display_datetime, get_activity_status
@@ -65,7 +64,7 @@ def index():
 
         # 首页活动逻辑：仅显示进行中的活动，按发布时间倒序（越新越靠前）
         active_activities = db.session.execute(
-            db.select(Activity).options(joinedload(Activity.category)).filter(
+            db.select(Activity).filter(
                 Activity.status == 'active'
             ).order_by(
                 Activity.created_at.desc()
@@ -129,7 +128,7 @@ def home_activities_api():
     """首页活动预告实时接口：每次加载都应获取最新活动。"""
     try:
         active_activities = db.session.execute(
-            db.select(Activity).options(joinedload(Activity.category)).filter(
+            db.select(Activity).filter(
                 Activity.status == 'active'
             ).order_by(
                 Activity.created_at.desc()
@@ -165,7 +164,7 @@ def home_activities_api():
                 'description': (activity.description or ''),
                 'location': activity.location or '',
                 'start_time_text': display_datetime(activity.start_time, None, '%m月%d日 %H:%M') if activity.start_time else '',
-                'category_name': activity.category.name if getattr(activity, 'category', None) else '',
+                'category_name': '',
                 'detail_url': url_for('student.activity_detail', id=activity.id),
                 'poster_url': poster_url,
             })

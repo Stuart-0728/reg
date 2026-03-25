@@ -2055,6 +2055,11 @@ def create_activity():
             end_time = form.end_time.data
             registration_start_time = form.registration_start_time.data
             registration_deadline = form.registration_deadline.data
+            registration_success_message = sanitize_plain_text(
+                form.registration_success_message.data,
+                allow_multiline=True,
+                max_length=1000
+            )
             max_participants = form.max_participants.data
             if max_participants is None:
                 max_participants = 0
@@ -2086,6 +2091,7 @@ def create_activity():
                 end_time=end_time,
                 registration_start_time=registration_start_time,
                 registration_deadline=registration_deadline,
+                registration_success_message=registration_success_message,
                 max_participants=max_participants,
                 points=points,
                 status=status,
@@ -2251,6 +2257,11 @@ def edit_activity(id):
                 activity.points = form.points.data
                 activity.status = form.status.data
                 activity.is_featured = form.is_featured.data
+                activity.registration_success_message = sanitize_plain_text(
+                    form.registration_success_message.data,
+                    allow_multiline=True,
+                    max_length=1000
+                )
                 activity.activity_type = form.activity_type.data if hasattr(form, 'activity_type') else None
                 # 不处理tags字段，它会在后面单独处理
 
@@ -3647,7 +3658,7 @@ def create_backup():
                 
                 # 添加README文件
                 with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as temp_readme:
-                    temp_readme.write(f"重庆师范大学智能社团+系统备份\n")
+                    temp_readme.write(f"智能社团+系统备份\n")
                     temp_readme.write(f"创建时间: {normalize_datetime_for_db(datetime.now()).strftime('%Y-%m-%d %H:%M:%S')}\n")
                     temp_readme.write(f"创建者: {current_user.username}\n\n")
                     temp_readme.write("备份内容:\n")

@@ -1,4 +1,4 @@
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, bindparam
 
 
 def _column_exists(inspector, table_name, column_name):
@@ -147,6 +147,76 @@ def ensure_db_structure(app, db):
         app.logger.info('已补齐 activities.registration_start_time 字段')
     else:
         app.logger.info('字段 activities.registration_start_time 已存在，跳过补齐')
+
+    if not _column_exists(inspector, 'activities', 'registration_success_message'):
+        if dialect == 'postgresql':
+            alter_sql = "ALTER TABLE activities ADD COLUMN registration_success_message TEXT"
+        else:
+            alter_sql = "ALTER TABLE activities ADD COLUMN registration_success_message TEXT"
+
+        with engine.begin() as conn:
+            conn.execute(text(alter_sql))
+
+        app.logger.info('已补齐 activities.registration_success_message 字段')
+    else:
+        app.logger.info('字段 activities.registration_success_message 已存在，跳过补齐')
+
+    if not _column_exists(inspector, 'notification_read', 'is_deleted'):
+        if dialect == 'postgresql':
+            alter_sql = "ALTER TABLE notification_read ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE"
+        else:
+            alter_sql = "ALTER TABLE notification_read ADD COLUMN is_deleted BOOLEAN DEFAULT 0"
+
+        with engine.begin() as conn:
+            conn.execute(text(alter_sql))
+
+        app.logger.info('已补齐 notification_read.is_deleted 字段')
+    else:
+        app.logger.info('字段 notification_read.is_deleted 已存在，跳过补齐')
+
+    # 清理 notification_read 重复记录，避免同一用户同一通知出现多条状态冲突
+    with engine.begin() as conn:
+        duplicates = conn.execute(text("""
+            SELECT user_id, notification_id, COUNT(*) AS cnt
+            FROM notification_read
+            GROUP BY user_id, notification_id
+            HAVING COUNT(*) > 1
+        """)).fetchall()
+
+        removed_rows = 0
+        for row in duplicates:
+            user_id = row[0]
+            notification_id = row[1]
+            records = conn.execute(text("""
+                SELECT id
+                FROM notification_read
+                WHERE user_id = :user_id AND notification_id = :notification_id
+                ORDER BY
+                    CASE WHEN is_deleted THEN 1 ELSE 0 END DESC,
+                    CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END DESC,
+                    COALESCE(read_at, CURRENT_TIMESTAMP) DESC,
+                    id DESC
+            """), {
+                'user_id': user_id,
+                'notification_id': notification_id
+            }).fetchall()
+
+            if len(records) <= 1:
+                continue
+
+            keep_id = records[0][0]
+            delete_ids = [r[0] for r in records[1:] if r[0] != keep_id]
+            if delete_ids:
+                conn.execute(
+                    text("DELETE FROM notification_read WHERE id IN :ids").bindparams(bindparam("ids", expanding=True)),
+                    {"ids": delete_ids}
+                )
+                removed_rows += len(delete_ids)
+
+        if removed_rows:
+            app.logger.info(f'已清理 notification_read 重复记录 {removed_rows} 条')
+        else:
+            app.logger.info('notification_read 无重复记录，跳过去重')
 
     # 4) 每日天气缓存表（降低第三方API消耗并稳定详情页加载）
     if 'weather_daily_cache' not in table_names:

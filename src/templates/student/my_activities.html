@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}我的活动 - 重庆师范大学智能社团+{% endblock %}
+{% block title %}我的活动 - 智能社团+{% endblock %}
 
 {% block content %}
 <div class="container mt-4">
@@ -10,20 +10,49 @@
         <div class="card-header bg-white">
             <ul class="nav nav-tabs card-header-tabs">
                 <li class="nav-item">
-                    <a class="nav-link {% if current_status == 'all' %}active{% endif %}" href="{{ url_for('student.my_activities', status='all') }}">全部活动</a>
+                    <a class="nav-link {% if current_status == 'all' %}active{% endif %}" href="{{ url_for('student.my_activities', status='all', q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}">全部活动</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if current_status == 'active' %}active{% endif %}" href="{{ url_for('student.my_activities', status='active') }}">进行中</a>
+                    <a class="nav-link {% if current_status == 'active' %}active{% endif %}" href="{{ url_for('student.my_activities', status='active', q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}">进行中</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if current_status == 'completed' %}active{% endif %}" href="{{ url_for('student.my_activities', status='completed') }}">已结束</a>
+                    <a class="nav-link {% if current_status == 'completed' %}active{% endif %}" href="{{ url_for('student.my_activities', status='completed', q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}">已结束</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if current_status == 'cancelled' %}active{% endif %}" href="{{ url_for('student.my_activities', status='cancelled') }}">已取消报名</a>
+                    <a class="nav-link {% if current_status == 'cancelled' %}active{% endif %}" href="{{ url_for('student.my_activities', status='cancelled', q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}">已取消报名</a>
                 </li>
             </ul>
         </div>
         <div class="card-body">
+            <form method="get" action="{{ url_for('student.my_activities') }}" class="row g-2 align-items-end mb-3">
+                <input type="hidden" name="status" value="{{ current_status }}">
+                <div class="col-12 col-lg-4">
+                    <label for="myKeywordInput" class="form-label mb-1">关键词搜索</label>
+                    <input type="text" class="form-control" id="myKeywordInput" name="q" value="{{ keyword or '' }}" placeholder="按标题、简介、社团搜索">
+                </div>
+                <div class="col-6 col-lg-3">
+                    <label for="myTagFilter" class="form-label mb-1">标签筛选</label>
+                    <select class="form-select" id="myTagFilter" name="tag_id">
+                        <option value="">全部标签</option>
+                        {% for tag in tags %}
+                            <option value="{{ tag.id }}" {% if selected_tag_id == tag.id %}selected{% endif %}>{{ tag.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <label for="mySocietyFilter" class="form-label mb-1">社团筛选</label>
+                    <select class="form-select" id="mySocietyFilter" name="society_id">
+                        <option value="">全部社团</option>
+                        {% for society in societies %}
+                            <option value="{{ society.id }}" {% if selected_society_id == society.id %}selected{% endif %}>{{ society.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">筛选</button>
+                    <a href="{{ url_for('student.my_activities', status=current_status) }}" class="btn btn-outline-secondary">重置</a>
+                </div>
+            </form>
             {% if registrations and registrations.items %}
                 <div class="list-group">
                     {% for registration in registrations.items %}
@@ -78,7 +107,7 @@
                         <ul class="pagination pagination-sm justify-content-center mb-0">
                             {% if registrations.has_prev %}
                                 <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.prev_num, status=current_status) }}" aria-label="Previous">
+                                    <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.prev_num, status=current_status, q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}" aria-label="Previous">
                                         <span aria-hidden="true">&laquo;</span>
                                     </a>
                                 </li>
@@ -87,7 +116,7 @@
                             {% for page_num in registrations.iter_pages() %}
                                 {% if page_num %}
                                     <li class="page-item {% if page_num == registrations.page %}active{% endif %}">
-                                        <a class="page-link" href="{{ url_for('student.my_activities', page=page_num, status=current_status) }}">{{ page_num }}</a>
+                                        <a class="page-link" href="{{ url_for('student.my_activities', page=page_num, status=current_status, q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}">{{ page_num }}</a>
                                     </li>
                                 {% else %}
                                     <li class="page-item disabled">
@@ -98,7 +127,7 @@
                             
                             {% if registrations.has_next %}
                                 <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.next_num, status=current_status) }}" aria-label="Next">
+                                    <a class="page-link" href="{{ url_for('student.my_activities', page=registrations.next_num, status=current_status, q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}" aria-label="Next">
                                         <span aria-hidden="true">&raquo;</span>
                                     </a>
                                 </li>

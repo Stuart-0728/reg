@@ -60,10 +60,10 @@ ONLINE_RESOURCES = [
         "description": "国家级中小学教育平台，提供丰富的教学资源和教育服务",
     },
     {
-        "name": "重庆师范大学官网",
+        "name": "官网",
         "url": "https://www.cqnu.edu.cn/",
         "icon": "fa-university",
-        "description": "重庆师范大学官方网站，提供学校新闻、通知和资源",
+        "description": "官方网站，提供学校新闻、通知和资源",
     },
     {
         "name": "中国教育资源网",

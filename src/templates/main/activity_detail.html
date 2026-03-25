@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ activity.title }} - 活动详情 - 重庆师范大学智能社团+{% endblock %}
+{% block title %}{{ activity.title }} - 活动详情 - 智能社团+{% endblock %}
 
 {% block styles %}
 {{ super() }}
@@ -40,6 +40,19 @@
                         <h5>活动详情</h5>
                         <p class="card-text">{{ activity.description | safe }}</p>
                     </div>
+
+                    {% if activity.registration_success_message %}
+                    <div class="card border-primary border-opacity-25 bg-light mb-4">
+                        <div class="card-body py-3 px-3">
+                            <h6 class="fw-bold mb-2 text-primary">
+                                <i class="fas fa-bullhorn me-1"></i>附加消息
+                            </h6>
+                            <div class="small mb-0">
+                                {{ activity.registration_success_message|replace('\n', '<br>')|safe }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                     
                     <div class="row mb-4">
                         <div class="col-md-6">
@@ -230,7 +243,7 @@
                             <i class="fas fa-user-tie fa-2x text-primary"></i>
                         </div>
                         <div class="flex-grow-1 ms-3">
-                            <h6 class="mb-0">{{ activity.society.name if activity.society else '重庆师范大学智能社团+' }}</h6>
+                            <h6 class="mb-0">{{ activity.society.name if activity.society else '智能社团+' }}</h6>
                             {% if activity.society and activity.society.description %}
                             <p class="text-muted mb-0 small">{{ activity.society.description }}</p>
                             {% elif not activity.society %}

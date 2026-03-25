@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}活动列表 - 重庆师范大学智能社团+{% endblock %}
+{% block title %}活动列表 - 智能社团+{% endblock %}
 
 {% block content %}
 <div class="container py-4">
@@ -22,18 +22,51 @@
         <div class="card-header bg-white p-0">
             <ul class="nav nav-tabs card-header-tabs border-0">
                 <li class="nav-item">
-                    <a class="nav-link {% if current_status == 'active' %}active fw-medium{% endif %}" href="{{ url_for('student.activities', status='active') }}">
+                    <a class="nav-link {% if current_status == 'active' %}active fw-medium{% endif %}" href="{{ url_for('student.activities', status='active', q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}">
                         <i class="fas fa-play-circle me-1"></i>进行中的活动
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if current_status == 'past' %}active fw-medium{% endif %}" href="{{ url_for('student.activities', status='past') }}">
+                    <a class="nav-link {% if current_status == 'past' %}active fw-medium{% endif %}" href="{{ url_for('student.activities', status='past', q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}">
                         <i class="fas fa-history me-1"></i>已结束的活动
                     </a>
                 </li>
             </ul>
         </div>
         <div class="card-body p-0">
+            <div class="p-3 border-bottom bg-light-subtle">
+                <form method="get" action="{{ url_for('student.activities') }}" class="row g-2 align-items-end">
+                    <input type="hidden" name="status" value="{{ current_status }}">
+                    <div class="col-12 col-lg-4">
+                        <label for="keywordInput" class="form-label mb-1">关键词搜索</label>
+                        <input type="text" class="form-control" id="keywordInput" name="q" value="{{ keyword or '' }}" placeholder="按标题、简介、社团搜索">
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <label for="tagFilter" class="form-label mb-1">标签筛选</label>
+                        <select class="form-select" id="tagFilter" name="tag_id">
+                            <option value="">全部标签</option>
+                            {% for tag in tags %}
+                                <option value="{{ tag.id }}" {% if selected_tag_id == tag.id %}selected{% endif %}>{{ tag.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <label for="societyFilter" class="form-label mb-1">社团筛选</label>
+                        <select class="form-select" id="societyFilter" name="society_id">
+                            <option value="">全部社团</option>
+                            {% for society in societies %}
+                                <option value="{{ society.id }}" {% if selected_society_id == society.id %}selected{% endif %}>{{ society.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-lg-2 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-grow-1">
+                            <i class="fas fa-search me-1"></i>筛选
+                        </button>
+                        <a href="{{ url_for('student.activities', status=current_status) }}" class="btn btn-outline-secondary">重置</a>
+                    </div>
+                </form>
+            </div>
             {% if activities.items %}
                 <div class="list-group list-group-flush">
                     {% for activity in activities.items %}
@@ -111,7 +144,7 @@
                         <ul class="pagination pagination-sm justify-content-center flex-wrap mb-0">
                             {% if activities.has_prev %}
                                 <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('student.activities', page=activities.prev_num, status=current_status) }}" aria-label="Previous">
+                                    <a class="page-link" href="{{ url_for('student.activities', page=activities.prev_num, status=current_status, q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}" aria-label="Previous">
                                         <span aria-hidden="true">&laquo;</span>
                                     </a>
                                 </li>
@@ -120,7 +153,7 @@
                             {% for page_num in activities.iter_pages() %}
                                 {% if page_num %}
                                     <li class="page-item {% if page_num == activities.page %}active{% endif %}">
-                                        <a class="page-link" href="{{ url_for('student.activities', page=page_num, status=current_status) }}">{{ page_num }}</a>
+                                        <a class="page-link" href="{{ url_for('student.activities', page=page_num, status=current_status, q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}">{{ page_num }}</a>
                                     </li>
                                 {% else %}
                                     <li class="page-item disabled">
@@ -131,7 +164,7 @@
                             
                             {% if activities.has_next %}
                                 <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('student.activities', page=activities.next_num, status=current_status) }}" aria-label="Next">
+                                    <a class="page-link" href="{{ url_for('student.activities', page=activities.next_num, status=current_status, q=(keyword or None), tag_id=(selected_tag_id or None), society_id=(selected_society_id or None)) }}" aria-label="Next">
                                         <span aria-hidden="true">&raquo;</span>
                                     </a>
                                 </li>
@@ -230,6 +263,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     // 显示成功消息
                     showToast(data.message || '报名成功！', 'success');
+
+                    // 报名成功后立即刷新全局未读通知角标（含活动附加通知）
+                    if (typeof window.fetchUnreadNotifications === 'function') {
+                        window.fetchUnreadNotifications(true);
+                    }
 
                     // 原地更新按钮状态，避免强制跳转带来的额外加载时延
                     this.classList.remove('btn-primary', 'register-btn');

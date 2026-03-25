@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ activity.title }} - 重庆师范大学智能社团+{% endblock %}
+{% block title %}{{ activity.title }} - 智能社团+{% endblock %}
 
 {% block head %}
 {{ super() }}
@@ -101,6 +101,19 @@
                         </div>
                     </div>
 
+                    {% if activity.registration_success_message %}
+                    <div class="card border-primary border-opacity-25 bg-light mb-4">
+                        <div class="card-body py-3 px-3">
+                            <h6 class="fw-bold mb-2 text-primary">
+                                <i class="fas fa-bullhorn me-1"></i>附加消息
+                            </h6>
+                            <div class="small mb-0">
+                                {{ activity.registration_success_message|replace('\n', '<br>')|safe }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div class="activity-info-overview mb-4 d-xl-none">
                         <h5 class="fw-bold mb-3">活动信息</h5>
                         <ul class="list-unstyled mb-0">
@@ -140,7 +153,7 @@
                                 <i class="fas fa-user-tie fa-2x text-primary"></i>
                             </div>
                             <div class="flex-grow-1 ms-3">
-                                <h6 class="mb-0">{{ activity.society.name if activity.society else '重庆师范大学智能社团+' }}</h6>
+                                <h6 class="mb-0">{{ activity.society.name if activity.society else '智能社团+' }}</h6>
                                 {% if activity.society and activity.society.description %}
                                 <p class="text-muted mb-0 small">{{ activity.society.description }}</p>
                                 {% elif not activity.society %}
@@ -303,7 +316,7 @@
                             <i class="fas fa-user-tie fa-2x text-primary"></i>
                         </div>
                         <div class="flex-grow-1 ms-3">
-                            <h6 class="mb-0">{{ activity.society.name if activity.society else '重庆师范大学智能社团+' }}</h6>
+                            <h6 class="mb-0">{{ activity.society.name if activity.society else '智能社团+' }}</h6>
                             {% if activity.society and activity.society.description %}
                             <p class="text-muted mb-0 small">{{ activity.society.description }}</p>
                             {% elif not activity.society %}
@@ -423,6 +436,57 @@
 <script>
 // QR扫描器代码
 let html5QrcodeScanner = null;
+let isScannerRunning = false;
+
+function getScannerStateValue() {
+    if (!html5QrcodeScanner || typeof html5QrcodeScanner.getState !== 'function') {
+        return null;
+    }
+    try {
+        return html5QrcodeScanner.getState();
+    } catch (e) {
+        return null;
+    }
+}
+
+function isRunningOrPausedState(stateValue) {
+    if (stateValue === null || typeof stateValue === 'undefined') {
+        return isScannerRunning;
+    }
+    const stateEnum = window.Html5QrcodeScannerState || {};
+    if (typeof stateEnum.SCANNING !== 'undefined' && stateValue === stateEnum.SCANNING) {
+        return true;
+    }
+    if (typeof stateEnum.PAUSED !== 'undefined' && stateValue === stateEnum.PAUSED) {
+        return true;
+    }
+    if (typeof stateValue === 'string') {
+        const normalized = stateValue.toLowerCase();
+        return normalized === 'scanning' || normalized === 'paused';
+    }
+    return isScannerRunning;
+}
+
+function safeStopScanner() {
+    if (!html5QrcodeScanner) {
+        return Promise.resolve();
+    }
+    const stateValue = getScannerStateValue();
+    if (!isRunningOrPausedState(stateValue)) {
+        isScannerRunning = false;
+        return Promise.resolve();
+    }
+    return html5QrcodeScanner.stop().then(() => {
+        isScannerRunning = false;
+    }).catch((err) => {
+        const msg = String((err && err.message) || err || '');
+        if (msg.includes('scanner is not running or paused')) {
+            isScannerRunning = false;
+            return;
+        }
+        throw err;
+    });
+}
 
 function ensureHtml5QrcodeLoaded() {
     return new Promise((resolve, reject) => {
@@ -505,7 +569,7 @@ async function showQRScanner() {
                 if (switchBtn && devices.length > 1) {
                     switchBtn.addEventListener('click', () => {
                         // 停止当前扫描
-                        html5QrcodeScanner.stop().then(() => {
+                        safeStopScanner().then(() => {
                             // 切换到下一个摄像头
                             currentCameraIndex = (currentCameraIndex + 1) % devices.length;
                             cameraId = devices[currentCameraIndex].id;
@@ -554,23 +618,30 @@ function startScanner(cameraId) {
         config,
         onScanSuccess,
         onScanError
-    ).catch(err => {
+    ).then(() => {
+        isScannerRunning = true;
+    }).catch(err => {
         console.error("启动扫描器失败:", err);
+        isScannerRunning = false;
         showToast('启动摄像头失败: ' + err.message, 'danger');
     });
 }
 
 function closeQRScanner() {
     if (html5QrcodeScanner) {
-        html5QrcodeScanner.stop().then(() => {
+        safeStopScanner().then(() => {
             console.log('QR扫描器已关闭');
             // 移除模态框
             const container = document.getElementById('qr-reader-container');
             if (container) {
                 container.remove();
             }
+            html5QrcodeScanner = null;
+            isScannerRunning = false;
         }).catch(err => {
             console.error('关闭QR扫描器失败:', err);
+            html5QrcodeScanner = null;
+            isScannerRunning = false;
         });
     }
 }
@@ -579,7 +650,13 @@ function onScanSuccess(decodedText, decodedResult) {
     console.log(`扫码成功: ${decodedText}`, decodedResult);
     
     // 停止扫描
-    html5QrcodeScanner.pause();
+    if (html5QrcodeScanner && isScannerRunning && typeof html5QrcodeScanner.pause === 'function') {
+        try {
+            html5QrcodeScanner.pause();
+        } catch (e) {
+            console.debug('pause调用被忽略:', e);
+        }
+    }
     
     // 提取活动ID和签到码
     const activityIdFromDom = Number(document.querySelector('[data-activity-id]')?.dataset.activityId || 0);
@@ -641,14 +718,26 @@ function onScanSuccess(decodedText, decodedResult) {
         } else {
             showToast(data.message || '签到失败', 'danger');
             // 恢复扫描
-            html5QrcodeScanner.resume();
+            if (html5QrcodeScanner && isScannerRunning && typeof html5QrcodeScanner.resume === 'function') {
+                try {
+                    html5QrcodeScanner.resume();
+                } catch (e) {
+                    console.debug('resume调用被忽略:', e);
+                }
+            }
         }
     })
     .catch(error => {
         console.error('签到请求失败:', error);
         showToast('网络错误，请重试', 'danger');
         // 恢复扫描
-        html5QrcodeScanner.resume();
+        if (html5QrcodeScanner && isScannerRunning && typeof html5QrcodeScanner.resume === 'function') {
+            try {
+                html5QrcodeScanner.resume();
+            } catch (e) {
+                console.debug('resume调用被忽略:', e);
+            }
+        }
     });
 }
 
@@ -784,6 +873,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
                 updateRegistrationCount(1);
                 bindCancelButton(document.getElementById('cancel-btn'));
+
+                // 报名成功后立即刷新全局未读通知角标（含活动附加通知）
+                if (typeof window.fetchUnreadNotifications === 'function') {
+                    window.fetchUnreadNotifications(true);
+                }
 
                 if (window.showToast) {
                     window.showToast(data.message || '重新报名成功！', 'success');

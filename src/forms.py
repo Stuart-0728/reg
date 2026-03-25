@@ -84,6 +84,7 @@ class ActivityForm(FlaskForm):
     end_time = LocalizedDateTimeField('结束时间', format='%Y-%m-%d %H:%M', validators=[DataRequired(message='结束时间不能为空')])
     registration_start_time = LocalizedDateTimeField('报名开始时间', format='%Y-%m-%d %H:%M', validators=[Optional()])
     registration_deadline = LocalizedDateTimeField('报名截止时间', format='%Y-%m-%d %H:%M', validators=[DataRequired(message='报名截止时间不能为空')])
+    registration_success_message = TextAreaField('报名成功额外信息（可选）', validators=[Optional(), Length(max=1000, message='额外信息不能超过1000字')])
     max_participants = IntegerField('最大参与人数', validators=[Optional(), NumberRange(min=0, message='参与人数不能为负数')], default=0)
     status = SelectField('活动状态', choices=[('active', '进行中'), ('completed', '已结束'), ('cancelled', '已取消')], default='active')
     is_featured = BooleanField('设为重点活动', default=False)

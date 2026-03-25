@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}通知中心 - 重庆师范大学智能社团+{% endblock %}
+{% block title %}通知中心 - 智能社团+{% endblock %}
 
 {% block content %}
 <div class="container py-4">
@@ -24,6 +24,20 @@
         </div>
         <div class="card-body p-3">
             {% if notifications.items %}
+                <div class="notification-actions d-flex flex-wrap align-items-center gap-2 gap-md-3 mb-3 pb-2 border-bottom">
+                    <form method="post" action="{{ url_for('student.mark_all_notifications_read', page=notifications.page) }}" class="mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-check-double me-1"></i>一键已读通知
+                        </button>
+                    </form>
+                    <form method="post" action="{{ url_for('student.delete_read_notifications', page=notifications.page) }}" class="mb-0">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('确认删除已读通知吗？删除后将不再显示。')">
+                            <i class="fas fa-trash-alt me-1"></i>一键删除已读
+                        </button>
+                    </form>
+                </div>
                 <div class="notification-list">
                     {% for notification in notifications.items %}
                         <div class="notification-item {% if notification.id not in read_notification_ids %}unread{% endif %}">

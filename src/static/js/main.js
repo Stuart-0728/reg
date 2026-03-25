@@ -100,9 +100,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    if (routeScopes.student && isStudent) {
+    if (isStudent) {
         // 学生：首屏先保证交互，未读通知稍后加载。
-        runNonCritical(() => fetchUnreadNotifications(), 1200);
+        runNonCritical(() => fetchUnreadNotifications(true), 1200);
 
         // 设置定时刷新（每10分钟，减少频率）
         setInterval(fetchUnreadNotifications, 10 * 60 * 1000);
@@ -1499,17 +1499,21 @@ function isHeaderNoticeDismissed(notificationId) {
 }
 
 // 获取未读通知
-function fetchUnreadNotifications() {
+function fetchUnreadNotifications(force = false) {
     const now = Date.now();
 
     // 防止重复请求
     if (isFetchingNotifications) {
-        console.log('通知获取正在进行中，跳过此次请求');
+        if (force) {
+            setTimeout(() => fetchUnreadNotifications(true), 500);
+        } else {
+            console.log('通知获取正在进行中，跳过此次请求');
+        }
         return;
     }
 
     // 频率限制
-    if (now - lastNotificationFetch < NOTIFICATION_FETCH_COOLDOWN) {
+    if (!force && now - lastNotificationFetch < NOTIFICATION_FETCH_COOLDOWN) {
         console.log('通知获取频率限制，跳过此次请求');
         return;
     }
@@ -1517,7 +1521,14 @@ function fetchUnreadNotifications() {
     isFetchingNotifications = true;
     lastNotificationFetch = now;
 
-    fetch('/student/api/notifications/unread')
+    fetch('/student/api/notifications/unread', {
+        cache: 'no-store',
+        headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
         .then(response => {
             if (response.status === 429) {
                 throw new Error('请求过于频繁，请稍后再试');
@@ -1641,14 +1652,22 @@ function showNotificationBanner(notification, allowMarkRead = false) {
                 markNotificationAsRead(notification.id);
                 return;
             }
-            markNotificationAsRead(notification.id);
-            window.location.href = `/student/notification/${notification.id}`;
+            markNotificationAsRead(notification.id).then(result => {
+                if (!result || result.deleted) {
+                    return;
+                }
+                window.location.href = `/student/notification/${notification.id}`;
+            });
         };
         noticeLink.onkeydown = function(e) {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                markNotificationAsRead(notification.id);
-                window.location.href = `/student/notification/${notification.id}`;
+                markNotificationAsRead(notification.id).then(result => {
+                    if (!result || result.deleted) {
+                        return;
+                    }
+                    window.location.href = `/student/notification/${notification.id}`;
+                });
             }
         };
     } else {
@@ -1772,14 +1791,21 @@ function removeNotificationBanner() {
 
 // 标记通知为已读
 function markNotificationAsRead(notificationId) {
-    fetch(`/student/notification/${notificationId}/mark_read`, {
+    return fetch(`/student/notification/${notificationId}/mark_read`, {
         method: 'POST',
+        cache: 'no-store',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': getCsrfToken() // 获取CSRF令牌的函数
         }
     })
     .then(response => {
+        if (response.status === 410) {
+            return response.json().then(data => {
+                throw { code: 'deleted', data };
+            });
+        }
+
         if (!response.ok) {
             throw new Error('网络响应异常');
         }
@@ -1793,10 +1819,25 @@ function markNotificationAsRead(notificationId) {
                 const count = parseInt(badge.textContent) - 1;
                 updateNotificationBadge(count);
             }
+
+            // 以服务端结果为准，避免跨页残留旧通知状态
+            fetchUnreadNotifications(true);
         }
+
+        return data;
     })
     .catch(error => {
+        if (error && error.code === 'deleted') {
+            persistDismissedHeaderNoticeId(notificationId);
+            if (window.currentHeaderNotificationId === notificationId) {
+                dismissHeaderNotification(false, false);
+            }
+            fetchUnreadNotifications(true);
+            return { success: false, deleted: true };
+        }
+
         console.error('标记通知已读失败:', error);
+        return { success: false };
     });
 }
 

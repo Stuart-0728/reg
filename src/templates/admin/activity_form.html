@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}创建/编辑活动 - 重庆师范大学智能社团+{% endblock %}
+{% block title %}创建/编辑活动 - 智能社团+{% endblock %}
 
 {% block styles %}
 {{ super() }}
@@ -162,6 +162,20 @@
                     </div>
                   {% endif %}
                   <small class="form-text text-muted">填写 0 或留空均表示不限人数。</small>
+                </div>
+              </div>
+              <div class="col-md-12">
+                <div class="mb-3">
+                  {{ form.registration_success_message.label(class="form-label fw-medium") }}
+                  {{ form.registration_success_message(class="form-control" + (" is-invalid" if form.registration_success_message.errors else ""), rows=3, placeholder="例如：报名成功的同学请及时加入QQ群：123456789") }}
+                  {% if form.registration_success_message.errors %}
+                    <div class="invalid-feedback">
+                      {% for error in form.registration_success_message.errors %}
+                        {{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  <small class="form-text text-muted">选填。学生报名成功后将收到一条站内通知。</small>
                 </div>
               </div>
             </div>

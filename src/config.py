@@ -194,7 +194,7 @@ class Config:
     RATELIMIT_STRATEGY = 'fixed-window'
     
     # 系统设置
-    APP_NAME = os.environ.get('APP_NAME', '重庆师范大学智能社团+')
+    APP_NAME = os.environ.get('APP_NAME', '智能社团+')
     ITEMS_PER_PAGE = int(os.environ.get('ITEMS_PER_PAGE', 10))
     
     # 活动类型
@@ -240,7 +240,7 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', MAIL_USERNAME)
-    MAIL_SUBJECT_PREFIX = os.environ.get('MAIL_SUBJECT_PREFIX', '[重庆师范大学智能社团+]')
+    MAIL_SUBJECT_PREFIX = os.environ.get('MAIL_SUBJECT_PREFIX', '[智能社团+]')
     
     @classmethod
     def init_app(cls, app):

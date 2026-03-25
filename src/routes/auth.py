@@ -180,8 +180,8 @@ def _mail_provider_configs():
 def _send_html_email(subject, recipient, html_body):
     subject_prefix = current_app.config.get('MAIL_SUBJECT_PREFIX', '')
     # 兼容服务器环境变量中文乱码（如 [????]），回退到固定前缀
-    if not subject_prefix or ('?' in str(subject_prefix) and '重庆师范大学智能社团+' not in str(subject_prefix)):
-        subject_prefix = '[重庆师范大学智能社团+]'
+    if not subject_prefix or ('?' in str(subject_prefix) and '智能社团+' not in str(subject_prefix)):
+        subject_prefix = '[智能社团+]'
 
     providers = _mail_provider_configs()
     if not providers:

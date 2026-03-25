@@ -185,6 +185,7 @@ class Activity(db.Model):
     end_time = Column(DateTime)
     registration_start_time = Column(DateTime)
     registration_deadline = Column(DateTime)
+    registration_success_message = Column(Text)  # 报名成功后给学生的额外提示信息
     completed_at = Column(DateTime)  # 活动完成时间
     
     # 参与人数
@@ -387,6 +388,7 @@ class NotificationRead(db.Model):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     notification_id = Column(Integer, ForeignKey('notification.id'), nullable=False)
     read_at = Column(DateTime)
+    is_deleted = Column(Boolean, default=False)
     
     # 唯一约束，确保一个用户只能标记一个通知为已读一次
     __table_args__ = (UniqueConstraint('user_id', 'notification_id', name='uq_notification_user'),)

@@ -529,7 +529,7 @@ def ai_chat():
     
     # 系统提示词
     if is_admin:
-        system_prompt = f"""您好，我是基于DeepSeek大语言模型的智能助手，为重庆师范大学智能社团+平台的管理员提供服务。
+        system_prompt = f"""您好，我是基于DeepSeek大语言模型的智能助手，为智能社团+平台的管理员提供服务。
 
 我使用的是DeepSeek-r1-distill-qwen-7b-250120模型，可以为您这位管理员提供以下帮助：
 1. 分析活动参与数据和学生参与情况
@@ -544,7 +544,7 @@ def ai_chat():
 您可以询问我关于平台数据的分析、学生参与情况、活动与标签映射关系、活动建议等方面的问题。
 """
     else:
-        system_prompt = f"""您好，我是基于DeepSeek大语言模型的智能助手，为重庆师范大学智能社团+平台提供服务。
+        system_prompt = f"""您好，我是基于DeepSeek大语言模型的智能助手，为智能社团+平台提供服务。
 
 我使用的是DeepSeek-r1-distill-qwen-7b-250120模型，可以为您提供以下帮助：
 1. 回答关于活动的问题
