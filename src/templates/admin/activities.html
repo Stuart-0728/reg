@@ -23,6 +23,46 @@
         </a>
     </div>
 
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('admin.activities', status=current_status) }}" class="row g-2 align-items-center" data-no-loading="true">
+                <div class="col-xl-3 col-lg-4 col-md-6">
+                    <input type="text" class="form-control" name="search" value="{{ search or '' }}" placeholder="关键词：标题/描述/地点">
+                </div>
+                {% if current_user.is_super_admin %}
+                <div class="col-xl-2 col-lg-3 col-md-6">
+                    <select class="form-select" name="society_id" title="按社团筛选">
+                        <option value="">全部社团</option>
+                        {% for society in societies %}
+                        <option value="{{ society.id }}" {% if selected_society_id == society.id %}selected{% endif %}>{{ society.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="col-xl-2 col-lg-3 col-md-6">
+                    <input type="date" class="form-control" name="date_from" value="{{ date_from or '' }}" title="开始日期(起)">
+                </div>
+                <div class="col-auto d-none d-md-flex align-items-center justify-content-center text-muted fw-semibold px-1">
+                    -
+                </div>
+                <div class="col-xl-2 col-lg-3 col-md-6">
+                    <input type="date" class="form-control" name="date_to" value="{{ date_to or '' }}" title="开始日期(止)">
+                </div>
+                <div class="col-xl-1 col-lg-2 col-md-4">
+                    <select class="form-select" name="per_page" title="每页条数" onchange="this.form.submit()">
+                        {% for option in per_page_options %}
+                        <option value="{{ option }}" {% if per_page == option %}selected{% endif %}>{{ option }}/页</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-xl-2 col-lg-3 col-md-8 d-flex gap-2">
+                    <button class="btn btn-primary flex-fill" type="submit">筛选</button>
+                    <a class="btn btn-outline-secondary" href="{{ url_for('admin.activities', status=current_status) }}">重置</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="card border-0 shadow-sm mb-4 activities-card">
         <div class="card-header bg-white p-0">
             <ul class="nav nav-tabs card-header-tabs border-0">
@@ -52,13 +92,13 @@
             <div class="table-responsive has-sticky-action" style="overflow-x: auto; overflow-y: visible;">
                 <table class="table table-hover align-middle mb-0 table-cell-scroll table-has-sticky-action activities-table">
                     <colgroup>
-                        <col style="width: 280px;">
-                        <col style="width: 170px;">
-                        <col style="width: 170px;">
-                        <col style="width: 170px;">
-                        <col style="width: 120px;">
-                        <col style="width: 120px;">
-                        <col style="width: 110px;">
+                        <col style="width: 27%;">
+                        <col style="width: 16%;">
+                        <col style="width: 16%;">
+                        <col style="width: 16%;">
+                        <col style="width: 8%;">
+                        <col style="width: 8%;">
+                        <col style="width: 9%;">
                     </colgroup>
                     <thead class="table-light">
                         <tr>
@@ -74,15 +114,15 @@
                     <tbody>
                         {% for activity in activities.items %}
                         <tr>
-                            <td class="fw-medium text-truncate" style="max-width: 200px;" title="{{ activity.title }}">
-                                {{ activity.title }}
+                            <td class="fw-medium" title="{{ activity.title }}">
+                                <span class="table-cell-ellipsis" title="{{ activity.title }}">{{ activity.title }}</span>
                                 {% if activity.is_featured %}
                                 <span class="badge featured-badge ms-1" title="重点活动"><i class="fas fa-star"></i></span>
                                 {% endif %}
                             </td>
-                            <td class="text-truncate" style="max-width: 120px;" title="{{ activity.location }}">{{ activity.location }}</td>
-                            <td>{{ display_datetime(activity.start_time) }}</td>
-                            <td>{{ display_datetime(activity.registration_deadline) }}</td>
+                            <td title="{{ activity.location }}"><span class="table-cell-ellipsis" title="{{ activity.location }}">{{ activity.location }}</span></td>
+                            <td title="{{ display_datetime(activity.start_time) }}"><span class="table-cell-ellipsis">{{ display_datetime(activity.start_time) }}</span></td>
+                            <td title="{{ display_datetime(activity.registration_deadline) }}"><span class="table-cell-ellipsis">{{ display_datetime(activity.registration_deadline) }}</span></td>
                             <td>
                                 <span class="badge {% if activity.status == 'active' %}bg-success{% elif activity.status == 'completed' %}bg-secondary{% else %}bg-danger{% endif %} rounded-pill">
                                     {% if activity.status == 'active' %}进行中{% elif activity.status == 'completed' %}已结束{% else %}已取消{% endif %}
@@ -99,7 +139,7 @@
                                     </span>
                                 {% endif %}
                             </td>
-                            <td class="sticky-action-col">
+                            <td class="sticky-action-col text-center">
                                 <div class="dropdown">
                                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle action-btn" type="button" id="actionMenu{{ activity.id }}" data-bs-toggle="dropdown" data-bs-boundary="viewport" data-bs-offset="0,8" aria-expanded="false" data-no-loading="true" data-no-global-loading="true">
                                         操作
@@ -132,24 +172,30 @@
                                             </a>
                                         </li>
                                         <li>
-                                            <a class="dropdown-item" href="{{ url_for('admin.export_activity_share_poster', id=activity.id) }}" data-no-loading="true">
-                                                <i class="fas fa-share-alt text-secondary me-2"></i>分享海报
-                                            </a>
+                                            <button
+                                                class="dropdown-item"
+                                                type="button"
+                                                onclick="shareActivityFromAdminList('{{ url_for('admin.export_activity_share_poster', id=activity.id) }}', '{{ url_for('main.activity_detail', activity_id=activity.id, _external=True) }}', event); return false;"
+                                                data-no-loading="true"
+                                                data-no-global-loading="true"
+                                            >
+                                                <i class="fas fa-share-alt text-secondary me-2"></i>分享活动
+                                            </button>
                                         </li>
                                         {% if activity.status == 'active' %}
                                         <li>
-                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'completed'); return false;" data-no-loading="true" data-no-global-loading="true">
+                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'completed', event); return false;" data-no-loading="true" data-no-global-loading="true">
                                                 <i class="fas fa-check-circle text-success me-2"></i>标记为已结束
                                             </button>
                                         </li>
                                         <li>
-                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'cancelled'); return false;" data-no-loading="true" data-no-global-loading="true">
+                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'cancelled', event); return false;" data-no-loading="true" data-no-global-loading="true">
                                                 <i class="fas fa-ban text-danger me-2"></i>取消活动
                                             </button>
                                         </li>
                                         {% elif activity.status == 'completed' or activity.status == 'cancelled' %}
                                         <li>
-                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'active'); return false;" data-no-loading="true" data-no-global-loading="true">
+                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'active', event); return false;" data-no-loading="true" data-no-global-loading="true">
                                                 <i class="fas fa-play-circle text-success me-2"></i>恢复为进行中
                                             </button>
                                         </li>
@@ -185,12 +231,12 @@
             {% if activities.pages > 1 %}
             <div class="p-3">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <small class="text-muted">共 {{ activities.total }} 条活动，每页 10 条，当前第 {{ activities.page }}/{{ activities.pages }} 页</small>
+                    <small class="text-muted">共 {{ activities.total }} 条活动，每页 {{ activities.per_page }} 条，当前第 {{ activities.page }}/{{ activities.pages }} 页</small>
                     <nav aria-label="活动分页">
                     <ul class="pagination pagination-sm justify-content-center mb-0">
                         {% if activities.has_prev %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.prev_num) }}">
+                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.prev_num, search=search, per_page=per_page, society_id=selected_society_id, date_from=date_from, date_to=date_to) }}">
                                 <i class="fas fa-chevron-left"></i>
                             </a>
                         </li>
@@ -199,7 +245,7 @@
                         {% for page_num in activities.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                             {% if page_num %}
                                 <li class="page-item {% if page_num == activities.page %}active{% endif %}">
-                                    <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=page_num) }}">{{ page_num }}</a>
+                                    <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=page_num, search=search, per_page=per_page, society_id=selected_society_id, date_from=date_from, date_to=date_to) }}">{{ page_num }}</a>
                                 </li>
                             {% else %}
                                 <li class="page-item disabled">
@@ -210,13 +256,25 @@
                         
                         {% if activities.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.next_num) }}">
+                            <a class="page-link" href="{{ url_for('admin.activities', status=current_status, page=activities.next_num, search=search, per_page=per_page, society_id=selected_society_id, date_from=date_from, date_to=date_to) }}">
                                 <i class="fas fa-chevron-right"></i>
                             </a>
                         </li>
                         {% endif %}
                     </ul>
                 </nav>
+                <form method="get" action="{{ url_for('admin.activities', status=current_status) }}" class="d-flex align-items-center gap-2" data-no-loading="true">
+                    <input type="hidden" name="search" value="{{ search or '' }}">
+                    <input type="hidden" name="per_page" value="{{ per_page }}">
+                    <input type="hidden" name="date_from" value="{{ date_from or '' }}">
+                    <input type="hidden" name="date_to" value="{{ date_to or '' }}">
+                    {% if selected_society_id %}
+                    <input type="hidden" name="society_id" value="{{ selected_society_id }}">
+                    {% endif %}
+                    <span class="text-muted small">跳转到</span>
+                    <input type="number" class="form-control form-control-sm" name="jump_page" min="1" max="{{ activities.pages }}" style="width: 88px;" placeholder="页码">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">跳转</button>
+                </form>
                 </div>
             </div>
             {% endif %}
@@ -263,6 +321,26 @@
 </form>
 
 <script>
+const ACTIVITIES_SCROLL_KEY = `admin-scroll:${window.location.pathname}`;
+
+function saveActivitiesScroll() {
+    try {
+        sessionStorage.setItem(ACTIVITIES_SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+    } catch (_) {}
+}
+
+function restoreActivitiesScroll() {
+    try {
+        const saved = sessionStorage.getItem(ACTIVITIES_SCROLL_KEY);
+        if (saved === null) return;
+        sessionStorage.removeItem(ACTIVITIES_SCROLL_KEY);
+        const y = parseInt(saved, 10);
+        if (!Number.isNaN(y) && y > 0) {
+            window.requestAnimationFrame(() => window.scrollTo(0, y));
+        }
+    } catch (_) {}
+}
+
 function confirmDeleteActivity(activityId, activityTitle, registrationCount) {
     // 设置模态框内容
     document.getElementById('deleteActivityWarning').innerHTML = 
@@ -271,6 +349,7 @@ function confirmDeleteActivity(activityId, activityTitle, registrationCount) {
     
     // 设置删除按钮点击事件
     document.getElementById('confirmDelete').onclick = function() {
+        saveActivitiesScroll();
         const form = document.getElementById('deleteActivityForm');
         form.action = "{{ url_for('admin.delete_activity', id=0) }}".replace('0', activityId);
         // 确保CSRF令牌存在
@@ -286,6 +365,7 @@ function confirmDeleteActivity(activityId, activityTitle, registrationCount) {
     
     // 设置永久删除按钮点击事件
     document.getElementById('confirmForceDelete').onclick = function() {
+        saveActivitiesScroll();
         const form = document.getElementById('forceDeleteActivityForm');
         form.action = "{{ url_for('admin.delete_activity', id=0) }}?force=true".replace('0', activityId);
         // 确保CSRF令牌存在
@@ -322,6 +402,14 @@ function confirmDeleteActivity(activityId, activityTitle, registrationCount) {
 
 // 添加自定义样式以优化模态框过渡效果
 document.addEventListener('DOMContentLoaded', function() {
+    restoreActivitiesScroll();
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', saveActivitiesScroll);
+    });
+    document.querySelectorAll('a.page-link, .nav-tabs a.nav-link').forEach(link => {
+        link.addEventListener('click', saveActivitiesScroll);
+    });
+
     const style = document.createElement('style');
     style.textContent = `
         .modal.fade .modal-dialog {
@@ -456,6 +544,7 @@ function updateActivityStatus(activityId, status) {
     })
     .then((result) => {
         const forceRefresh = () => {
+            saveActivitiesScroll();
             const allUrl = "{{ url_for('admin.activities', status='all') }}" + '?_t=' + Date.now();
             window.location.href = allUrl;
         };
@@ -488,6 +577,57 @@ function updateActivityStatus(activityId, status) {
         alert('状态更新失败，请检查网络后重试');
     });
 }
+
+async function copyActivityShareLink(link) {
+    if (!link) return false;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(link);
+            return true;
+        }
+    } catch (_) {}
+
+    const textarea = document.createElement('textarea');
+    textarea.value = link;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'absolute';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copied;
+}
+
+function triggerActivityPosterDownload(downloadUrl) {
+    if (!downloadUrl) return;
+    const anchor = document.createElement('a');
+    anchor.href = downloadUrl;
+    anchor.setAttribute('data-no-global-loading', 'true');
+    anchor.setAttribute('data-no-loading', 'true');
+    anchor.className = 'btn';
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+}
+
+async function shareActivityFromAdminList(downloadUrl, shareLink, evt) {
+    if (evt) {
+        evt.preventDefault();
+        evt.stopPropagation();
+    }
+
+    saveActivitiesScroll();
+    triggerActivityPosterDownload(downloadUrl);
+    const copied = await copyActivityShareLink(shareLink);
+
+    if (window.showToast) {
+        window.showToast(copied ? '已下载分享海报并复制活动链接' : '海报已下载，复制链接失败，请手动复制', copied ? 'success' : 'warning');
+    } else if (!copied) {
+        alert('海报已下载，复制链接失败，请手动复制');
+    }
+}
 </script>
 
 <style>
@@ -514,12 +654,24 @@ function updateActivityStatus(activityId, status) {
 
 .activities-card .activities-table {
     table-layout: fixed;
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
+    min-width: 0;
 }
 
 .activities-card .activities-table th,
 .activities-card .activities-table td {
+    overflow: hidden;
+}
+
+.activities-card .activities-table th {
+    white-space: nowrap;
+}
+
+.activities-card .activities-table .table-cell-ellipsis {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -531,6 +683,14 @@ function updateActivityStatus(activityId, status) {
     background: #fff;
     box-shadow: -10px 0 12px -12px rgba(15, 23, 42, 0.28);
     min-width: 110px;
+}
+
+.activities-card .table-has-sticky-action td.sticky-action-col {
+    text-align: center;
+}
+
+.activities-card .table-has-sticky-action td.sticky-action-col .dropdown {
+    display: inline-block;
 }
 
 .activities-card .table-has-sticky-action thead .sticky-action-col {

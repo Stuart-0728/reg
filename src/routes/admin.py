@@ -10,6 +10,7 @@ import re
 import io
 import threading
 import uuid
+import time
 from io import BytesIO  # 添加BytesIO导入
 import csv
 import qrcode
@@ -20,6 +21,7 @@ import tempfile  # 添加tempfile导入
 import zipfile  # 添加zipfile导入
 import pytz
 import requests
+import mimetypes
 from itsdangerous import URLSafeTimedSerializer
 from flask import (
     Blueprint, render_template, redirect, url_for, flash, request, current_app, 
@@ -30,7 +32,7 @@ from sqlalchemy import func, desc, or_, and_, extract, text, case
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 from src import cache, limiter
-from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, student_tags, activity_tags, student_societies, Announcement, Society
+from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, ActivityDocument, student_tags, activity_tags, student_societies, Announcement, Society
 from src.routes.utils import admin_required, log_action, is_super_admin
 from src.utils.time_helpers import normalize_datetime_for_db, display_datetime, ensure_timezone_aware, get_localized_now, get_beijing_time, safe_less_than, safe_greater_than, get_activity_status
 from src.forms import ActivityForm  # 添加ActivityForm导入
@@ -43,6 +45,13 @@ admin_bp = Blueprint('admin', __name__)
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
+
+DOCUMENT_CATEGORY_LABELS = {
+    'certificate': '参赛证明',
+    'award': '奖状',
+    'notice': '官方通知',
+    'other': '其他资料'
+}
 
 
 def _invalidate_home_page_caches():
@@ -510,7 +519,7 @@ def _format_review_time_for_display(dt):
         localized = dt.astimezone(beijing_tz)
     return localized.strftime('%Y-%m-%d %H:%M')
 
-def _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.6, max_tokens=1200, timeout_seconds=45):
+def _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.6, max_tokens=1200, timeout_seconds=45, max_retries=1):
     api_key = os.environ.get("ARK_API_KEY") or current_app.config.get('VOLCANO_API_KEY')
     if not api_key:
         raise ValueError('未配置ARK_API_KEY，无法使用AI生成能力')
@@ -534,10 +543,41 @@ def _call_ark_chat_completion(system_prompt, user_prompt, temperature=0.6, max_t
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
-    response = requests.post(url, headers=headers, json=payload, timeout=timeout_seconds)
-    response.raise_for_status()
-    data = response.json()
-    return data['choices'][0]['message']['content'].strip()
+    last_exception = None
+    total_attempts = max(1, int(max_retries) + 1)
+    for attempt in range(1, total_attempts + 1):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=(8, timeout_seconds))
+            response.raise_for_status()
+            data = response.json()
+            return data['choices'][0]['message']['content'].strip()
+        except requests.exceptions.Timeout as e:
+            last_exception = e
+            logger.warning(f"ARK文本请求超时，第{attempt}/{total_attempts}次: read_timeout={timeout_seconds}s")
+            if attempt < total_attempts:
+                time.sleep(min(1.5 * attempt, 3.0))
+                continue
+            raise
+        except requests.exceptions.ConnectionError as e:
+            last_exception = e
+            logger.warning(f"ARK文本请求连接异常，第{attempt}/{total_attempts}次: {e}")
+            if attempt < total_attempts:
+                time.sleep(min(1.0 * attempt, 2.0))
+                continue
+            raise
+        except requests.exceptions.HTTPError as e:
+            last_exception = e
+            status_code = getattr(getattr(e, 'response', None), 'status_code', None)
+            # 服务端暂时性错误重试，4xx参数错误不重试
+            if status_code and status_code >= 500 and attempt < total_attempts:
+                logger.warning(f"ARK文本请求服务端错误，第{attempt}/{total_attempts}次: status={status_code}")
+                time.sleep(min(1.2 * attempt, 2.5))
+                continue
+            raise
+
+    if last_exception:
+        raise last_exception
+    raise ValueError('ARK文本请求失败：未知错误')
 
 def _extract_json_block(raw_text):
     text = (raw_text or '').strip()
@@ -955,7 +995,7 @@ def _run_async_text_job(app, job_id, job_kind, payload):
                 registrations = Registration.query.filter_by(activity_id=activity_id).all()
 
                 total_registered = len(registrations)
-                attended_count = sum(1 for r in registrations if (r.status == 'attended' or r.check_in_time is not None))
+                attended_count = sum(1 for r in registrations if r.status == 'attended')
                 cancelled_count = sum(1 for r in registrations if r.status == 'cancelled')
                 no_show_count = max(total_registered - attended_count - cancelled_count, 0)
                 attendance_rate = (attended_count / total_registered * 100.0) if total_registered else 0.0
@@ -1156,7 +1196,8 @@ def _parse_activity_content_with_ai(raw_content):
         user_prompt,
         temperature=0.2,
         max_tokens=520,
-        timeout_seconds=20
+        timeout_seconds=35,
+        max_retries=1
     )
     parsed_json = _extract_json_block(parsed_text)
     return _normalize_activity_ai_payload(parsed_json)
@@ -1901,6 +1942,186 @@ def handle_poster_upload(file_data, activity_id):
         logger.error(f"海报上传失败: {str(e)}", exc_info=True)
         return None
 
+
+def _activity_docs_upload_dir():
+    docs_dir = current_app.config.get('ACTIVITY_DOCS_DIR')
+    if not docs_dir:
+        base_upload = current_app.config.get('UPLOAD_FOLDER') or os.path.join(current_app.root_path, 'static', 'uploads')
+        docs_dir = os.path.join(base_upload, 'activity_docs')
+    os.makedirs(docs_dir, exist_ok=True)
+    return docs_dir
+
+
+def _activity_docs_allowed_dirs():
+    docs_dir = _activity_docs_upload_dir()
+    base_upload = current_app.config.get('UPLOAD_FOLDER') or os.path.join(current_app.root_path, 'static', 'uploads')
+    legacy_dir = os.path.join(base_upload, 'activity_docs')
+    return [os.path.realpath(docs_dir), os.path.realpath(legacy_dir)]
+
+
+def _is_within_allowed_activity_docs(path):
+    if not path:
+        return False
+    try:
+        real_path = os.path.realpath(path)
+        for allowed_dir in _activity_docs_allowed_dirs():
+            try:
+                if os.path.commonpath([real_path, allowed_dir]) == allowed_dir:
+                    return True
+            except ValueError:
+                continue
+    except Exception:
+        return False
+    return False
+
+
+def _resolve_activity_document_file_path(doc):
+    if not doc:
+        return None
+
+    raw_path = str(doc.file_path or '').replace('\x00', '').strip()
+    candidates = []
+    if raw_path:
+        candidates.append(raw_path)
+        # 兼容历史路径：按文件名回落到当前资料目录
+        candidates.append(os.path.join(_activity_docs_upload_dir(), os.path.basename(raw_path)))
+
+    for path in candidates:
+        if path and os.path.exists(path) and _is_within_allowed_activity_docs(path):
+            return path
+    return None
+
+
+def _is_allowed_activity_document(file_obj):
+    if not file_obj or not getattr(file_obj, 'filename', None):
+        return False
+    raw_filename = str(file_obj.filename or '').strip()
+    if not raw_filename:
+        return False
+    clean_name = os.path.basename(raw_filename).replace('\x00', '').strip()
+    ext = clean_name.rsplit('.', 1)[-1].lower() if '.' in clean_name else ''
+    allowed_exts = set(current_app.config.get('ALLOWED_EXTENSIONS') or set())
+    return bool(ext and ext in allowed_exts)
+
+
+def _save_activity_documents(activity, files, category='certificate', is_public=False, title_prefix='', per_file_meta=None):
+    if not activity or not files:
+        return []
+
+    saved_docs = []
+    docs_dir = _activity_docs_upload_dir()
+    now = datetime.now()
+
+    safe_category = category if category in DOCUMENT_CATEGORY_LABELS else 'other'
+    safe_prefix = sanitize_plain_text(title_prefix, max_length=64) if title_prefix else ''
+    safe_meta = per_file_meta if isinstance(per_file_meta, dict) else {}
+    max_single_file_size = 80 * 1024 * 1024
+
+    for file_index, file_obj in enumerate(files):
+        if not file_obj or not getattr(file_obj, 'filename', None):
+            continue
+        if not _is_allowed_activity_document(file_obj):
+            continue
+
+        file_meta = safe_meta.get(file_index, {}) if isinstance(safe_meta.get(file_index, {}), dict) else {}
+
+        original_name = os.path.basename(str(file_obj.filename or '')).replace('\x00', '').strip()
+        if not original_name:
+            continue
+
+        ext = os.path.splitext(original_name)[1].lower() or ''
+        if not ext:
+            continue
+
+        # 单文件限制 80MB
+        current_pos = file_obj.stream.tell()
+        file_obj.stream.seek(0, os.SEEK_END)
+        stream_size = file_obj.stream.tell()
+        file_obj.stream.seek(current_pos, os.SEEK_SET)
+        if stream_size and stream_size > max_single_file_size:
+            logger.warning(f"活动资料超限已跳过: name={original_name}, size={stream_size}")
+            continue
+
+        unique_name = f"activity_doc_{activity.id}_{uuid.uuid4().hex[:12]}_{now.strftime('%Y%m%d%H%M%S')}{ext}"
+        save_path = os.path.join(docs_dir, unique_name)
+        file_obj.save(save_path)
+
+        try:
+            os.chmod(save_path, 0o644)
+        except Exception:
+            pass
+
+        display_title = sanitize_plain_text(file_meta.get('title', ''), max_length=128)
+        if not display_title:
+            display_title = os.path.splitext(original_name)[0][:120]
+            if safe_prefix:
+                display_title = f"{safe_prefix} - {display_title}"[:128]
+
+        meta_category = str(file_meta.get('category', '') or '').strip().lower()
+        final_category = meta_category if meta_category in DOCUMENT_CATEGORY_LABELS else safe_category
+
+        meta_public = file_meta.get('is_public', is_public)
+        if isinstance(meta_public, str):
+            final_public = meta_public.strip().lower() in ['1', 'true', 'yes', 'on']
+        else:
+            final_public = bool(meta_public)
+
+        file_size = 0
+        try:
+            file_size = os.path.getsize(save_path)
+        except Exception:
+            file_size = 0
+
+        mime_type = (getattr(file_obj, 'mimetype', None) or '').strip()
+        if not mime_type:
+            guessed_mime, _ = mimetypes.guess_type(original_name)
+            mime_type = guessed_mime or 'application/octet-stream'
+
+        doc = ActivityDocument(
+            activity_id=activity.id,
+            uploaded_by=current_user.id,
+            title=display_title or f"活动资料_{activity.id}",
+            category=final_category,
+            file_name=original_name,
+            file_path=save_path,
+            mime_type=mime_type,
+            file_size=file_size,
+            is_public=final_public
+        )
+        db.session.add(doc)
+        saved_docs.append(doc)
+
+    return saved_docs
+
+
+def _notify_students_for_new_documents(activity, docs):
+    if not activity or not docs:
+        return
+
+    recipient_ids = db.session.execute(
+        db.select(Registration.user_id).filter(
+            Registration.activity_id == activity.id,
+            Registration.status.in_(['registered', 'attended'])
+        ).distinct()
+    ).scalars().all()
+
+    if not recipient_ids:
+        return
+
+    doc_names = [f"《{(d.title or d.file_name or '活动资料')[:30]}》" for d in docs[:3]]
+    suffix = '等资料' if len(docs) > 3 else '资料'
+    doc_desc = '、'.join(doc_names) + suffix
+
+    for user_id in recipient_ids:
+        db.session.add(Notification(
+            title=f"活动资料已更新：{activity.title}",
+            content=f"你报名的活动《{activity.title}》新增了{doc_desc}，请及时查看并下载。",
+            is_important=True,
+            created_at=get_localized_now(),
+            created_by=user_id,
+            is_public=False
+        ))
+
 @admin_bp.route('/dashboard')
 @admin_required
 def dashboard():
@@ -1964,21 +2185,55 @@ def dashboard():
 def activities(status='all'):
     try:
         from src.utils import get_compatible_paginate
-        
-        page = request.args.get('page', 1, type=int)
-        search = request.args.get('search', '')
+
+        per_page_options = [10, 20, 50, 100]
+        requested_per_page = request.args.get('per_page', 10, type=int)
+        per_page = requested_per_page if requested_per_page in per_page_options else 10
+
+        jump_page = request.args.get('jump_page', type=int)
+        page = jump_page if jump_page and jump_page > 0 else request.args.get('page', 1, type=int)
+        page = page if page and page > 0 else 1
+
+        search = (request.args.get('search', '') or '').strip()
+        selected_society_id = request.args.get('society_id', type=int)
+        date_from = (request.args.get('date_from', '') or '').strip()
+        date_to = (request.args.get('date_to', '') or '').strip()
+
+        scope_society_id = _current_scope_society_id()
         
         # 基本查询
         query = _apply_activity_scope(db.select(Activity))
-        
+
         # 搜索功能
         if search:
             query = query.filter(
                 db.or_(
                     Activity.title.ilike(f'%{search}%'),
-                    Activity.description.ilike(f'%{search}%')
+                    Activity.description.ilike(f'%{search}%'),
+                    Activity.location.ilike(f'%{search}%')
                 )
             )
+
+        # 社团筛选（社团管理员固定在本社团）
+        if scope_society_id:
+            selected_society_id = scope_society_id
+        elif selected_society_id:
+            query = query.filter(Activity.society_id == selected_society_id)
+
+        # 时间范围筛选（按活动开始时间）
+        if date_from:
+            try:
+                start_dt = datetime.strptime(date_from, '%Y-%m-%d')
+                query = query.filter(Activity.start_time >= start_dt)
+            except ValueError:
+                date_from = ''
+
+        if date_to:
+            try:
+                end_dt = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+                query = query.filter(Activity.start_time < end_dt)
+            except ValueError:
+                date_to = ''
         
         # 状态筛选
         if status == 'upcoming':
@@ -1996,9 +2251,13 @@ def activities(status='all'):
         
         # 排序
         query = query.order_by(Activity.created_at.desc())
-        
+
         # 使用兼容性分页查询
-        activities = get_compatible_paginate(db, query, page=page, per_page=10, error_out=False)
+        activities = get_compatible_paginate(db, query, page=page, per_page=per_page, error_out=False)
+
+        if activities.pages > 0 and page > activities.pages:
+            page = activities.pages
+            activities = get_compatible_paginate(db, query, page=page, per_page=per_page, error_out=False)
         
         # 优化：使用子查询一次性获取所有活动的报名人数
         activity_ids = [activity.id for activity in activities.items]
@@ -2021,12 +2280,27 @@ def activities(status='all'):
         
         # 导入display_datetime函数供模板使用
         from src.utils.time_helpers import display_datetime
+
+        if scope_society_id:
+            scope_society = db.session.get(Society, scope_society_id)
+            societies = [scope_society] if scope_society else []
+        else:
+            societies = db.session.execute(
+                db.select(Society).filter(Society.is_active == True).order_by(Society.name.asc())
+            ).scalars().all()
         
         return render_template('admin/activities.html', 
                               activities=activities, 
                               current_status=status,
                               registration_counts=registration_counts,
-                              display_datetime=display_datetime)
+                              display_datetime=display_datetime,
+                              search=search,
+                              societies=societies,
+                              selected_society_id=selected_society_id,
+                              date_from=date_from,
+                              date_to=date_to,
+                              per_page=per_page,
+                              per_page_options=per_page_options)
     except Exception as e:
         logger.error(f"Error in activities page: {e}")
         flash('加载活动列表时出错', 'danger')
@@ -2070,7 +2344,7 @@ def create_activity():
 
             if not title or not description or not location:
                 flash('标题、活动描述、活动地点不能为空（不支持HTML脚本内容）', 'warning')
-                return render_template('admin/activity_form.html', form=form, activity=None)
+                return render_template('admin/activity_form.html', form=form, activity=None, existing_documents=[], document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
             
             # 统一写库：北京时间输入 -> UTC naive（数据库）
             start_time = _to_utc_naive_datetime(start_time)
@@ -2080,7 +2354,7 @@ def create_activity():
 
             if registration_start_time and registration_deadline and registration_start_time > registration_deadline:
                 flash('报名开始时间不能晚于报名截止时间', 'warning')
-                return render_template('admin/activity_form.html', form=form, activity=None)
+                return render_template('admin/activity_form.html', form=form, activity=None, existing_documents=[], document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
             
             # 创建活动
             activity = Activity(
@@ -2193,7 +2467,7 @@ def create_activity():
         _flash_form_errors(form)
 
     # GET请求或表单验证失败
-    return render_template('admin/activity_form.html', form=form, activity=None)
+    return render_template('admin/activity_form.html', form=form, activity=None, existing_documents=[], document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
 
 @admin_bp.route('/activity/<int:id>/edit', methods=['GET', 'POST'])
 @admin_required
@@ -2221,6 +2495,13 @@ def edit_activity(id):
                 logger.error(f"设置当前标签时出错: {e}")
                 form.tags.data = []
         
+        def _load_activity_documents():
+            return db.session.execute(
+                db.select(ActivityDocument)
+                .filter(ActivityDocument.activity_id == activity.id)
+                .order_by(ActivityDocument.created_at.desc())
+            ).scalars().all()
+
         if form.validate_on_submit():
             try:
                 # 更新活动信息，但先保存标签引用
@@ -2246,7 +2527,7 @@ def edit_activity(id):
 
                 if registration_start_time and registration_deadline and registration_start_time > registration_deadline:
                     flash('报名开始时间不能晚于报名截止时间', 'warning')
-                    return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
+                    return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
                 
                 # 使用form填充对象
                 # 手动填充对象字段，避免标签处理错误
@@ -2267,7 +2548,7 @@ def edit_activity(id):
 
                 if not activity.title or not activity.description or not activity.location:
                     flash('标题、活动描述、活动地点不能为空（不支持HTML脚本内容）', 'warning')
-                    return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
+                    return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
                 
                 # 使用转换后的时间覆盖填充的时间字段
                 activity.start_time = start_time
@@ -2339,6 +2620,63 @@ def edit_activity(id):
                 except Exception as e:
                     logger.error(f"处理标签时出错: {e}", exc_info=True)
                     flash('处理活动标签时出错，其他信息已尝试保存', 'warning')
+
+                # 保存已有资料的标题/类型/公开状态
+                existing_docs = db.session.execute(
+                    db.select(ActivityDocument).filter(ActivityDocument.activity_id == activity.id)
+                ).scalars().all()
+                for doc in existing_docs:
+                    new_title = sanitize_plain_text(request.form.get(f'doc_title_{doc.id}', doc.title), max_length=128)
+                    new_category = (request.form.get(f'doc_category_{doc.id}', doc.category) or 'other').strip().lower()
+                    doc.title = new_title or doc.title
+                    doc.category = new_category if new_category in DOCUMENT_CATEGORY_LABELS else 'other'
+                    doc.is_public = bool(request.form.get(f'doc_is_public_{doc.id}'))
+
+                # 处理新增活动资料（仅支持PDF）
+                upload_files = request.files.getlist('activity_documents')
+                new_doc_category = (request.form.get('new_document_category') or 'certificate').strip().lower()
+                new_doc_public = bool(request.form.get('new_document_is_public'))
+                new_doc_prefix = request.form.get('new_document_title_prefix', '')
+
+                # 解析前端按文件单独配置的元数据
+                per_file_meta = {}
+                raw_meta = request.form.get('activity_documents_meta', '')
+                if raw_meta:
+                    try:
+                        meta_list = json.loads(raw_meta)
+                        if isinstance(meta_list, list):
+                            for item in meta_list:
+                                if not isinstance(item, dict):
+                                    continue
+                                index_value = item.get('index')
+                                if not isinstance(index_value, int):
+                                    try:
+                                        index_value = int(index_value)
+                                    except Exception:
+                                        continue
+                                if index_value < 0:
+                                    continue
+                                per_file_meta[index_value] = {
+                                    'title': item.get('title', ''),
+                                    'category': item.get('category', ''),
+                                    'is_public': item.get('is_public', False)
+                                }
+                    except Exception as e:
+                        logger.warning(f"活动资料元数据解析失败，回退默认设置: {e}")
+
+                new_docs = _save_activity_documents(
+                    activity=activity,
+                    files=upload_files,
+                    category=new_doc_category,
+                    is_public=new_doc_public,
+                    title_prefix=new_doc_prefix,
+                    per_file_meta=per_file_meta
+                )
+                if upload_files and not new_docs:
+                    flash('未检测到可上传文件，或文件超过80MB，请检查格式与大小', 'warning')
+
+                if new_docs:
+                    _notify_students_for_new_documents(activity, new_docs)
                 
                 # 更新积分，确保重点活动有足够积分
                 if activity.is_featured and (activity.points is None or activity.points < 20):
@@ -2405,6 +2743,9 @@ def edit_activity(id):
                     
                     # 记录日志
                     log_action('edit_activity', f'编辑活动: {activity.title}')
+
+                    if new_docs:
+                        flash(f'新增 {len(new_docs)} 份活动资料并已通知相关学生', 'success')
                     
                     flash('活动更新成功!', 'success')
                     return redirect(url_for('admin.activities'))
@@ -2412,31 +2753,116 @@ def edit_activity(id):
                     db.session.rollback()
                     logger.error(f"提交活动更新时出错: {e}", exc_info=True)
                     flash(f'保存活动时出错: {str(e)}', 'danger')
-                    return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
+                    return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
             except Exception as e:
                 db.session.rollback()
                 logger.error(f"编辑活动时出错: {e}", exc_info=True)
                 flash(f'编辑活动时出错: {str(e)}', 'danger')
-                return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
+                return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
         
         if request.method == 'POST' and not form.validate_on_submit():
             _flash_form_errors(form)
 
-        return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity)
+        return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error in edit_activity: {e}", exc_info=True)
         flash('编辑活动时出错', 'danger')
         return redirect(url_for('admin.activities'))
 
+
+@admin_bp.route('/activity/<int:activity_id>/documents/<int:doc_id>/delete', methods=['POST'])
+@admin_required
+def delete_activity_document(activity_id, doc_id):
+    activity = db.get_or_404(Activity, activity_id)
+    if not _scope_guard_activity(activity):
+        flash('您只能管理所属社团的活动资料', 'danger')
+        return redirect(url_for('admin.activities'))
+
+    doc = db.session.execute(
+        db.select(ActivityDocument).filter(
+            ActivityDocument.id == doc_id,
+            ActivityDocument.activity_id == activity_id
+        )
+    ).scalar_one_or_none()
+
+    if not doc:
+        flash('资料不存在或已删除', 'warning')
+        return redirect(url_for('admin.edit_activity', id=activity_id))
+
+    file_path = _resolve_activity_document_file_path(doc)
+    db.session.delete(doc)
+    db.session.commit()
+
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            logger.warning(f"删除活动资料文件失败: {file_path}, error={e}")
+
+    flash('活动资料已删除', 'success')
+    return redirect(url_for('admin.edit_activity', id=activity_id))
+
+
+@admin_bp.route('/activity/<int:activity_id>/documents/<int:doc_id>/download')
+@admin_required
+@limiter.limit('60 per minute')
+def download_activity_document_admin(activity_id, doc_id):
+    activity = db.get_or_404(Activity, activity_id)
+    if not _scope_guard_activity(activity):
+        flash('您只能下载所属社团的活动资料', 'danger')
+        return redirect(url_for('admin.activities'))
+
+    doc = db.session.execute(
+        db.select(ActivityDocument).filter(
+            ActivityDocument.id == doc_id,
+            ActivityDocument.activity_id == activity_id
+        )
+    ).scalar_one_or_none()
+    if not doc:
+        flash('资料不存在', 'warning')
+        return redirect(url_for('admin.edit_activity', id=activity_id))
+
+    resolved_path = _resolve_activity_document_file_path(doc)
+    if not resolved_path:
+        flash('资料文件不存在，可能已被清理', 'warning')
+        return redirect(url_for('admin.edit_activity', id=activity_id))
+
+    download_name = os.path.basename(str(doc.file_name or f'activity_{activity_id}_document')).replace('\x00', '').strip()
+    if not download_name:
+        download_name = f"activity_{activity_id}_document"
+
+    response = send_file(
+        resolved_path,
+        mimetype=doc.mime_type or 'application/pdf',
+        as_attachment=True,
+        download_name=download_name,
+        conditional=True
+    )
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Cache-Control'] = 'private, max-age=600, must-revalidate'
+    response.headers['CDN-Cache-Control'] = 'no-store'
+    response.headers['Pragma'] = 'private'
+    response.headers['Vary'] = 'Accept-Encoding, Cookie, Authorization'
+    return response
+
 @admin_bp.route('/students')
 @admin_required
 def students():
     try:
         from src.utils import get_compatible_paginate
-        
-        page = request.args.get('page', 1, type=int)
-        search = request.args.get('search', '')
+
+        per_page_options = [10, 20, 50, 100]
+        requested_per_page = request.args.get('per_page', 20, type=int)
+        per_page = requested_per_page if requested_per_page in per_page_options else 20
+
+        jump_page = request.args.get('jump_page', type=int)
+        page = jump_page if jump_page and jump_page > 0 else request.args.get('page', 1, type=int)
+        page = page if page and page > 0 else 1
+
+        search = (request.args.get('search', '') or '').strip()
+        selected_society_id = request.args.get('society_id', type=int)
+        scope_society_id = _current_scope_society_id()
         
         # 使用SQLAlchemy 2.0风格查询
         query = _apply_student_scope(db.select(StudentInfo).join(User, StudentInfo.user_id == User.id))
@@ -2451,10 +2877,24 @@ def students():
                     User.username.ilike(f'%{search}%')
                 )
             )
+
+        if scope_society_id:
+            selected_society_id = scope_society_id
+        elif selected_society_id:
+            query = query.filter(
+                db.or_(
+                    StudentInfo.society_id == selected_society_id,
+                    StudentInfo.joined_societies.any(Society.id == selected_society_id)
+                )
+            )
         
         # 使用兼容性分页
         query = query.order_by(StudentInfo.id.desc())
-        students = get_compatible_paginate(db, query, page=page, per_page=20, error_out=False)
+        students = get_compatible_paginate(db, query, page=page, per_page=per_page, error_out=False)
+
+        if students.pages > 0 and page > students.pages:
+            page = students.pages
+            students = get_compatible_paginate(db, query, page=page, per_page=per_page, error_out=False)
         
         # 确保所有学生记录都有qq和has_selected_tags字段的值，并标记是否为管理员
         for student in students.items:
@@ -2465,7 +2905,23 @@ def students():
                 student.has_selected_tags = False
             student.is_admin = bool(user and user.role and (user.role.name or '').strip().lower() == 'admin')
         
-        return render_template('admin/students.html', students=students, search=search)
+        if scope_society_id:
+            scope_society = db.session.get(Society, scope_society_id)
+            societies = [scope_society] if scope_society else []
+        else:
+            societies = db.session.execute(
+                db.select(Society).filter(Society.is_active == True).order_by(Society.name.asc())
+            ).scalars().all()
+
+        return render_template(
+            'admin/students.html',
+            students=students,
+            search=search,
+            societies=societies,
+            selected_society_id=selected_society_id,
+            per_page=per_page,
+            per_page_options=per_page_options
+        )
     except Exception as e:
         logger.error(f"Error in students: {e}")
         flash('加载学生列表时出错', 'danger')
@@ -2475,20 +2931,21 @@ def students():
 @admin_required
 def delete_student(id):
     try:
+        return_back = request.referrer or url_for('admin.students')
         user = db.get_or_404(User, id)
         user_role = (user.role.name or '').strip().lower() if user.role else ''
         if user_role != 'student':
             flash('只能删除学生账号', 'danger')
-            return redirect(url_for('admin.students'))
+            return redirect(return_back)
 
         if not is_super_admin(current_user):
             student = user.student_info
             if not student:
                 flash('该用户不是学生账号', 'warning')
-                return redirect(url_for('admin.students'))
+                return redirect(return_back)
             if not _scope_guard_student(student):
                 flash('您只能管理所属社团学生', 'danger')
-                return redirect(url_for('admin.students'))
+                return redirect(return_back)
 
             changed = _remove_student_from_scope_society(student)
             db.session.commit()
@@ -2497,7 +2954,7 @@ def delete_student(id):
                 flash('已将该学生移出当前社团名单（账号保留）', 'success')
             else:
                 flash('该学生不在当前社团名单中，无需移除', 'info')
-            return redirect(url_for('admin.students'))
+            return redirect(return_back)
 
         # 清理外键依赖，避免删除失败
         db.session.execute(db.text("UPDATE system_logs SET user_id = NULL WHERE user_id = :uid"), {'uid': user.id})
@@ -2525,12 +2982,12 @@ def delete_student(id):
 
         log_action('delete_student', f'删除学生账号: {user.username}')
         flash('学生账号已成功删除', 'success')
-        return redirect(url_for('admin.students'))
+        return redirect(return_back)
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error deleting student: {e}")
         flash('删除学生账号时出错', 'danger')
-        return redirect(url_for('admin.students'))
+        return redirect(request.referrer or url_for('admin.students'))
 
 @admin_bp.route('/student/<int:user_id>/promote-admin', methods=['POST'])
 @admin_required
@@ -3846,7 +4303,9 @@ def update_registration_status(id):
         # 如果状态改为已参加，设置签到时间
         if new_status == 'attended' and not registration.check_in_time:
             registration.check_in_time = get_localized_now()
-        # 如果从已参加改为其他状态，保留签到时间以便恢复
+        # 状态从已参加改为其他状态时清理签到时间，避免“已取消仍显示已签到/可下载”的误判
+        elif new_status in ['registered', 'cancelled']:
+            registration.check_in_time = None
         
         db.session.commit()
         
@@ -4328,7 +4787,7 @@ def ai_activity_retrospective_report(id):
         registrations = Registration.query.filter_by(activity_id=id).all()
 
         total_registered = len(registrations)
-        attended_count = sum(1 for r in registrations if (r.status == 'attended' or r.check_in_time is not None))
+        attended_count = sum(1 for r in registrations if r.status == 'attended')
         cancelled_count = sum(1 for r in registrations if r.status == 'cancelled')
         no_show_count = max(total_registered - attended_count - cancelled_count, 0)
         attendance_rate = (attended_count / total_registered * 100.0) if total_registered else 0.0

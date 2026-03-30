@@ -15,7 +15,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.header import Header
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, parse_qs
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -276,6 +276,34 @@ def _is_safe_next_url(target):
     ref_url = urlparse(request.host_url)
     test_url = urlparse(urljoin(request.host_url, target))
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
+
+def _resolve_post_login_next(next_page, user):
+    """将公共活动详情页回跳转换为学生活动详情页，支持自动报名意图参数。"""
+    if not next_page or not user:
+        return next_page
+
+    role_name = (getattr(getattr(user, 'role', None), 'name', '') or '').strip().lower()
+    if role_name != 'student':
+        return next_page
+
+    try:
+        parsed = urlparse(urljoin(request.host_url, next_page))
+        path_parts = [part for part in parsed.path.split('/') if part]
+        if len(path_parts) != 2 or path_parts[0] != 'activity' or not path_parts[1].isdigit():
+            return next_page
+
+        activity_id = int(path_parts[1])
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        auto_register = str((query.get('auto_register') or ['0'])[0]).strip().lower() in ('1', 'true', 'yes')
+
+        student_detail_url = url_for('student.activity_detail', id=activity_id)
+        if auto_register:
+            return f'{student_detail_url}?auto_register=1'
+        return student_detail_url
+    except Exception as e:
+        logger.warning(f"解析登录回跳地址失败，保留原next参数: {e}")
+        return next_page
 
 
 def _build_logout_response(message='您已成功登出！', category='success', logged_out=1, password_changed=0):
@@ -570,6 +598,7 @@ def login():
                 if next_page and '/utils/ai_chat/history' in next_page:
                     logger.warning(f"阻止重定向到AI聊天历史: {next_page}")
                     next_page = url_for('main.index')
+                next_page = _resolve_post_login_next(next_page, user)
 
                 # 学生首次登录（尚未选择标签）强制进入标签选择页
                 try:
@@ -612,6 +641,8 @@ def session_state():
     display_name = ''
     dashboard_url = url_for('main.index')
     is_super = False
+    can_enter_student_mode = False
+    admin_student_mode = False
     managed_society_id = None
     managed_society_name = ''
 
@@ -625,6 +656,8 @@ def session_state():
             dashboard_url = url_for('admin.dashboard')
             display_name = current_user.username or '管理员'
             is_super = bool(getattr(current_user, 'is_super_admin', False))
+            can_enter_student_mode = not is_super
+            admin_student_mode = bool(session.get('admin_student_mode')) and can_enter_student_mode
             managed_society_id = getattr(current_user, 'managed_society_id', None)
             if managed_society_id:
                 society = db.session.get(Society, managed_society_id)
@@ -642,6 +675,8 @@ def session_state():
         'authenticated': bool(current_user.is_authenticated),
         'role': role_name,
         'is_super_admin': is_super,
+        'can_enter_student_mode': can_enter_student_mode,
+        'admin_student_mode': admin_student_mode,
         'managed_society_id': managed_society_id,
         'managed_society_name': managed_society_name,
         'display_name': display_name,
@@ -655,6 +690,9 @@ def session_state():
             'messages': url_for('admin.messages') if role_name == 'admin' else '',
             'societies': url_for('admin.manage_societies') if role_name == 'admin' and is_super else '',
             'select_society': url_for('admin.select_admin_society') if role_name == 'admin' and not is_super else '',
+            'student_dashboard': url_for('student.dashboard') if role_name == 'admin' else '',
+            'enter_student_mode': url_for('student.enter_student_mode') if role_name == 'admin' and can_enter_student_mode else '',
+            'exit_student_mode': url_for('student.exit_student_mode') if role_name == 'admin' and can_enter_student_mode else '',
         }
     })
 

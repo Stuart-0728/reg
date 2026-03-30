@@ -1,6 +1,49 @@
+const statisticsChartInstances = {};
+let statisticsInitialized = false;
+
 document.addEventListener('DOMContentLoaded', function() {
+    if (statisticsInitialized) {
+        return;
+    }
+    statisticsInitialized = true;
     initializeCharts();
 });
+
+function getCanvasContext(chartId) {
+    const canvas = document.getElementById(chartId);
+    if (!canvas || typeof canvas.getContext !== 'function') {
+        console.warn(`统计图表容器不存在: ${chartId}`);
+        return null;
+    }
+    return canvas.getContext('2d');
+}
+
+function destroyChartIfExists(chartId) {
+    if (statisticsChartInstances[chartId]) {
+        statisticsChartInstances[chartId].destroy();
+        delete statisticsChartInstances[chartId];
+    }
+
+    if (typeof Chart.getChart === 'function') {
+        const canvas = document.getElementById(chartId);
+        const existing = canvas ? Chart.getChart(canvas) : null;
+        if (existing) {
+            existing.destroy();
+        }
+    }
+}
+
+function createOrReplaceChart(chartId, config) {
+    const ctx = getCanvasContext(chartId);
+    if (!ctx) {
+        return null;
+    }
+
+    destroyChartIfExists(chartId);
+    const chart = new Chart(ctx, config);
+    statisticsChartInstances[chartId] = chart;
+    return chart;
+}
 
 function initializeCharts() {
     // 设置全局Chart.js配置
@@ -70,7 +113,11 @@ function tryFetchExtStats() {
 function showChartError(chartId) {
     const canvas = document.getElementById(chartId);
     if (canvas) {
+        destroyChartIfExists(chartId);
         const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            return;
+        }
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.font = '14px "Microsoft YaHei", sans-serif';
         ctx.fillStyle = '#dc3545';
@@ -82,8 +129,7 @@ function showChartError(chartId) {
 // 渲染基础图表
 function renderBasicCharts(data) {
     // 活动报名统计图表
-    const registrationCtx = document.getElementById('registrationChart').getContext('2d');
-    new Chart(registrationCtx, {
+    createOrReplaceChart('registrationChart', {
         type: 'doughnut',
         data: {
             labels: data.registration_stats.labels,
@@ -152,8 +198,7 @@ function renderBasicCharts(data) {
     });
 
     // 学生参与度图表
-    const participationCtx = document.getElementById('participationChart').getContext('2d');
-    new Chart(participationCtx, {
+    createOrReplaceChart('participationChart', {
         type: 'pie',
         data: {
             labels: data.participation_stats.labels,
@@ -219,8 +264,7 @@ function renderBasicCharts(data) {
     });
 
     // 月度统计图表 - 使用双Y轴解决数量级不同的问题
-    const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
-    new Chart(monthlyCtx, {
+    createOrReplaceChart('monthlyChart', {
         type: 'bar',
         data: {
             labels: data.monthly_stats.labels,
@@ -330,8 +374,7 @@ function renderBasicCharts(data) {
 // 渲染扩展图表
 function renderExtCharts(ext) {
     // 标签热度图表
-    const tagHeatCtx = document.getElementById('tagHeatChart').getContext('2d');
-    new Chart(tagHeatCtx, {
+    createOrReplaceChart('tagHeatChart', {
         type: 'bar',
         data: {
             labels: ext.tag_heat.labels,
@@ -391,13 +434,12 @@ function renderExtCharts(ext) {
     });
 
     // 积分分布图表
-    const pointsDistCtx = document.getElementById('pointsDistChart').getContext('2d');
     
     // 计算百分比数据用于标签显示
     const total = ext.points_dist.data.reduce((acc, curr) => acc + curr, 0);
     const percentages = ext.points_dist.data.map(value => total > 0 ? Math.round((value / total) * 100) : 0);
     
-    new Chart(pointsDistCtx, {
+    createOrReplaceChart('pointsDistChart', {
         type: 'bar',
         data: {
             labels: ext.points_dist.labels,
@@ -470,8 +512,7 @@ function renderExtCharts(ext) {
 
     // 学生注册趋势图表
     if (ext.registration_trend && ext.registration_trend.labels) {
-        const trendCtx = document.getElementById('registrationTrendChart').getContext('2d');
-        new Chart(trendCtx, {
+        createOrReplaceChart('registrationTrendChart', {
             type: 'line',
             data: {
                 labels: ext.registration_trend.labels,

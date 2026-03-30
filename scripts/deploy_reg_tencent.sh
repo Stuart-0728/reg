@@ -5,6 +5,8 @@ SERVER_IP="49.234.20.60"
 SERVER_USER="ubuntu"
 DOMAIN="reg.cqaibase.cn"
 APP_DIR="/var/www/reg/current"
+STORAGE_DIR="/var/www/reg/storage"
+ACTIVITY_DOCS_DIR="${STORAGE_DIR}/activity_docs"
 SERVICE_NAME="reg"
 DB_NAME="reg_db"
 DB_USER="reg_user"
@@ -23,7 +25,10 @@ fi
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "[1/8] 准备服务器目录"
-ssh ${SERVER_USER}@${SERVER_IP} "sudo mkdir -p ${APP_DIR} && sudo chown -R ${SERVER_USER}:${SERVER_USER} /var/www/reg"
+ssh ${SERVER_USER}@${SERVER_IP} "sudo mkdir -p ${APP_DIR} ${ACTIVITY_DOCS_DIR} && sudo chown -R ${SERVER_USER}:${SERVER_USER} /var/www/reg"
+
+echo "[1.1/8] 迁移历史活动资料到持久化目录（若存在）"
+ssh ${SERVER_USER}@${SERVER_IP} "LEGACY_DIR='${APP_DIR}/static/uploads/posters/activity_docs'; if [ -d \"\${LEGACY_DIR}\" ]; then mkdir -p '${ACTIVITY_DOCS_DIR}' && cp -an \"\${LEGACY_DIR}/.\" '${ACTIVITY_DOCS_DIR}/' || true; fi"
 
 echo "[2/8] 同步项目代码"
 rsync -az --delete \
@@ -102,6 +107,9 @@ else
   echo '.env 文件已存在，跳过覆盖以保留原有配置（包括持续会话）。'
 fi"
 
+echo "[5.0/8] 确保持久化资料目录配置"
+ssh ${SERVER_USER}@${SERVER_IP} "if grep -q '^ACTIVITY_DOCS_DIR=' ${APP_DIR}/.env; then sed -i \"s|^ACTIVITY_DOCS_DIR=.*|ACTIVITY_DOCS_DIR=${ACTIVITY_DOCS_DIR}|\" ${APP_DIR}/.env; else echo \"ACTIVITY_DOCS_DIR=${ACTIVITY_DOCS_DIR}\" >> ${APP_DIR}/.env; fi"
+
 echo "[5.1/8] 同步 Gemini API Key（仅当本地环境变量已设置）"
 if [[ -n "${GEMINI_API_KEY}" ]]; then
   ssh ${SERVER_USER}@${SERVER_IP} "if grep -q '^GEMINI_API_KEY=' ${APP_DIR}/.env; then sed -i \"s|^GEMINI_API_KEY=.*|GEMINI_API_KEY=${GEMINI_API_KEY}|\" ${APP_DIR}/.env; else echo \"GEMINI_API_KEY=${GEMINI_API_KEY}\" >> ${APP_DIR}/.env; fi"
@@ -143,8 +151,11 @@ ssh ${SERVER_USER}@${SERVER_IP} "if [ ! -f /etc/nginx/sites-available/reg ]; the
 server {
     listen 80;
     server_name reg.cqaibase.cn;
+  client_max_body_size 80m;
 
     location / {
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
         proxy_pass http://127.0.0.1:8082;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;

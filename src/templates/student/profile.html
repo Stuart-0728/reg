@@ -3,7 +3,7 @@
 {% block title %}个人资料 - 智能社团+{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-3 py-md-4 profile-page-wrap">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="{{ url_for('student.dashboard') }}">控制台</a></li>
@@ -11,35 +11,12 @@
         </ol>
     </nav>
 
-    <div class="row g-4">
-        <div class="col-lg-3">
-            <div class="list-group mb-4">
-                <a href="{{ url_for('student.dashboard') }}" class="list-group-item list-group-item-action">
-                    <i class="fas fa-home me-2"></i> 控制台
-                </a>
-                <a href="{{ url_for('student.my_activities') }}" class="list-group-item list-group-item-action">
-                    <i class="fas fa-calendar-alt me-2"></i> 我的活动
-                </a>
-                <a href="{{ url_for('student.profile') }}" class="list-group-item list-group-item-action active">
-                    <i class="fas fa-user me-2"></i> 个人资料
-                </a>
-                <a href="{{ url_for('student.points') }}" class="list-group-item list-group-item-action">
-                    <i class="fas fa-star me-2"></i> 我的积分
-                </a>
-                <a href="{{ url_for('student.messages') }}" class="list-group-item list-group-item-action">
-                    <i class="fas fa-envelope me-2"></i> 站内信
-                </a>
-                <a href="{{ url_for('student.notifications') }}" class="list-group-item list-group-item-action">
-                    <i class="fas fa-bell me-2"></i> 通知中心
-                </a>
-            </div>
-        </div>
-
-        <div class="col-lg-9">
+    <div class="row g-3 g-md-4 justify-content-center">
+        <div class="col-12 col-xl-10">
             <div class="card shadow-sm border-0 rounded-4">
-                <div class="card-header bg-transparent text-dark d-flex justify-content-between align-items-center">
+                <div class="card-header bg-transparent text-dark d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="mb-0">个人资料</h5>
-                    <a href="{{ url_for('student.edit_profile') }}" class="btn btn-light btn-sm">
+                    <a href="{{ url_for('student.edit_profile') }}" class="btn btn-light btn-sm profile-main-edit-btn">
                         <i class="fas fa-edit me-1"></i>编辑资料
                     </a>
                 </div>
@@ -75,10 +52,10 @@
                     </div>
                     
                     <!-- 兴趣标签部分 -->
-                    <div class="mb-4">
+                    <div class="mb-4 profile-section-block">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h5 class="mb-0">我的社团</h5>
-                            <a href="{{ url_for('student.edit_profile') }}" class="btn btn-sm btn-outline-primary">
+                            <a href="{{ url_for('student.edit_profile') }}" class="btn btn-sm btn-outline-primary section-edit-btn">
                                 <i class="fas fa-edit me-1"></i>调整社团
                             </a>
                         </div>
@@ -96,10 +73,10 @@
                     </div>
 
                     <!-- 兴趣标签部分 -->
-                    <div class="mb-4">
+                    <div class="mb-4 profile-section-block">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h5 class="mb-0">兴趣标签</h5>
-                            <a href="{{ url_for('auth.select_tags') }}" class="btn btn-sm btn-outline-primary">
+                            <a href="{{ url_for('auth.select_tags') }}" class="btn btn-sm btn-outline-primary section-edit-btn">
                                 <i class="fas fa-edit me-1"></i>修改标签
                             </a>
                         </div>
@@ -124,6 +101,10 @@
 </div>
 
 <style>
+    .profile-page-wrap {
+        max-width: 1080px;
+    }
+
     .avatar-circle {
         width: 100px;
         height: 100px;
@@ -164,9 +145,69 @@
         font-size: 1rem;
     }
 
+    .profile-section-block {
+        padding: 0.2rem 0;
+    }
+
+    .section-edit-btn,
+    .profile-main-edit-btn {
+        white-space: nowrap;
+    }
+
     @media (max-width: 768px) {
+        .profile-page-wrap {
+            padding-left: 0.2rem;
+            padding-right: 0.2rem;
+        }
+
+        .breadcrumb {
+            margin-bottom: 0.8rem;
+            font-size: 0.9rem;
+        }
+
+        .card.rounded-4 {
+            border-radius: 0.9rem !important;
+        }
+
+        .card-header {
+            padding: 0.9rem 1rem;
+        }
+
+        .card-body {
+            padding: 1rem;
+        }
+
         .profile-grid {
             grid-template-columns: 1fr;
+            gap: 0.6rem;
+        }
+
+        .profile-item {
+            border-radius: 0.7rem;
+            padding: 0.62rem 0.72rem;
+        }
+
+        .profile-item span {
+            font-size: 0.84rem;
+        }
+
+        .profile-item strong {
+            font-size: 0.95rem;
+        }
+
+        .section-edit-btn,
+        .profile-main-edit-btn {
+            min-height: 36px;
+        }
+
+        .d-flex.justify-content-between.align-items-center.mb-2 {
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .alert.alert-info {
+            font-size: 0.9rem;
+            line-height: 1.45;
         }
     }
 </style>

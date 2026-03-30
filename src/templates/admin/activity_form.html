@@ -5,6 +5,17 @@
 {% block styles %}
 {{ super() }}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+.poster-zoom-trigger {
+  cursor: zoom-in;
+}
+
+#posterZoomModalImage {
+  width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -266,7 +277,7 @@
               <div class="mt-3">
                 <div id="posterPreviewContainer" class="d-none">
                   <p class="mb-1">上传预览:</p>
-                  <img id="posterPreview" src="#" alt="海报预览" class="img-thumbnail" style="max-height: 200px;">
+                  <img id="posterPreview" src="#" alt="海报预览" class="img-thumbnail poster-zoom-trigger" style="max-height: 200px;" data-full-src="#">
                   <div id="aiPosterPromptHint" class="small text-muted mt-2 d-none"></div>
                 </div>
                 
@@ -274,15 +285,91 @@
                 <div class="mt-2">
                   <p class="mb-1">当前海报:</p>
                   {% if 'banner' in activity.poster_image %}
-                  <img src="{{ url_for('static', filename='img/' + activity.poster_image) }}" alt="活动海报" class="img-thumbnail" style="max-height: 200px;">
+                  <img src="{{ url_for('static', filename='img/' + activity.poster_image) }}" alt="活动海报" class="img-thumbnail poster-zoom-trigger" style="max-height: 200px;" data-full-src="{{ url_for('static', filename='img/' + activity.poster_image) }}">
                   <small class="form-text text-muted d-block mt-1">使用系统默认图片：{{ activity.poster_image }}</small>
                   {% else %}
-                  <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" alt="活动海报" class="img-thumbnail" style="max-height: 200px;">
+                  <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" alt="活动海报" class="img-thumbnail poster-zoom-trigger" style="max-height: 200px;" data-full-src="{{ url_for('main.poster_image', activity_id=activity.id) }}">
                   <small class="form-text text-muted d-block mt-1">当前文件名：{{ activity.poster_image }}</small>
                   {% endif %}
                 </div>
                 {% endif %}
               </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-medium">活动资料（参赛证明/奖状/通知）</label>
+              {% if activity %}
+              <input type="hidden" id="activityDocumentsMeta" name="activity_documents_meta" value="[]">
+              <input type="file" id="activityDocumentsInput" name="activity_documents" multiple class="d-none" tabindex="-1" aria-hidden="true">
+              <div class="border rounded p-3 bg-light mb-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <div>
+                    <div class="fw-semibold">资料缓存站</div>
+                    <small id="stagedDocsSummary" class="text-muted">未加入新文件</small>
+                  </div>
+                  <button type="button" class="btn btn-outline-primary btn-sm" id="openDocsStagingBtn" data-bs-toggle="modal" data-bs-target="#documentsStagingModal">
+                    <i class="fas fa-folder-plus me-1"></i>打开缓存站
+                  </button>
+                </div>
+                <small class="text-muted d-block mt-2">可多次打开弹窗分批加文件（单文件80MB以内），每个文件可单独设置标题/类型/公开权限；最终点击“保存”统一上传。</small>
+              </div>
+
+              {% if existing_documents %}
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle">
+                    <thead>
+                      <tr>
+                        <th>文件名</th>
+                        <th style="min-width: 180px;">标题</th>
+                        <th style="min-width: 140px;">类型</th>
+                        <th>公开</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for doc in existing_documents %}
+                      <tr>
+                        <td>
+                          <div class="fw-medium">{{ doc.file_name }}</div>
+                          <small class="text-muted">{{ display_datetime(doc.created_at, 'Asia/Shanghai', '%Y-%m-%d %H:%M') if doc.created_at else '未知时间' }}</small>
+                        </td>
+                        <td>
+                          <input type="text" class="form-control form-control-sm" name="doc_title_{{ doc.id }}" value="{{ doc.title }}" maxlength="128">
+                        </td>
+                        <td>
+                          <select class="form-select form-select-sm" name="doc_category_{{ doc.id }}">
+                            {% for code, label in document_categories.items() %}
+                              <option value="{{ code }}" {% if doc.category == code %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                          </select>
+                        </td>
+                        <td>
+                          <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="doc_is_public_{{ doc.id }}" {% if doc.is_public %}checked{% endif %}>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="d-flex gap-2 flex-wrap">
+                            <a class="btn btn-outline-primary btn-sm" href="{{ url_for('admin.download_activity_document_admin', activity_id=activity.id, doc_id=doc.id) }}">下载</a>
+                            <button
+                              type="button"
+                              class="btn btn-outline-danger btn-sm js-delete-existing-doc"
+                              data-delete-url="{{ url_for('admin.delete_activity_document', activity_id=activity.id, doc_id=doc.id) }}"
+                              data-csrf="{{ csrf_token() }}"
+                            >删除</button>
+                          </div>
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <div class="alert alert-light border mb-0">当前活动暂无上传资料。</div>
+              {% endif %}
+              {% else %}
+                <div class="alert alert-info mb-0">请先创建活动，保存后可在编辑页上传多个常见格式资料并设置下载权限。</div>
+              {% endif %}
             </div>
             
             <div class="mb-3">
@@ -330,14 +417,81 @@
           <a href="{{ url_for('admin.activities') }}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i> 返回
           </a>
-          <button type="submit" class="btn btn-primary" id="submitBtn">
-            <i class="fas fa-save me-1"></i> <span id="submitText">保存</span>
-          </button>
+          <div class="d-flex flex-column align-items-end gap-2" style="min-width: 280px;">
+            <button type="submit" class="btn btn-primary" id="submitBtn">
+              <i class="fas fa-save me-1"></i> <span id="submitText">保存</span>
+            </button>
+            <div id="uploadProgressWrap" class="w-100 d-none">
+              <div class="progress" style="height: 10px;">
+                <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;"></div>
+              </div>
+              <small id="uploadProgressText" class="text-muted">准备上传...</small>
+            </div>
+          </div>
         </div>
       </form>
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="posterZoomModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">海报预览</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+      </div>
+      <div class="modal-body">
+        <img id="posterZoomModalImage" src="" alt="海报大图预览">
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if activity %}
+<div class="modal fade" id="documentsStagingModal" tabindex="-1" aria-labelledby="documentsStagingModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="documentsStagingModalLabel">活动资料缓存站</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-9">
+            <input type="file" id="stagedDocsInput" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.bmp,.txt,.zip" multiple>
+          </div>
+          <div class="col-md-3 d-grid">
+            <button type="button" class="btn btn-outline-primary" id="addDocsToStageBtn">加入缓存站</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle" id="stagedDocsTable">
+            <thead>
+              <tr>
+                <th>文件</th>
+                <th style="min-width: 180px;">标题</th>
+                <th style="min-width: 140px;">类型</th>
+                <th>公开</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="stagedDocsTbody">
+              <tr id="stagedDocsEmptyRow">
+                <td colspan="5" class="text-center text-muted py-4">还没有缓存文件</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <small class="text-muted me-auto">缓存区文件仅在当前页面生效，点击页面底部“保存”才会真正上传。</small>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">完成设置</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -347,6 +501,22 @@
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = '{{ csrf_token() }}';
+    const posterZoomModalEl = document.getElementById('posterZoomModal');
+    const posterZoomModalImage = document.getElementById('posterZoomModalImage');
+    const posterZoomModal = posterZoomModalEl ? new bootstrap.Modal(posterZoomModalEl) : null;
+
+    document.addEventListener('click', function(event) {
+      const trigger = event.target.closest('.poster-zoom-trigger');
+      if (!trigger || !posterZoomModal || !posterZoomModalImage) {
+        return;
+      }
+      const fullSrc = trigger.getAttribute('data-full-src') || trigger.getAttribute('src');
+      if (!fullSrc || fullSrc === '#') {
+        return;
+      }
+      posterZoomModalImage.src = fullSrc;
+      posterZoomModal.show();
+    });
 
     async function postJson(url, payload, options = {}) {
       const timeoutMs = Number(options.timeoutMs || 0);
@@ -497,7 +667,7 @@
       throw new Error('AI生成耗时较长，请稍后重试');
     }
 
-    async function pollParseJob(jobId, maxAttempts = 60, intervalMs = 1000) {
+    async function pollParseJob(jobId, maxAttempts = 120, intervalMs = 1000) {
       for (let i = 0; i < maxAttempts; i += 1) {
         await sleep(intervalMs);
         const statusUrl = parseJobStatusUrlTemplate.replace('__JOB_ID__', encodeURIComponent(jobId));
@@ -823,9 +993,11 @@
           }
           if (posterPreview) {
             posterPreview.src = previewUrl;
+            posterPreview.dataset.fullSrc = previewUrl;
             posterPreview.onerror = function() {
               if (imageUrl && posterPreview.src !== imageUrl) {
                 posterPreview.src = imageUrl;
+                posterPreview.dataset.fullSrc = imageUrl;
               }
             };
           }
@@ -879,6 +1051,7 @@
           const reader = new FileReader();
           reader.onload = function(e) {
             posterPreview.src = e.target.result;
+            posterPreview.dataset.fullSrc = e.target.result;
             posterPreviewContainer.classList.remove('d-none');
           };
           reader.readAsDataURL(file);
@@ -888,11 +1061,226 @@
       });
     }
     
+    // 活动资料缓存站
+    const stagedDocsInput = document.getElementById('stagedDocsInput');
+    const addDocsToStageBtn = document.getElementById('addDocsToStageBtn');
+    const stagedDocsTbody = document.getElementById('stagedDocsTbody');
+    const stagedDocsEmptyRow = document.getElementById('stagedDocsEmptyRow');
+    const stagedDocsSummary = document.getElementById('stagedDocsSummary');
+    const activityDocumentsMetaInput = document.getElementById('activityDocumentsMeta');
+    const activityDocumentsInput = document.getElementById('activityDocumentsInput');
+    const deleteExistingDocBtns = document.querySelectorAll('.js-delete-existing-doc');
+
+    const stagedDocs = [];
+
+    function formatBytes(bytes) {
+      const value = Number(bytes || 0);
+      if (value < 1024) return `${value} B`;
+      if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+      return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function syncStagedDocsToForm() {
+      if (!activityDocumentsMetaInput || !activityDocumentsInput) {
+        return;
+      }
+
+      const dataTransfer = new DataTransfer();
+      const meta = [];
+      stagedDocs.forEach((item, index) => {
+        if (!item || !item.file) return;
+        dataTransfer.items.add(item.file);
+        meta.push({
+          index,
+          title: String(item.title || '').trim(),
+          category: String(item.category || 'certificate'),
+          is_public: !!item.isPublic
+        });
+      });
+
+      activityDocumentsInput.files = dataTransfer.files;
+      activityDocumentsMetaInput.value = JSON.stringify(meta);
+    }
+
+    function updateStagedDocsSummary() {
+      if (!stagedDocsSummary) {
+        return;
+      }
+      if (!stagedDocs.length) {
+        stagedDocsSummary.textContent = '未加入新文件';
+        return;
+      }
+      const totalSize = stagedDocs.reduce((acc, item) => acc + Number(item.file?.size || 0), 0);
+      stagedDocsSummary.textContent = `已缓存 ${stagedDocs.length} 份文件，总大小 ${formatBytes(totalSize)}`;
+    }
+
+    function renderStagedDocsRows() {
+      if (!stagedDocsTbody) {
+        return;
+      }
+
+      const rows = stagedDocs.map((item, index) => {
+        const escapedName = (item.file?.name || '未命名文件').replace(/"/g, '&quot;');
+        const escapedTitle = String(item.title || '').replace(/"/g, '&quot;');
+        return `
+          <tr data-staged-index="${index}">
+            <td>
+              <div class="fw-semibold text-truncate" style="max-width: 260px;" title="${escapedName}">${escapedName}</div>
+              <small class="text-muted">${formatBytes(item.file?.size || 0)}</small>
+            </td>
+            <td>
+              <input type="text" class="form-control form-control-sm js-staged-title" value="${escapedTitle}" maxlength="128" placeholder="可自定义展示标题">
+            </td>
+            <td>
+              <select class="form-select form-select-sm js-staged-category">
+                <option value="certificate" ${item.category === 'certificate' ? 'selected' : ''}>参赛证明</option>
+                <option value="award" ${item.category === 'award' ? 'selected' : ''}>奖状</option>
+                <option value="notice" ${item.category === 'notice' ? 'selected' : ''}>官方通知</option>
+                <option value="other" ${item.category === 'other' ? 'selected' : ''}>其他资料</option>
+              </select>
+            </td>
+            <td>
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input js-staged-public" ${item.isPublic ? 'checked' : ''}>
+              </div>
+            </td>
+            <td>
+              <button type="button" class="btn btn-sm btn-outline-danger js-staged-remove">移除</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      if (!rows.length) {
+        stagedDocsTbody.innerHTML = '<tr id="stagedDocsEmptyRow"><td colspan="5" class="text-center text-muted py-4">还没有缓存文件</td></tr>';
+      } else {
+        stagedDocsTbody.innerHTML = rows.join('');
+      }
+
+      updateStagedDocsSummary();
+      syncStagedDocsToForm();
+    }
+
+    if (addDocsToStageBtn && stagedDocsInput) {
+      addDocsToStageBtn.addEventListener('click', function() {
+        const files = Array.from(stagedDocsInput.files || []);
+        if (!files.length) {
+          alert('请先选择至少一个文件');
+          return;
+        }
+
+        let addedCount = 0;
+        let oversizeCount = 0;
+        files.forEach((file) => {
+          const name = String(file.name || '').toLowerCase();
+          const ext = name.includes('.') ? name.split('.').pop() : '';
+          const allowedExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'txt', 'zip'];
+          if (!allowedExts.includes(ext)) {
+            return;
+          }
+          if (Number(file.size || 0) > 80 * 1024 * 1024) {
+            oversizeCount += 1;
+            return;
+          }
+          stagedDocs.push({
+            file,
+            title: (file.name || '').replace(/\.[^.]+$/i, '').slice(0, 128),
+            category: 'certificate',
+            isPublic: false
+          });
+          addedCount += 1;
+        });
+
+        stagedDocsInput.value = '';
+        renderStagedDocsRows();
+
+        if (!addedCount) {
+          alert('选择的文件中没有可用格式（支持常见文档/图片）');
+        } else if (oversizeCount > 0) {
+          alert(`已跳过 ${oversizeCount} 个超过80MB的文件`);
+        }
+      });
+    }
+
+    if (stagedDocsTbody) {
+      stagedDocsTbody.addEventListener('input', function(event) {
+        const row = event.target.closest('tr[data-staged-index]');
+        if (!row) return;
+        const index = Number(row.getAttribute('data-staged-index'));
+        const item = stagedDocs[index];
+        if (!item) return;
+
+        if (event.target.classList.contains('js-staged-title')) {
+          item.title = event.target.value;
+          syncStagedDocsToForm();
+        }
+      });
+
+      stagedDocsTbody.addEventListener('change', function(event) {
+        const row = event.target.closest('tr[data-staged-index]');
+        if (!row) return;
+        const index = Number(row.getAttribute('data-staged-index'));
+        const item = stagedDocs[index];
+        if (!item) return;
+
+        if (event.target.classList.contains('js-staged-category')) {
+          item.category = event.target.value;
+        }
+        if (event.target.classList.contains('js-staged-public')) {
+          item.isPublic = !!event.target.checked;
+        }
+        syncStagedDocsToForm();
+      });
+
+      stagedDocsTbody.addEventListener('click', function(event) {
+        const btn = event.target.closest('.js-staged-remove');
+        if (!btn) return;
+        const row = event.target.closest('tr[data-staged-index]');
+        if (!row) return;
+        const index = Number(row.getAttribute('data-staged-index'));
+        if (Number.isInteger(index) && index >= 0) {
+          stagedDocs.splice(index, 1);
+          renderStagedDocsRows();
+        }
+      });
+    }
+
+    deleteExistingDocBtns.forEach((btn) => {
+      btn.addEventListener('click', function() {
+        const deleteUrl = btn.getAttribute('data-delete-url');
+        const csrf = btn.getAttribute('data-csrf');
+        if (!deleteUrl || !csrf) {
+          return;
+        }
+        if (!window.confirm('确认删除该资料吗？')) {
+          return;
+        }
+        const tempForm = document.createElement('form');
+        tempForm.method = 'post';
+        tempForm.action = deleteUrl;
+        tempForm.style.display = 'none';
+
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = csrf;
+        tempForm.appendChild(csrfInput);
+
+        document.body.appendChild(tempForm);
+        tempForm.submit();
+      });
+    });
+
+    renderStagedDocsRows();
+
     // 表单提交处理
     const form = document.getElementById('activityForm');
     const submitBtn = document.getElementById('submitBtn');
     const submitText = document.getElementById('submitText');
     const maxParticipantsInputForValidation = document.getElementById('max_participants');
+    const uploadProgressWrap = document.getElementById('uploadProgressWrap');
+    const uploadProgressBar = document.getElementById('uploadProgressBar');
+    const uploadProgressText = document.getElementById('uploadProgressText');
 
     function clearFormValidationState() {
       if (!form) {
@@ -945,54 +1333,102 @@
       return true;
     }
     
-    console.log('表单元素检查:', {
-      form: form,
-      submitBtn: submitBtn,
-      submitText: submitText
-    });
-    
-    if (form && submitBtn) {
-      console.log('添加表单提交监听器');
-      
-      // 添加点击事件监听器到提交按钮
-      submitBtn.addEventListener('click', function(e) {
-        console.log('提交按钮被点击');
-        
-        // 检查表单是否有效
-        if (!validateBeforeSubmit()) {
-          console.log('表单验证失败');
-          e.preventDefault();
+    function setUploadProgress(percent, message) {
+      if (!uploadProgressWrap || !uploadProgressBar || !uploadProgressText) {
+        return;
+      }
+      uploadProgressWrap.classList.remove('d-none');
+      const safePercent = Math.max(0, Math.min(100, Number(percent || 0)));
+      uploadProgressBar.style.width = `${safePercent}%`;
+      uploadProgressBar.setAttribute('aria-valuenow', String(safePercent));
+      uploadProgressText.textContent = message || `上传中 ${safePercent}%`;
+    }
+
+    function resetUploadUI() {
+      if (!uploadProgressWrap || !uploadProgressBar || !uploadProgressText) {
+        return;
+      }
+      uploadProgressWrap.classList.add('d-none');
+      uploadProgressBar.style.width = '0%';
+      uploadProgressBar.setAttribute('aria-valuenow', '0');
+      uploadProgressText.textContent = '准备上传...';
+    }
+
+    async function submitFormWithProgress() {
+      return new Promise((resolve, reject) => {
+        if (!form) {
+          reject(new Error('表单不存在'));
           return;
         }
-        
-        // 显示加载状态
-        submitBtn.disabled = true;
-        submitText.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>保存中...';
-        
-        console.log('准备提交表单');
-        
-        // 手动提交表单
-        setTimeout(() => {
-          form.submit();
-        }, 100);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action, true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+        xhr.upload.onprogress = function(event) {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress(percent, `上传中 ${percent}% (${formatBytes(event.loaded)}/${formatBytes(event.total)})`);
+          } else {
+            setUploadProgress(40, '上传中（服务器未返回总大小）...');
+          }
+        };
+
+        xhr.onerror = function() {
+          reject(new Error('上传失败：网络异常，请检查网络后重试'));
+        };
+
+        xhr.ontimeout = function() {
+          reject(new Error('上传超时：文件较大或网络较慢，请稍后重试'));
+        };
+
+        xhr.onload = function() {
+          setUploadProgress(100, '上传完成，正在处理服务器响应...');
+          if (xhr.status >= 200 && xhr.status < 400) {
+            resolve(xhr);
+          } else if (xhr.status === 413) {
+            reject(new Error('上传失败：文件过大（413），请压缩或分批上传'));
+          } else {
+            reject(new Error(`保存失败（${xhr.status}），请稍后重试`));
+          }
+        };
+
+        const formData = new FormData(form);
+        xhr.timeout = 15 * 60 * 1000;
+        xhr.send(formData);
       });
-      
-      form.addEventListener('submit', function(e) {
-        console.log('表单提交事件触发');
+    }
+
+    if (form && submitBtn) {
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
 
         if (!validateBeforeSubmit()) {
-          e.preventDefault();
           return;
         }
-        
-        // 显示加载状态
+
+        syncStagedDocsToForm();
+
         submitBtn.disabled = true;
         submitText.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>保存中...';
-        
-        console.log('表单正在提交到:', form.action);
+        setUploadProgress(0, '准备上传...');
+
+        try {
+          const xhr = await submitFormWithProgress();
+          const redirectUrl = xhr.responseURL || form.action;
+          window.location.href = redirectUrl;
+        } catch (error) {
+          const message = error?.message || '保存失败，请稍后重试';
+          if (window.showToast) {
+            showToast(message, 'danger');
+          } else {
+            alert(message);
+          }
+          submitBtn.disabled = false;
+          submitText.textContent = '保存';
+          resetUploadUI();
+        }
       });
-    } else {
-      console.error('表单或提交按钮未找到');
     }
   });
 </script>

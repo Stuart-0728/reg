@@ -1558,7 +1558,14 @@ footer {
 .btn-loading-active {
     pointer-events: none;
     opacity: 0.8;
-    min-width: 6rem; /* 根据设计酌情调整 */
+    white-space: nowrap;
+}
+
+.loading-inline-spinner {
+    width: 0.9em;
+    height: 0.9em;
+    border-width: 0.12em;
+    vertical-align: -0.12em;
 }
 
 /* 旧的btn-loading类保持兼容性 */

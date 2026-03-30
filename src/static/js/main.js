@@ -746,13 +746,48 @@ function setupButtonLoading() {
             // 保存原始状态
             const originalText = button.innerHTML;
             const originalDisabled = button.disabled;
+            const originalMinWidth = button.style.minWidth || '';
+            const originalWidth = button.style.width || '';
+            const originalHeight = button.style.height || '';
+            const originalMinHeight = button.style.minHeight || '';
+            const originalWhiteSpace = button.style.whiteSpace || '';
 
             // 使用不同的属性名避免冲突
             button.setAttribute('data-unified-original-text', originalText);
             button.setAttribute('data-unified-original-disabled', originalDisabled);
+            button.setAttribute('data-unified-original-min-width', originalMinWidth);
+            button.setAttribute('data-unified-original-width', originalWidth);
+            button.setAttribute('data-unified-original-height', originalHeight);
+            button.setAttribute('data-unified-original-min-height', originalMinHeight);
+            button.setAttribute('data-unified-original-white-space', originalWhiteSpace);
+
+            // 对窄按钮/小按钮优先保留原文案，仅叠加spinner，避免“提交中...”导致宽度与形状突变
+            const currentLabel = (button.textContent || '').trim().replace(/\s+/g, ' ');
+            const shouldPreserveLabel =
+                button.hasAttribute('data-keep-loading-label') ||
+                button.classList.contains('btn-sm') ||
+                currentLabel.length <= 4;
+
+            const loadingContent = shouldPreserveLabel ? (currentLabel || loadingText) : loadingText;
+
+            // 锁定按钮宽高，避免加载态文案变化导致按钮形状抖动
+            const buttonRect = button.getBoundingClientRect();
+            const buttonWidth = Math.ceil(buttonRect.width);
+            const buttonHeight = Math.ceil(buttonRect.height);
+            if (buttonWidth > 0) {
+                button.style.minWidth = `${buttonWidth}px`;
+                if (!button.classList.contains('w-100') && !button.classList.contains('flex-fill')) {
+                    button.style.width = `${buttonWidth}px`;
+                }
+            }
+            if (buttonHeight > 0) {
+                button.style.height = `${buttonHeight}px`;
+                button.style.minHeight = `${buttonHeight}px`;
+            }
+            button.style.whiteSpace = 'nowrap';
 
             // 设置加载状态
-            button.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${loadingText}`;
+            button.innerHTML = `<span class="spinner-border spinner-border-sm loading-inline-spinner me-2" role="status" aria-hidden="true"></span>${loadingContent}`;
             button.disabled = true;
             button.classList.add('btn-loading-active');
 
@@ -781,16 +816,31 @@ function setupButtonLoading() {
             // 恢复原始状态
             const originalText = button.getAttribute('data-unified-original-text');
             const originalDisabled = button.getAttribute('data-unified-original-disabled') === 'true';
+            const originalMinWidth = button.getAttribute('data-unified-original-min-width') || '';
+            const originalWidth = button.getAttribute('data-unified-original-width') || '';
+            const originalHeight = button.getAttribute('data-unified-original-height') || '';
+            const originalMinHeight = button.getAttribute('data-unified-original-min-height') || '';
+            const originalWhiteSpace = button.getAttribute('data-unified-original-white-space') || '';
 
             if (originalText) {
                 button.innerHTML = originalText;
             }
             button.disabled = originalDisabled;
+            button.style.minWidth = originalMinWidth;
+            button.style.width = originalWidth;
+            button.style.height = originalHeight;
+            button.style.minHeight = originalMinHeight;
+            button.style.whiteSpace = originalWhiteSpace;
             button.classList.remove('btn-loading-active');
 
             // 清理属性
             button.removeAttribute('data-unified-original-text');
             button.removeAttribute('data-unified-original-disabled');
+            button.removeAttribute('data-unified-original-min-width');
+            button.removeAttribute('data-unified-original-width');
+            button.removeAttribute('data-unified-original-height');
+            button.removeAttribute('data-unified-original-min-height');
+            button.removeAttribute('data-unified-original-white-space');
 
             this.loadingButtons.delete(button);
         },
@@ -820,6 +870,12 @@ function setupButtonLoading() {
         }
 
         // 跳过特定按钮 - 更严格的过滤
+        const buttonText = (button.textContent || '').replace(/\s+/g, ' ').trim();
+        const utilityActionKeywords = ['筛选', '搜索', '查询', '重置', '清空', '跳转', '上一页', '下一页'];
+        if (utilityActionKeywords.some(keyword => buttonText.includes(keyword))) {
+            return;
+        }
+
         if (button.classList.contains('ai-chat-button') ||
             button.hasAttribute('data-no-loading') ||
             button.hasAttribute('data-no-global-loading') ||
@@ -904,6 +960,11 @@ function setupFormLoadingHandlers() {
     document.addEventListener('submit', function(e) {
         const form = e.target;
 
+        const formMethod = (form.getAttribute('method') || 'GET').toUpperCase();
+        if (formMethod === 'GET') {
+            return;
+        }
+
         // 跳过特定表单
         if (form.hasAttribute('data-no-loading') ||
             form.hasAttribute('data-no-global-loading') ||
@@ -930,6 +991,12 @@ function setupFormLoadingHandlers() {
             submitBtn.hasAttribute('data-no-global-loading') ||
             submitBtn.closest('[data-no-loading]') ||
             submitBtn.closest('[data-no-global-loading]')) {
+            return;
+        }
+
+        const submitText = (submitBtn.textContent || '').replace(/\s+/g, ' ').trim();
+        const utilitySubmitKeywords = ['筛选', '搜索', '查询', '重置', '清空', '跳转', '上一页', '下一页'];
+        if (utilitySubmitKeywords.some(keyword => submitText.includes(keyword))) {
             return;
         }
 
@@ -1043,7 +1110,7 @@ function initToastSystem() {
     const toastContainer = document.createElement('div');
     toastContainer.id = 'toast-container';
     toastContainer.className = 'toast-container position-fixed bottom-0 start-0 p-3';
-    toastContainer.style.zIndex = '1090';
+    toastContainer.style.zIndex = '12050';
     document.body.appendChild(toastContainer);
     
     // 添加全局showToast函数
@@ -1356,9 +1423,10 @@ function setupSearchOptimization() {
 }
 
 // 更新活动状态
-function updateActivityStatus(activityId, newStatus) {
+function updateActivityStatus(activityId, newStatus, evt) {
     // 找到触发按钮
-    const button = event.target.closest('.activity-status-btn');
+    const sourceEvent = evt || window.event;
+    const button = sourceEvent && sourceEvent.target ? sourceEvent.target.closest('.activity-status-btn') : null;
     if (!button) return;
     
     // 保存原始内容
@@ -1567,7 +1635,16 @@ function fetchUnreadNotifications(force = false) {
 }
 
 function fetchPublicNotifications() {
-    fetch('/api/public-notifications')
+    const now = Date.now();
+    fetch(`/api/public-notifications?_t=${now}`, {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
         .then(response => {
             if (!response.ok) {
                 throw new Error('公开通知请求失败');
@@ -2311,8 +2388,43 @@ function resetAllButtonStates() {
             button.innerHTML = button.getAttribute('data-unified-original-text');
             button.removeAttribute('data-unified-original-text');
         }
+        if (button.hasAttribute('data-unified-original-min-width')) {
+            button.style.minWidth = button.getAttribute('data-unified-original-min-width') || '';
+            button.removeAttribute('data-unified-original-min-width');
+        }
+        if (button.hasAttribute('data-unified-original-width')) {
+            button.style.width = button.getAttribute('data-unified-original-width') || '';
+            button.removeAttribute('data-unified-original-width');
+        }
+        if (button.hasAttribute('data-unified-original-height')) {
+            button.style.height = button.getAttribute('data-unified-original-height') || '';
+            button.removeAttribute('data-unified-original-height');
+        }
+        if (button.hasAttribute('data-unified-original-min-height')) {
+            button.style.minHeight = button.getAttribute('data-unified-original-min-height') || '';
+            button.removeAttribute('data-unified-original-min-height');
+        }
+        if (button.hasAttribute('data-unified-original-white-space')) {
+            button.style.whiteSpace = button.getAttribute('data-unified-original-white-space') || '';
+            button.removeAttribute('data-unified-original-white-space');
+        }
         if (button.hasAttribute('data-unified-original-disabled')) {
             button.removeAttribute('data-unified-original-disabled');
+        }
+    });
+
+    // 兜底清理：若旧逻辑把 a.btn 加了 disabled 类，恢复可点击状态
+    document.querySelectorAll('a.btn.disabled[data-original-text], a.btn.disabled[data-unified-original-text]').forEach(function(anchorBtn) {
+        anchorBtn.classList.remove('disabled');
+        anchorBtn.setAttribute('aria-disabled', 'false');
+
+        if (anchorBtn.hasAttribute('data-original-text')) {
+            anchorBtn.innerHTML = anchorBtn.getAttribute('data-original-text');
+            anchorBtn.removeAttribute('data-original-text');
+        }
+        if (anchorBtn.hasAttribute('data-unified-original-text')) {
+            anchorBtn.innerHTML = anchorBtn.getAttribute('data-unified-original-text');
+            anchorBtn.removeAttribute('data-unified-original-text');
         }
     });
 

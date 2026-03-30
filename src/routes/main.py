@@ -555,9 +555,15 @@ def public_notifications_api():
                 for n in notifications
             ]
         })
-        response.headers['Cache-Control'] = 'public, max-age=10, s-maxage=30, stale-while-revalidate=20'
-        response.headers['Surrogate-Control'] = 'max-age=30, stale-while-revalidate=20'
-        response.headers['Vary'] = 'Accept-Encoding'
+        # 通知属于高时效内容，禁用浏览器/CDN缓存，避免教育资源页等页面看到旧通知。
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Surrogate-Control'] = 'no-store'
+        response.headers['Vary'] = 'Accept-Encoding, Cookie, Authorization'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         return response
     except Exception as e:
         logger.error(f"获取公开通知失败: {e}")

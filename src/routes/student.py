@@ -1,6 +1,6 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, abort, session, Response
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, abort, session, Response, send_file
 from flask_login import login_required, current_user
-from src.models import db, Activity, Registration, User, StudentInfo, PointsHistory, ActivityReview, Tag, Message, Notification, NotificationRead, Role, Society
+from src.models import db, Activity, Registration, User, StudentInfo, PointsHistory, ActivityReview, Tag, Message, Notification, NotificationRead, Role, Society, ActivityDocument
 from datetime import datetime, timedelta
 import logging
 import json
@@ -16,6 +16,7 @@ from src.utils import get_compatible_paginate
 from sqlalchemy.orm import joinedload, defer
 import pytz
 import os
+from collections import OrderedDict
 from flask_wtf.csrf import CSRFProtect
 from src import cache, limiter
 from src.utils.input_safety import sanitize_plain_text
@@ -27,6 +28,112 @@ student_bp = Blueprint('student', __name__, url_prefix='/student')
 
 # 创建CSRF保护实例
 csrf = CSRFProtect()
+
+DOCUMENT_CATEGORY_LABELS = {
+    'certificate': '参赛证明',
+    'award': '奖状',
+    'notice': '官方通知',
+    'other': '其他资料'
+}
+
+
+def _is_admin_user(user=None):
+    target = user or current_user
+    try:
+        return bool(target and target.is_authenticated and target.role and str(target.role.name).lower() == 'admin')
+    except Exception:
+        return False
+
+
+def _is_society_admin_user(user=None):
+    target = user or current_user
+    return _is_admin_user(target) and not bool(getattr(target, 'is_super_admin', False))
+
+
+def _is_admin_student_mode_enabled():
+    return _is_society_admin_user() and bool(session.get('admin_student_mode'))
+
+
+def _ensure_student_profile_for_admin_mode():
+    """管理员开启学生模式时，确保存在可参与活动的学生资料。"""
+    if not _is_admin_student_mode_enabled():
+        return None
+
+    student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
+    if student_info:
+        return student_info
+
+    base_student_id = f"A{current_user.id}{datetime.utcnow().strftime('%y%m%d')}"
+    candidate = base_student_id[:20]
+    seq = 1
+    while db.session.execute(db.select(StudentInfo).filter_by(student_id=candidate)).scalar_one_or_none():
+        suffix = str(seq)
+        candidate = f"{base_student_id[:20 - len(suffix)]}{suffix}"
+        seq += 1
+
+    student_info = StudentInfo(
+        user_id=current_user.id,
+        student_id=candidate,
+        real_name=current_user.username,
+        grade='未设置',
+        major='未设置',
+        college='未设置',
+        phone='',
+        qq='',
+        points=0,
+        has_selected_tags=True
+    )
+    db.session.add(student_info)
+    db.session.commit()
+    return student_info
+
+
+def _activity_docs_upload_dir():
+    docs_dir = current_app.config.get('ACTIVITY_DOCS_DIR')
+    if not docs_dir:
+        base_upload = current_app.config.get('UPLOAD_FOLDER') or os.path.join(current_app.root_path, 'static', 'uploads')
+        docs_dir = os.path.join(base_upload, 'activity_docs')
+    os.makedirs(docs_dir, exist_ok=True)
+    return docs_dir
+
+
+def _activity_docs_allowed_dirs():
+    docs_dir = _activity_docs_upload_dir()
+    base_upload = current_app.config.get('UPLOAD_FOLDER') or os.path.join(current_app.root_path, 'static', 'uploads')
+    legacy_dir = os.path.join(base_upload, 'activity_docs')
+    return [os.path.realpath(docs_dir), os.path.realpath(legacy_dir)]
+
+
+def _is_within_allowed_activity_docs(path):
+    if not path:
+        return False
+    try:
+        real_path = os.path.realpath(path)
+        for allowed_dir in _activity_docs_allowed_dirs():
+            try:
+                if os.path.commonpath([real_path, allowed_dir]) == allowed_dir:
+                    return True
+            except ValueError:
+                continue
+    except Exception:
+        return False
+    return False
+
+
+def _resolve_activity_document_file_path(doc):
+    if not doc:
+        return None
+
+    raw_path = str(doc.file_path or '').replace('\x00', '').strip()
+    candidates = []
+    if raw_path:
+        candidates.append(raw_path)
+        candidates.append(os.path.join(_activity_docs_upload_dir(), os.path.basename(raw_path)))
+
+    for path in candidates:
+        if path and os.path.exists(path) and _is_within_allowed_activity_docs(path):
+            return path
+    return None
 
 
 def _build_email_change_token(user_id, old_email, new_email):
@@ -182,9 +289,14 @@ def student_required(func):
     @login_required
     def decorated_view(*args, **kwargs):
         try:
-            if not current_user.role or current_user.role.name != 'Student':
+            is_student_role = bool(current_user.role and current_user.role.name == 'Student')
+            if not is_student_role and not _is_admin_student_mode_enabled():
                 flash('您没有权限访问此页面', 'danger')
                 return redirect(url_for('main.index'))
+
+            if _is_admin_student_mode_enabled():
+                _ensure_student_profile_for_admin_mode()
+
             return func(*args, **kwargs)
         except Exception as e:
             logger.error(f"Error in student_required: {e}")
@@ -241,6 +353,25 @@ def _ensure_student_join_society(student_info, society_id):
     if not getattr(student_info, 'society_id', None):
         student_info.society_id = society_id
 
+
+def _has_successful_participation(user_id, activity_id):
+    reg = db.session.execute(
+        db.select(Registration).filter(
+            Registration.user_id == user_id,
+            Registration.activity_id == activity_id
+        )
+    ).scalar_one_or_none()
+    if not reg:
+        return False
+    return reg.status == 'attended'
+
+
+def _successful_participation_activity_subquery(user_id):
+    return db.select(Registration.activity_id).filter(
+        Registration.user_id == user_id,
+        Registration.status == 'attended'
+    )
+
 @student_bp.route('/dashboard')
 @login_required
 def dashboard():
@@ -251,12 +382,16 @@ def dashboard():
         # 获取学生信息
         stmt = db.select(StudentInfo).filter_by(user_id=current_user.id)
         student_info = db.session.execute(stmt).scalar_one_or_none()
+        if not student_info and _is_admin_student_mode_enabled():
+            student_info = _ensure_student_profile_for_admin_mode()
+
         if not student_info:
             return redirect(url_for('auth.register'))
 
         has_tags = bool(getattr(student_info, 'tags', []) or [])
         has_society = bool(getattr(student_info, 'society_id', None)) or bool(getattr(student_info, 'joined_societies', []) or [])
-        if (not getattr(student_info, 'has_selected_tags', False)) or (not has_tags) or (not has_society):
+        should_skip_profile_gate = _is_admin_student_mode_enabled()
+        if (not should_skip_profile_gate) and ((not getattr(student_info, 'has_selected_tags', False)) or (not has_tags) or (not has_society)):
             flash('请先完成社团和兴趣标签选择后再继续使用。', 'warning')
             return redirect(url_for('auth.select_tags'))
         
@@ -356,6 +491,41 @@ def dashboard():
         # 获取推荐活动
         recommended_activities = get_recommended_activities(current_user.id)
 
+        # 活动资料小组件：按活动分组展示可下载文件（部分）
+        success_activity_ids_subq = _successful_participation_activity_subquery(current_user.id)
+        recent_docs = db.session.execute(
+            db.select(ActivityDocument)
+            .options(joinedload(ActivityDocument.activity).joinedload(Activity.society))
+            .filter(
+                or_(
+                    ActivityDocument.is_public == True,
+                    and_(
+                        ActivityDocument.is_public == False,
+                        ActivityDocument.activity_id.in_(success_activity_ids_subq)
+                    )
+                )
+            )
+            .order_by(ActivityDocument.created_at.desc())
+            .limit(30)
+        ).scalars().all()
+
+        docs_by_activity = OrderedDict()
+        for doc in recent_docs:
+            activity = getattr(doc, 'activity', None)
+            if not activity:
+                continue
+            if activity.id not in docs_by_activity:
+                docs_by_activity[activity.id] = {
+                    'activity': activity,
+                    'documents': []
+                }
+            if len(docs_by_activity[activity.id]['documents']) < 3:
+                docs_by_activity[activity.id]['documents'].append(doc)
+            if len(docs_by_activity) >= 4 and all(len(v['documents']) >= 3 for v in docs_by_activity.values()):
+                break
+
+        recent_document_groups = list(docs_by_activity.values())[:4]
+
         return render_template(
             'student/dashboard.html',
             student=student_info,
@@ -366,7 +536,9 @@ def dashboard():
             now=now,
             safe_less_than=safe_less_than,
             safe_greater_than=safe_greater_than,
-            recommended_activities=recommended_activities
+            recommended_activities=recommended_activities,
+            recent_document_groups=recent_document_groups,
+            document_category_labels=DOCUMENT_CATEGORY_LABELS
         )
     except Exception as e:
         logger.error(f"Error in student dashboard: {e}", exc_info=True)
@@ -475,7 +647,8 @@ def activity_detail(id):
 
         registration = db.session.execute(db.select(Registration).filter_by(user_id=current_user.id, activity_id=id)).scalar_one_or_none()
         has_registered = registration is not None and registration.status in ['registered', 'attended']
-        has_checked_in = registration.check_in_time is not None if registration else False
+        has_checked_in = bool(registration and registration.status == 'attended')
+        has_successful_participation = bool(registration and registration.status == 'attended')
 
         registered_count = db.session.execute(db.select(func.count()).select_from(Registration).filter_by(activity_id=id, status='registered')).scalar() or 0
         checked_in_count = db.session.execute(db.select(func.count()).select_from(Registration).filter_by(activity_id=id, status='attended')).scalar() or 0
@@ -558,6 +731,19 @@ def activity_detail(id):
             logger.warning(f"获取天气数据失败: {e}")
             weather_data = None
 
+        all_documents = db.session.execute(
+            db.select(ActivityDocument)
+            .filter(ActivityDocument.activity_id == activity.id)
+            .order_by(ActivityDocument.created_at.desc())
+        ).scalars().all()
+
+        if has_successful_participation:
+            accessible_documents = all_documents
+        else:
+            accessible_documents = [d for d in all_documents if d.is_public]
+
+        locked_document_count = max(len(all_documents) - len(accessible_documents), 0)
+
         return render_template('student/activity_detail.html',
                               form=form,
                               activity=activity,
@@ -584,7 +770,11 @@ def activity_detail(id):
                               safe_greater_than_equal=safe_greater_than_equal,
                               safe_less_than_equal=safe_less_than_equal,
                               poster_url=poster_url,
-                              weather_data=weather_data)
+                              weather_data=weather_data,
+                              activity_documents=accessible_documents,
+                              locked_document_count=locked_document_count,
+                              has_successful_participation=has_successful_participation,
+                              document_category_labels=DOCUMENT_CATEGORY_LABELS)
 
     except Exception as e:
         logger.error(f"加载活动详情出错: {str(e)}", exc_info=True)
@@ -739,11 +929,17 @@ def my_activities():
         
         # 根据状态筛选
         if status == 'active':
-            query = query.filter(ActivityAlias.status == 'active')
+            query = query.filter(
+                ActivityAlias.status == 'active',
+                Registration.status.in_(['registered', 'attended'])
+            )
         elif status == 'completed':
-            query = query.filter(ActivityAlias.status == 'completed')
+            query = query.filter(
+                ActivityAlias.status == 'completed',
+                Registration.status.in_(['registered', 'attended'])
+            )
         elif status == 'cancelled':
-            query = query.filter_by(status='cancelled')
+            query = query.filter(Registration.status == 'cancelled')
 
         if selected_tag_id:
             query = query.join(ActivityAlias.tags.of_type(TagAlias)).filter(TagAlias.id == selected_tag_id)
@@ -837,6 +1033,144 @@ def my_activities():
         flash('加载我的活动时发生错误', 'danger')
         return redirect(url_for('student.dashboard'))
 
+
+@student_bp.route('/activity-documents')
+@student_required
+def activity_documents():
+    try:
+        page = request.args.get('page', 1, type=int)
+        keyword = (request.args.get('q', '', type=str) or '').strip()
+        selected_society_id = request.args.get('society_id', type=int)
+        selected_visibility = (request.args.get('visibility', 'all', type=str) or 'all').strip().lower()
+        start_date = (request.args.get('start_date', '', type=str) or '').strip()
+        end_date = (request.args.get('end_date', '', type=str) or '').strip()
+
+        societies = db.session.execute(
+            db.select(Society).order_by(Society.is_active.desc(), Society.name.asc())
+        ).scalars().all()
+
+        success_activity_ids_subq = _successful_participation_activity_subquery(current_user.id)
+        query = db.select(ActivityDocument).join(Activity, ActivityDocument.activity_id == Activity.id).options(
+            joinedload(ActivityDocument.activity).joinedload(Activity.society)
+        ).filter(
+            or_(
+                ActivityDocument.is_public == True,
+                and_(
+                    ActivityDocument.is_public == False,
+                    ActivityDocument.activity_id.in_(success_activity_ids_subq)
+                )
+            )
+        )
+
+        if selected_visibility == 'public':
+            query = query.filter(ActivityDocument.is_public == True)
+        elif selected_visibility == 'private':
+            query = query.filter(ActivityDocument.is_public == False)
+
+        if selected_society_id:
+            query = query.filter(Activity.society_id == selected_society_id)
+
+        if keyword:
+            keyword_like = f"%{keyword}%"
+            query = query.outerjoin(Society, Activity.society_id == Society.id).filter(
+                or_(
+                    ActivityDocument.title.ilike(keyword_like),
+                    ActivityDocument.file_name.ilike(keyword_like),
+                    Activity.title.ilike(keyword_like),
+                    Society.name.ilike(keyword_like)
+                )
+            )
+
+        if start_date:
+            try:
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                query = query.filter(ActivityDocument.created_at >= start_dt)
+            except ValueError:
+                pass
+
+        if end_date:
+            try:
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+                query = query.filter(ActivityDocument.created_at < end_dt)
+            except ValueError:
+                pass
+
+        documents = get_compatible_paginate(
+            db,
+            query.order_by(ActivityDocument.created_at.desc()),
+            page=page,
+            per_page=12,
+            error_out=False
+        )
+
+        return render_template(
+            'student/activity_documents.html',
+            documents=documents,
+            keyword=keyword,
+            selected_society_id=selected_society_id,
+            selected_visibility=selected_visibility,
+            start_date=start_date,
+            end_date=end_date,
+            societies=societies,
+            display_datetime=display_datetime,
+            document_category_labels=DOCUMENT_CATEGORY_LABELS
+        )
+    except Exception as e:
+        logger.error(f"加载活动资料汇总失败: {e}", exc_info=True)
+        flash('加载活动资料失败，请稍后重试', 'danger')
+        return redirect(url_for('student.dashboard'))
+
+
+@student_bp.route('/activity-document/<int:doc_id>/download')
+@student_required
+@limiter.limit('60 per minute')
+def download_activity_document(doc_id):
+    try:
+        doc = db.session.execute(
+            db.select(ActivityDocument).filter(ActivityDocument.id == doc_id)
+        ).scalar_one_or_none()
+        if not doc:
+            flash('资料不存在或已删除', 'warning')
+            return redirect(url_for('student.dashboard'))
+
+        if not doc.is_public and not _has_successful_participation(current_user.id, doc.activity_id):
+            flash('该资料仅对活动成功参与学生开放下载', 'warning')
+            return redirect(url_for('student.activity_detail', id=doc.activity_id))
+
+        resolved_path = _resolve_activity_document_file_path(doc)
+        if not resolved_path:
+            flash('文件不存在，可能已被清理', 'warning')
+            return redirect(url_for('student.activity_detail', id=doc.activity_id))
+
+        safe_download_name = os.path.basename(str(doc.file_name or doc.title or 'activity_document')).replace('\x00', '').strip()
+        if not safe_download_name:
+            safe_download_name = f"activity_document_{doc.id}"
+
+        response = send_file(
+            resolved_path,
+            mimetype=doc.mime_type or 'application/pdf',
+            as_attachment=True,
+            download_name=safe_download_name,
+            conditional=True
+        )
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        if doc.is_public:
+            # 公开资料可由边缘缓存，降低源站出站带宽压力。
+            response.headers['Cache-Control'] = 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=600'
+            response.headers['CDN-Cache-Control'] = 'public, s-maxage=86400, stale-while-revalidate=600'
+            response.headers['Vary'] = 'Accept-Encoding'
+        else:
+            # 非公开资料仅允许浏览器私有缓存，禁止CDN共享缓存。
+            response.headers['Cache-Control'] = 'private, max-age=600, must-revalidate'
+            response.headers['CDN-Cache-Control'] = 'no-store'
+            response.headers['Pragma'] = 'private'
+            response.headers['Vary'] = 'Accept-Encoding, Cookie, Authorization'
+        return response
+    except Exception as e:
+        logger.error(f"下载活动资料失败: {e}", exc_info=True)
+        flash('下载失败，请稍后重试', 'danger')
+        return redirect(url_for('student.dashboard'))
+
 @student_bp.route('/profile')
 @student_required
 def profile():
@@ -863,6 +1197,11 @@ def edit_profile():
         from wtforms.validators import DataRequired, Length, Regexp
         
         class ProfileForm(FlaskForm):
+            student_id = StringField('学号', validators=[
+                DataRequired(message='学号不能为空'),
+                Length(min=5, max=20, message='学号长度需在5-20位之间'),
+                Regexp(r'^[A-Za-z0-9_-]+$', message='学号仅支持字母、数字、下划线和短横线')
+            ])
             real_name = StringField('姓名', validators=[DataRequired(message='姓名不能为空')])
             grade = StringField('年级', validators=[DataRequired(message='年级不能为空')])
             major = StringField('专业', validators=[DataRequired(message='专业不能为空')])
@@ -879,6 +1218,12 @@ def edit_profile():
         
         form = ProfileForm()
         student_info = current_user.student_info
+        if not student_info and _is_admin_student_mode_enabled():
+            student_info = _ensure_student_profile_for_admin_mode()
+
+        if not student_info:
+            flash('请先完善个人信息', 'warning')
+            return redirect(url_for('student.profile'))
         
         if form.validate_on_submit():
             requested_email = (request.form.get('email') or '').strip()
@@ -892,6 +1237,18 @@ def edit_profile():
                     return redirect(url_for('student.edit_profile'))
 
             phone = (form.phone.data or '').strip()
+            student_id = (form.student_id.data or '').strip()
+
+            student_id_exists = db.session.execute(
+                db.select(StudentInfo).filter(
+                    StudentInfo.student_id == student_id,
+                    StudentInfo.user_id != current_user.id
+                )
+            ).scalar_one_or_none()
+            if student_id_exists:
+                flash('该学号已被其他账号使用，请更换。', 'warning')
+                return redirect(url_for('student.edit_profile'))
+
             phone_exists = db.session.execute(
                 db.select(StudentInfo).filter(
                     StudentInfo.phone == phone,
@@ -902,6 +1259,7 @@ def edit_profile():
                 flash('该手机号已被其他账号使用，请更换。', 'warning')
                 return redirect(url_for('student.edit_profile'))
 
+            student_info.student_id = student_id
             student_info.real_name = form.real_name.data
             student_info.grade = form.grade.data
             student_info.major = form.major.data
@@ -946,6 +1304,7 @@ def edit_profile():
         
         # 预填表单
         if request.method == 'GET':
+            form.student_id.data = student_info.student_id
             form.real_name.data = student_info.real_name
             form.grade.data = student_info.grade
             form.major.data = student_info.major
@@ -966,6 +1325,37 @@ def edit_profile():
         logger.error(f"Error in edit profile: {e}")
         flash('编辑个人资料时发生错误', 'danger')
         return redirect(url_for('student.profile'))
+
+
+@student_bp.route('/mode/enter')
+@login_required
+def enter_student_mode():
+    if not _is_society_admin_user():
+        flash('仅社团管理员可开启学生模式', 'danger')
+        return redirect(url_for('main.index'))
+
+    try:
+        session['admin_student_mode'] = True
+        _ensure_student_profile_for_admin_mode()
+        flash('已切换到学生模式，可正常报名参与活动。', 'success')
+        return redirect(url_for('student.dashboard'))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"开启学生模式失败: {e}", exc_info=True)
+        flash('开启学生模式失败，请稍后重试。', 'danger')
+        return redirect(url_for('admin.dashboard'))
+
+
+@student_bp.route('/mode/exit')
+@login_required
+def exit_student_mode():
+    if not _is_society_admin_user():
+        flash('仅社团管理员可执行此操作', 'danger')
+        return redirect(url_for('main.index'))
+
+    session.pop('admin_student_mode', None)
+    flash('已退出学生模式，返回管理面板。', 'info')
+    return redirect(url_for('admin.dashboard'))
 
 
 @student_bp.route('/verify-email-change/<token>')
@@ -1063,7 +1453,7 @@ def points():
         for history in points_history.items:
             if history.created_at:
                 if history.created_at.tzinfo is None:
-                    localized = beijing_tz.localize(history.created_at)
+                    localized = pytz.UTC.localize(history.created_at).astimezone(beijing_tz)
                 else:
                     localized = history.created_at.astimezone(beijing_tz)
                 history.display_created_at = localized.strftime('%Y-%m-%d %H:%M')

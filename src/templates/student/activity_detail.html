@@ -12,6 +12,20 @@
 {{ super() }}
 <link href="https://cdn.bootcdn.net/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css" rel="stylesheet">
 <style>
+.poster-zoom-trigger {
+    cursor: zoom-in;
+}
+
+#posterZoomModalImage {
+    width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+}
+
+.activity-share-link {
+    font-size: 0.9rem;
+}
+
 @media (max-width: 576px) {
     #action-buttons {
         align-items: flex-start !important;
@@ -66,7 +80,29 @@
         <div class="col-12 col-xl-8 activity-detail-main">
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body p-4">
-                    <h2 class="fw-bold mb-3">{{ activity.title }}</h2>
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                        <h2 class="fw-bold mb-0">{{ activity.title }}</h2>
+                        <div class="d-flex align-items-center gap-2">
+                            <button id="share-activity-btn" type="button" class="btn btn-sm btn-outline-success" data-no-loading="true" data-no-global-loading="true">
+                                <i class="fas fa-share-alt me-1"></i>分享活动
+                            </button>
+                            <a href="#" class="btn btn-sm btn-outline-secondary" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='{{ url_for('student.activities') }}'; } return false;">
+                                <i class="fas fa-arrow-left me-1"></i>返回上一页
+                            </a>
+                        </div>
+                    </div>
+                    <div id="share-activity-link-wrap" class="d-none mb-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="fas fa-link"></i></span>
+                            <input
+                                id="share-activity-link"
+                                type="text"
+                                class="form-control activity-share-link"
+                                value="{{ url_for('student.activity_detail', id=activity.id, _external=True) }}"
+                                readonly
+                            >
+                        </div>
+                    </div>
                     <div class="d-flex flex-wrap align-items-center mb-3">
                         <span class="badge bg-transparent me-2">{{ activity.type }}</span>
                         <span class="text-muted small">
@@ -77,9 +113,9 @@
                     {% if activity.poster_image %}
                     <div class="activity-poster mb-4">
                         {% if 'banner' in activity.poster_image %}
-                        <img src="{{ url_for('static', filename='img/' + activity.poster_image) }}" class="img-fluid rounded" alt="{{ activity.title }}">
+                        <img src="{{ url_for('static', filename='img/' + activity.poster_image) }}" class="img-fluid rounded poster-zoom-trigger" alt="{{ activity.title }}" data-full-src="{{ url_for('static', filename='img/' + activity.poster_image) }}">
                         {% else %}
-                        <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" class="img-fluid rounded" alt="{{ activity.title }}">
+                        <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" class="img-fluid rounded poster-zoom-trigger" alt="{{ activity.title }}" data-full-src="{{ url_for('main.poster_image', activity_id=activity.id) }}">
                         {% endif %}
                     </div>
                     {% endif %}
@@ -111,6 +147,42 @@
                                 {{ activity.registration_success_message|replace('\n', '<br>')|safe }}
                             </div>
                         </div>
+                    </div>
+                    {% endif %}
+
+                    {% if activity_documents or locked_document_count > 0 %}
+                    <div class="activity-documents mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0">参赛证明/奖状/活动资料</h5>
+                        </div>
+
+                        {% if activity_documents %}
+                            <div class="list-group list-group-flush border rounded">
+                                {% for doc in activity_documents %}
+                                <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                    <div>
+                                        <div class="fw-semibold">{{ doc.title }}</div>
+                                        <small class="text-muted">
+                                            {{ document_category_labels.get(doc.category, '活动资料') }}
+                                            · {{ display_datetime(doc.created_at, 'Asia/Shanghai', '%Y-%m-%d %H:%M') if doc.created_at else '未知时间' }}
+                                            {% if doc.is_public %}· 公开{% else %}· 报名后可下载{% endif %}
+                                        </small>
+                                    </div>
+                                    <a href="{{ url_for('student.download_activity_document', doc_id=doc.id) }}" class="btn btn-sm btn-outline-success">
+                                        <i class="fas fa-download me-1"></i>下载
+                                    </a>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <p class="text-muted mb-0">当前活动暂无可下载资料。</p>
+                        {% endif %}
+
+                        {% if locked_document_count > 0 and not has_successful_participation %}
+                            <div class="alert alert-info mt-3 mb-0">
+                                当前还有 {{ locked_document_count }} 份资料仅对成功参与该活动的同学开放下载。
+                            </div>
+                        {% endif %}
                     </div>
                     {% endif %}
 
@@ -162,11 +234,11 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div id="action-buttons" class="d-flex justify-content-between align-items-center flex-wrap">
                         <div class="mb-3 mb-md-0 d-flex flex-wrap align-items-center gap-2 student-action-main">
                             {% if registration %}
-                                {% if registration.status == 'attended' or registration.check_in_time %}
+                                {% if registration.status == 'attended' %}
                                     <div class="alert alert-info d-inline-block p-2">
                                         <i class="fas fa-check-circle me-2"></i>您已于 {{ display_datetime(registration.check_in_time) }} 签到
                                     </div>
@@ -222,12 +294,12 @@
                                 {% endif %}
                             {% endif %}
                         </div>
-                        <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary mt-2 mt-md-0">
-                            <i class="fas fa-arrow-left me-1"></i>返回活动列表
+                        <a href="#" class="btn btn-outline-secondary mt-2 mt-md-0" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='{{ url_for('student.activities') }}'; } return false;">
+                            <i class="fas fa-arrow-left me-1"></i>返回上一页
                         </a>
                     </div>
 
-                    {% if activity.status == 'completed' and registration and (registration.status == 'attended' or registration.check_in_time) %}
+                    {% if activity.status == 'completed' and registration and registration.status == 'attended' %}
                     <div class="mt-4 d-flex justify-content-end">
                         <a href="{{ url_for('student.review_activity', activity_id=activity.id) }}" class="btn btn-outline-primary">
                             <i class="fas fa-star me-1"></i>{{ '我的评价' if current_user_review else '去评价（+5积分）' }}
@@ -426,6 +498,20 @@
                     </div>
             {% endif %}
         </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="posterZoomModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">海报预览</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <img id="posterZoomModalImage" src="" alt="海报大图预览">
+            </div>
         </div>
     </div>
 </div>
@@ -753,6 +839,7 @@ function showToast(message, type = 'info') {
     if (!toastContainer) {
         toastContainer = document.createElement('div');
         toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        toastContainer.style.zIndex = '12050';
         document.body.appendChild(toastContainer);
     }
     
@@ -792,7 +879,84 @@ function showToast(message, type = 'info') {
     });
 }
 
+function initPosterZoomModal() {
+    const posterZoomModalEl = document.getElementById('posterZoomModal');
+    const posterZoomModalImage = document.getElementById('posterZoomModalImage');
+    if (!posterZoomModalEl || !posterZoomModalImage) {
+        return;
+    }
+    const posterZoomModal = new bootstrap.Modal(posterZoomModalEl);
+    document.querySelectorAll('.poster-zoom-trigger').forEach((imgEl) => {
+        imgEl.addEventListener('click', function() {
+            const fullSrc = this.getAttribute('data-full-src') || this.getAttribute('src');
+            if (!fullSrc) {
+                return;
+            }
+            posterZoomModalImage.src = fullSrc;
+            posterZoomModal.show();
+        });
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    initPosterZoomModal();
+
+    const shareActivityBtn = document.getElementById('share-activity-btn');
+    const shareActivityLinkInput = document.getElementById('share-activity-link');
+    const shareActivityLinkWrap = document.getElementById('share-activity-link-wrap');
+
+    async function copyShareActivityLink() {
+        if (!shareActivityLinkInput || !shareActivityLinkWrap) {
+            return;
+        }
+
+        shareActivityLinkWrap.classList.remove('d-none');
+        const linkText = (shareActivityLinkInput.value || '').trim();
+        if (!linkText) {
+            return;
+        }
+
+        let copied = false;
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(linkText);
+                copied = true;
+            }
+        } catch (_) {}
+
+        if (!copied) {
+            shareActivityLinkInput.focus();
+            shareActivityLinkInput.select();
+            copied = document.execCommand('copy');
+            window.getSelection()?.removeAllRanges();
+        }
+
+        if (window.showToast) {
+            window.showToast(copied ? '活动链接已复制' : '复制失败，请手动复制下方链接', copied ? 'success' : 'warning');
+        } else if (!copied) {
+            alert('复制失败，请手动复制下方链接');
+        }
+    }
+
+    if (shareActivityBtn) {
+        shareActivityBtn.addEventListener('click', copyShareActivityLink);
+    }
+
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('auto_register') === '1') {
+        const registerBtn = document.getElementById('register-btn');
+        if (registerBtn && !registerBtn.disabled) {
+            window.setTimeout(() => {
+                registerBtn.click();
+            }, 300);
+        }
+
+        query.delete('auto_register');
+        const cleanQuery = query.toString();
+        const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash || ''}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+    }
+
     const actionButtons = document.getElementById('action-buttons');
     const csrfToken = "{{ csrf_token() }}";
 
@@ -867,8 +1031,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             <i class="fas fa-times-circle me-1"></i>取消报名
                         </button>
                     </div>
-                    <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary mt-2 mt-md-0">
-                        <i class="fas fa-arrow-left me-1"></i>返回活动列表
+                    <a href="#" class="btn btn-outline-secondary mt-2 mt-md-0" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='{{ url_for('student.activities') }}'; } return false;">
+                        <i class="fas fa-arrow-left me-1"></i>返回上一页
                     </a>
                 `;
                 updateRegistrationCount(1);
@@ -941,8 +1105,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             <i class="fas fa-user-plus me-1"></i>重新报名
                         </button>
                     </div>
-                    <a href="{{ url_for('student.activities') }}" class="btn btn-outline-secondary mt-2 mt-md-0">
-                        <i class="fas fa-arrow-left me-1"></i>返回活动列表
+                    <a href="#" class="btn btn-outline-secondary mt-2 mt-md-0" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='{{ url_for('student.activities') }}'; } return false;">
+                        <i class="fas fa-arrow-left me-1"></i>返回上一页
                     </a>
                 `;
                 updateRegistrationCount(-1);

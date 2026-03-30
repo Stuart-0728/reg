@@ -14,12 +14,13 @@ INSTANCE_PATH = os.path.join(BASE_DIR, 'instance')
 DB_PATH = os.path.join(INSTANCE_PATH, 'cqnu_association.db')
 LOG_PATH = os.path.join(BASE_DIR, 'logs')
 UPLOAD_FOLDER = os.environ.get('PERSISTENT_STORAGE_PATH', os.path.join(BASE_DIR, 'static', 'uploads', 'posters'))
+ACTIVITY_DOCS_DIR = os.environ.get('ACTIVITY_DOCS_DIR', os.path.join(os.path.dirname(BASE_DIR), 'storage', 'activity_docs'))
 SESSION_FILE_DIR = os.path.join(BASE_DIR, 'flask_session')
 
 # 确保目录存在并设置权限
 def ensure_directories():
     """确保必要的目录存在并设置正确的权限"""
-    global UPLOAD_FOLDER
+    global UPLOAD_FOLDER, ACTIVITY_DOCS_DIR
     
     # 确保instance目录存在
     if not os.path.exists(INSTANCE_PATH):
@@ -80,11 +81,28 @@ def ensure_directories():
             print(f"已创建session目录: {SESSION_FILE_DIR}")
         except Exception as e:
             print(f"创建session目录失败: {e}")
+
+    # 确保活动资料目录存在（独立于代码目录，避免部署覆盖）
+    try:
+        if not os.path.exists(ACTIVITY_DOCS_DIR):
+            os.makedirs(ACTIVITY_DOCS_DIR, exist_ok=True)
+            print(f"已创建活动资料目录: {ACTIVITY_DOCS_DIR}")
+    except Exception as e:
+        print(f"创建活动资料目录失败: {e}")
+        fallback_docs = os.path.join(UPLOAD_FOLDER, 'activity_docs')
+        try:
+            if not os.path.exists(fallback_docs):
+                os.makedirs(fallback_docs, exist_ok=True)
+            ACTIVITY_DOCS_DIR = fallback_docs
+            print(f"使用回退活动资料目录: {ACTIVITY_DOCS_DIR}")
+        except Exception as e2:
+            print(f"创建回退活动资料目录失败: {e2}")
             
     # 打印当前工作目录和权限信息
     print(f"当前工作目录: {os.getcwd()}")
     print(f"BASE_DIR: {BASE_DIR}")
     print(f"UPLOAD_FOLDER: {UPLOAD_FOLDER}")
+    print(f"ACTIVITY_DOCS_DIR: {ACTIVITY_DOCS_DIR}")
 
 # 创建并设置目录权限
 ensure_directories()
@@ -108,8 +126,16 @@ class Config:
     
     # 上传文件配置
     UPLOAD_FOLDER = UPLOAD_FOLDER
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'docx', 'xlsx', 'pptx', 'txt', 'zip'}
-    MAX_CONTENT_LENGTH = 32 * 1024 * 1024  # 32MB
+    ACTIVITY_DOCS_DIR = ACTIVITY_DOCS_DIR
+    ALLOWED_EXTENSIONS = {
+        'pdf',
+        'doc', 'docx',
+        'xls', 'xlsx',
+        'ppt', 'pptx',
+        'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp',
+        'txt', 'zip'
+    }
+    MAX_CONTENT_LENGTH = 80 * 1024 * 1024  # 80MB，匹配Nginx上传限制
     
     # 数据库配置
     INSTANCE_PATH = INSTANCE_PATH

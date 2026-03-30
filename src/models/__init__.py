@@ -86,6 +86,7 @@ class User(db.Model, UserMixin):
     messages_received = relationship('Message', foreign_keys='Message.receiver_id', backref='recipient', lazy='dynamic', cascade="all, delete-orphan")
     notifications = relationship('Notification', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     notification_reads = relationship('NotificationRead', backref='user', lazy='dynamic', cascade="all, delete-orphan")
+    uploaded_activity_documents = relationship('ActivityDocument', backref='uploader', lazy='dynamic', cascade="all, delete-orphan")
     ai_chat_sessions = relationship('AIChatSession', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     ai_preferences = relationship('AIUserPreferences', backref='user', uselist=False, cascade="all, delete-orphan")
     managed_society = relationship('Society', foreign_keys=[managed_society_id])
@@ -220,6 +221,7 @@ class Activity(db.Model):
     checkins = relationship('ActivityCheckin', backref='activity', lazy='dynamic', cascade='all, delete-orphan')
     tags = relationship('Tag', secondary=activity_tags, backref=backref('activities', lazy='dynamic'))
     society = relationship('Society', foreign_keys=[society_id])
+    documents = relationship('ActivityDocument', backref='activity', lazy='dynamic', cascade='all, delete-orphan')
     
     # 海报属性方法 - 不再定义数据库字段，而是通过属性方法提供兼容性
     @property
@@ -264,6 +266,32 @@ class Registration(db.Model):
     
     def __repr__(self):
         return f'<Registration {self.user_id} {self.activity_id}>'
+
+
+class ActivityDocument(db.Model):
+    __tablename__ = 'activity_documents'
+
+    id = Column(Integer, primary_key=True)
+    activity_id = Column(Integer, ForeignKey('activities.id', ondelete='CASCADE'), nullable=False, index=True)
+    uploaded_by = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+
+    title = Column(String(128), nullable=False)
+    category = Column(String(32), default='certificate')  # certificate, award, notice, other
+    file_name = Column(String(255), nullable=False)
+    file_path = Column(String(512), nullable=False)
+    mime_type = Column(String(128), nullable=False, default='application/pdf')
+    file_size = Column(Integer, default=0)
+
+    is_public = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=func.now(), index=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_activity_docs_activity_visibility_created', 'activity_id', 'is_public', 'created_at'),
+    )
+
+    def __repr__(self):
+        return f'<ActivityDocument {self.activity_id} {self.title}>'
 
 # 积分历史模型
 class PointsHistory(db.Model):

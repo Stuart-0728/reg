@@ -333,9 +333,20 @@
                         </form>
                         {% endif %}
 
-                        <a href="{{ url_for('admin.export_activity_share_poster', id=activity.id) }}" class="btn btn-outline-success w-100">
+                        <button id="share-activity-admin-btn" type="button" class="btn btn-outline-success w-100" data-no-loading="true" data-no-global-loading="true">
                             <i class="fas fa-share-alt me-2"></i>一键分享海报
-                        </a>
+                        </button>
+                        <small class="text-muted mt-1">点击后会自动下载分享海报并复制活动链接</small>
+                        <div class="input-group input-group-sm mt-2">
+                            <span class="input-group-text"><i class="fas fa-link"></i></span>
+                            <input
+                                id="share-activity-admin-link"
+                                type="text"
+                                class="form-control"
+                                value="{{ url_for('main.activity_detail', activity_id=activity.id, _external=True) }}"
+                                readonly
+                            >
+                        </div>
                     </div>
                 </div>
             </div>
@@ -378,7 +389,41 @@
     const changeStatusUrl = '{{ url_for('admin.change_activity_status', id=activity.id) }}';
     const manualCheckinUrl = '{{ url_for('admin.manual_checkin', activity_id=activity.id) }}';
     const cancelCheckinUrl = '{{ url_for('admin.cancel_checkin', activity_id=activity.id) }}';
+    const sharePosterDownloadUrl = '{{ url_for('admin.export_activity_share_poster', id=activity.id) }}';
     const csrfToken = '{{ csrf_token() }}';
+
+    function triggerPosterDownload(downloadUrl) {
+        const anchor = document.createElement('a');
+        anchor.href = downloadUrl;
+        anchor.setAttribute('data-no-global-loading', 'true');
+        anchor.setAttribute('data-no-loading', 'true');
+        anchor.className = 'btn';
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    }
+
+    async function copyText(text) {
+        if (!text) return false;
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+                return true;
+            }
+        } catch (_) {}
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', 'readonly');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return copied;
+    }
     
     function changeStatus(status) {
         if (confirm('确定要将活动状态更改为: ' + status + '?')) {
@@ -534,6 +579,22 @@
     // 添加签到状态切换处理
     document.addEventListener('DOMContentLoaded', function() {
         const toggleForm = document.getElementById('toggle-checkin-form');
+        const shareBtn = document.getElementById('share-activity-admin-btn');
+        const shareInput = document.getElementById('share-activity-admin-link');
+
+        if (shareBtn && shareInput) {
+            shareBtn.addEventListener('click', async function() {
+                const link = (shareInput.value || '').trim();
+                triggerPosterDownload(sharePosterDownloadUrl);
+                const copied = await copyText(link);
+                if (window.showToast) {
+                    window.showToast(copied ? '已下载分享海报并复制活动链接' : '海报已下载，复制链接失败，请手动复制', copied ? 'success' : 'warning');
+                } else if (!copied) {
+                    alert('海报已下载，复制链接失败，请手动复制输入框内容');
+                }
+            });
+        }
+
         if (toggleForm) {
             toggleForm.addEventListener('submit', function(e) {
                 if (!confirm('确定要切换签到状态吗?')) {

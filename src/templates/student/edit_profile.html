@@ -29,6 +29,18 @@
                         </div>
                         
                         <div class="mb-3">
+                            {{ form.student_id.label(class="form-label") }}
+                            {{ form.student_id(class="form-control" + (" is-invalid" if form.student_id.errors else ""), placeholder="请输入学号") }}
+                            {% if form.student_id.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.student_id.errors %}
+                                        {{ error }}
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
                             {{ form.real_name.label(class="form-label") }}
                             {{ form.real_name(class="form-control" + (" is-invalid" if form.real_name.errors else "")) }}
                             {% if form.real_name.errors %}

@@ -101,9 +101,14 @@
                         <div class="text-muted small">向管理员提交问题、建议与使用反馈</div>
                     </div>
                 </div>
-                <a href="{{ url_for('student.create_message') }}" class="btn btn-primary">
-                    <i class="fas fa-paper-plane me-1"></i>提交反馈
-                </a>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{{ url_for('student.dashboard') }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-tachometer-alt me-1"></i>返回面板
+                    </a>
+                    <a href="{{ url_for('student.create_message') }}" class="btn btn-primary">
+                        <i class="fas fa-paper-plane me-1"></i>提交反馈
+                    </a>
+                </div>
             </div>
         </div>
         <div class="card-body p-4 pt-3">

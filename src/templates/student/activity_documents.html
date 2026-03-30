@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}活动资料中心 - 智能社团+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="mb-0">活动资料中心</h2>
+        <a href="{{ url_for('student.dashboard') }}" class="btn btn-outline-secondary">返回我的面板</a>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-12 col-lg-3">
+                    <label class="form-label mb-1">关键词</label>
+                    <input type="text" class="form-control" name="q" value="{{ keyword or '' }}" placeholder="按资料名、活动名、社团搜索">
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label mb-1">社团</label>
+                    <select class="form-select" name="society_id">
+                        <option value="">全部社团</option>
+                        {% for society in societies %}
+                            <option value="{{ society.id }}" {% if selected_society_id == society.id %}selected{% endif %}>{{ society.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label mb-1">可见范围</label>
+                    <select class="form-select" name="visibility">
+                        <option value="all" {% if selected_visibility == 'all' %}selected{% endif %}>全部</option>
+                        <option value="public" {% if selected_visibility == 'public' %}selected{% endif %}>公开</option>
+                        <option value="private" {% if selected_visibility == 'private' %}selected{% endif %}>参与可下载</option>
+                    </select>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label mb-1">开始日期</label>
+                    <input type="date" class="form-control" name="start_date" value="{{ start_date }}">
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label mb-1">结束日期</label>
+                    <input type="date" class="form-control" name="end_date" value="{{ end_date }}">
+                </div>
+                <div class="col-12 col-lg-1 d-grid">
+                    <button type="submit" class="btn btn-primary">筛选</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            {% if documents and documents.items %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>资料</th>
+                                <th>活动</th>
+                                <th>社团</th>
+                                <th>上传时间</th>
+                                <th>范围</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in documents.items %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ doc.title }}</div>
+                                    <small class="text-muted">{{ document_category_labels.get(doc.category, '活动资料') }}</small>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('student.activity_detail', id=doc.activity.id) }}" class="text-decoration-none">
+                                        {{ doc.activity.title if doc.activity else '未知活动' }}
+                                    </a>
+                                </td>
+                                <td>{{ doc.activity.society.name if doc.activity and doc.activity.society else '未设置' }}</td>
+                                <td>{{ display_datetime(doc.created_at, 'Asia/Shanghai', '%Y-%m-%d %H:%M') if doc.created_at else '-' }}</td>
+                                <td>
+                                    {% if doc.is_public %}
+                                        <span class="badge bg-success">公开</span>
+                                    {% else %}
+                                        <span class="badge bg-info text-dark">报名可下载</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('student.download_activity_document', doc_id=doc.id) }}" class="btn btn-sm btn-outline-primary">下载</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if documents.pages > 1 %}
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 border-top">
+                    <small class="text-muted">共 {{ documents.total }} 份资料，当前第 {{ documents.page }}/{{ documents.pages }} 页</small>
+                    <nav aria-label="资料分页">
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if documents.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('student.activity_documents', page=documents.prev_num, q=(keyword or None), society_id=(selected_society_id or None), visibility=selected_visibility, start_date=(start_date or None), end_date=(end_date or None)) }}">&laquo;</a>
+                            </li>
+                            {% endif %}
+
+                            {% for page_num in documents.iter_pages() %}
+                                {% if page_num %}
+                                <li class="page-item {% if page_num == documents.page %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('student.activity_documents', page=page_num, q=(keyword or None), society_id=(selected_society_id or None), visibility=selected_visibility, start_date=(start_date or None), end_date=(end_date or None)) }}">{{ page_num }}</a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if documents.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('student.activity_documents', page=documents.next_num, q=(keyword or None), society_id=(selected_society_id or None), visibility=selected_visibility, start_date=(start_date or None), end_date=(end_date or None)) }}">&raquo;</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="text-center p-5">
+                    <i class="fas fa-folder-open text-muted fs-2 mb-2"></i>
+                    <p class="text-muted mb-0">暂无符合条件的活动资料</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

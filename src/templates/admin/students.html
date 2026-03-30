@@ -137,7 +137,7 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
             <form method="get" action="{{ url_for('admin.students') }}" class="row g-3 align-items-center" data-no-loading="true">
-                <div class="col-md-8">
+                <div class="col-lg-5 col-md-6">
                     <div class="input-group">
                         <span class="input-group-text bg-white">
                             <i class="fas fa-search text-muted"></i>
@@ -146,7 +146,24 @@
                         <button class="btn btn-primary" type="submit">搜索</button>
                     </div>
                 </div>
-                <div class="col-md-4 text-md-end">
+                {% if current_user.is_super_admin %}
+                <div class="col-lg-3 col-md-6">
+                    <select class="form-select" name="society_id" title="按社团筛选">
+                        <option value="">全部社团</option>
+                        {% for society in societies %}
+                        <option value="{{ society.id }}" {% if selected_society_id == society.id %}selected{% endif %}>{{ society.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="col-lg-2 col-md-6">
+                    <select class="form-select" name="per_page" title="每页条数" onchange="this.form.submit()">
+                        {% for option in per_page_options %}
+                        <option value="{{ option }}" {% if per_page == option %}selected{% endif %}>每页 {{ option }} 条</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-6 text-md-end">
                     <span class="text-muted">共 {{ students.total }} 名学生</span>
                 </div>
             </form>
@@ -159,7 +176,6 @@
             <div class="table-responsive students-table-wrap">
                 <table class="table table-hover align-middle mb-0 table-cell-scroll students-table">
                     <colgroup>
-                        <col style="width: 70px;">
                         <col style="width: 110px;">
                         <col style="width: 180px;">
                         <col style="width: 110px;">
@@ -171,7 +187,6 @@
                     </colgroup>
                     <thead class="table-light">
                         <tr>
-                            <th>排序</th>
                             <th>姓名</th>
                             <th>学号</th>
                             <th>年级</th>
@@ -185,7 +200,6 @@
                     <tbody>
                         {% for student in students.items %}
                         <tr>
-                            <td>{{ (students.page - 1) * students.per_page + loop.index }}</td>
                             <td class="fw-medium"><span class="cell-ellipsis" title="{{ student.real_name }}">{{ student.real_name }}</span></td>
                             <td><span class="cell-ellipsis" title="{{ student.student_id }}">{{ student.student_id }}</span></td>
                             <td><span class="cell-ellipsis" title="{{ student.grade }}">{{ student.grade }}</span></td>
@@ -200,20 +214,22 @@
                                     <a href="{{ url_for('admin.student_view', user_id=student.user_id) }}" class="btn btn-sm btn-outline-primary">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    {% if student.is_admin %}
-                                        <form method="post" action="{{ url_for('admin.demote_admin_to_student', user_id=student.user_id) }}" class="d-inline" onsubmit="return confirm('确认取消该用户管理员身份？');" data-no-loading="true">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button type="submit" class="btn btn-sm btn-outline-secondary" title="取消管理员">
-                                                <i class="fas fa-user-minus"></i>
-                                            </button>
-                                        </form>
-                                    {% else %}
-                                        <form method="post" action="{{ url_for('admin.promote_student_to_admin', user_id=student.user_id) }}" class="d-inline" onsubmit="return confirm('确认将该学生设置为管理员？');" data-no-loading="true">
-                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="设为管理员">
-                                                <i class="fas fa-user-shield"></i>
-                                            </button>
-                                        </form>
+                                    {% if current_user.is_super_admin %}
+                                        {% if student.is_admin %}
+                                            <form method="post" action="{{ url_for('admin.demote_admin_to_student', user_id=student.user_id) }}" class="d-inline" onsubmit="return confirm('确认取消该用户管理员身份？');" data-no-loading="true">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="取消管理员">
+                                                    <i class="fas fa-user-minus"></i>
+                                                </button>
+                                            </form>
+                                        {% else %}
+                                            <form method="post" action="{{ url_for('admin.promote_student_to_admin', user_id=student.user_id) }}" class="d-inline" onsubmit="return confirm('确认将该学生设置为管理员？');" data-no-loading="true">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-warning" title="设为管理员">
+                                                    <i class="fas fa-user-shield"></i>
+                                                </button>
+                                            </form>
+                                        {% endif %}
                                     {% endif %}
                                     <button type="button" class="btn btn-sm btn-outline-danger" onclick="showDeleteModal('{{ student.id }}', '{{ student.real_name }}', '{{ student.student_id }}', '{{ student.user_id }}')">
                                         <i class="fas fa-trash-alt"></i>
@@ -243,12 +259,12 @@
             {% if students.pages > 1 %}
             <div class="p-3">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <small class="text-muted">共 {{ students.total }} 名，每页 20 条，当前第 {{ students.page }}/{{ students.pages }} 页</small>
+                    <small class="text-muted">共 {{ students.total }} 名，每页 {{ students.per_page }} 条，当前第 {{ students.page }}/{{ students.pages }} 页</small>
                     <nav aria-label="学生分页">
                     <ul class="pagination pagination-sm justify-content-center mb-0">
                         {% if students.has_prev %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('admin.students', page=students.prev_num, search=search) }}">上一页</a>
+                            <a class="page-link" href="{{ url_for('admin.students', page=students.prev_num, search=search, per_page=per_page, society_id=selected_society_id) }}">上一页</a>
                         </li>
                         {% endif %}
                         
@@ -260,7 +276,7 @@
                                 </li>
                                 {% else %}
                                 <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('admin.students', page=page_num, search=search) }}">{{ page_num }}</a>
+                                    <a class="page-link" href="{{ url_for('admin.students', page=page_num, search=search, per_page=per_page, society_id=selected_society_id) }}">{{ page_num }}</a>
                                 </li>
                                 {% endif %}
                             {% else %}
@@ -272,11 +288,21 @@
                         
                         {% if students.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('admin.students', page=students.next_num, search=search) }}">下一页</a>
+                            <a class="page-link" href="{{ url_for('admin.students', page=students.next_num, search=search, per_page=per_page, society_id=selected_society_id) }}">下一页</a>
                         </li>
                         {% endif %}
                     </ul>
                 </nav>
+                <form method="get" action="{{ url_for('admin.students') }}" class="d-flex align-items-center gap-2" data-no-loading="true">
+                    <input type="hidden" name="search" value="{{ search }}">
+                    <input type="hidden" name="per_page" value="{{ per_page }}">
+                    {% if selected_society_id %}
+                    <input type="hidden" name="society_id" value="{{ selected_society_id }}">
+                    {% endif %}
+                    <span class="text-muted small">跳转到</span>
+                    <input type="number" class="form-control form-control-sm" name="jump_page" min="1" max="{{ students.pages }}" style="width: 88px;" placeholder="页码">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">跳转</button>
+                </form>
                 </div>
             </div>
             {% endif %}
@@ -332,10 +358,12 @@
                     <a id="studentActionViewLink" href="#" class="btn btn-outline-primary" data-no-loading="true">
                         <i class="fas fa-eye me-2"></i>查看详情
                     </a>
+                    {% if current_user.is_super_admin %}
                     <form id="studentActionRoleForm" method="post" data-no-loading="true">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" id="studentActionRoleBtn" class="btn btn-outline-warning w-100"></button>
                     </form>
+                    {% endif %}
                     <button type="button" id="studentActionDeleteBtn" class="btn btn-outline-danger">
                         <i class="fas fa-trash-alt me-2"></i>{% if current_user.is_super_admin %}删除学生{% else %}移出社团{% endif %}
                     </button>
@@ -397,20 +425,22 @@ function showStudentActionsModal(triggerButton) {
 
     const roleForm = document.getElementById('studentActionRoleForm');
     const roleBtn = document.getElementById('studentActionRoleBtn');
-    if (isAdmin) {
-        roleForm.action = "{{ url_for('admin.demote_admin_to_student', user_id=0) }}".replace('0', userId);
-        roleBtn.className = 'btn btn-outline-secondary w-100';
-        roleBtn.innerHTML = '<i class="fas fa-user-minus me-2"></i>取消管理员';
-        roleForm.onsubmit = function() {
-            return confirm('确认取消该用户管理员身份？');
-        };
-    } else {
-        roleForm.action = "{{ url_for('admin.promote_student_to_admin', user_id=0) }}".replace('0', userId);
-        roleBtn.className = 'btn btn-outline-warning w-100';
-        roleBtn.innerHTML = '<i class="fas fa-user-shield me-2"></i>设为管理员';
-        roleForm.onsubmit = function() {
-            return confirm('确认将该学生设置为管理员？');
-        };
+    if (roleForm && roleBtn) {
+        if (isAdmin) {
+            roleForm.action = "{{ url_for('admin.demote_admin_to_student', user_id=0) }}".replace('0', userId);
+            roleBtn.className = 'btn btn-outline-secondary w-100';
+            roleBtn.innerHTML = '<i class="fas fa-user-minus me-2"></i>取消管理员';
+            roleForm.onsubmit = function() {
+                return confirm('确认取消该用户管理员身份？');
+            };
+        } else {
+            roleForm.action = "{{ url_for('admin.promote_student_to_admin', user_id=0) }}".replace('0', userId);
+            roleBtn.className = 'btn btn-outline-warning w-100';
+            roleBtn.innerHTML = '<i class="fas fa-user-shield me-2"></i>设为管理员';
+            roleForm.onsubmit = function() {
+                return confirm('确认将该学生设置为管理员？');
+            };
+        }
     }
 
     const deleteBtn = document.getElementById('studentActionDeleteBtn');
@@ -429,6 +459,33 @@ function showStudentActionsModal(triggerButton) {
 
 // 添加自定义样式以优化模态框过渡效果
 document.addEventListener('DOMContentLoaded', function() {
+    const SCROLL_KEY = `admin-scroll:${window.location.pathname}`;
+    const saveScroll = () => {
+        try {
+            sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+        } catch (_) {}
+    };
+
+    const restoreScroll = () => {
+        try {
+            const saved = sessionStorage.getItem(SCROLL_KEY);
+            if (saved === null) return;
+            sessionStorage.removeItem(SCROLL_KEY);
+            const y = parseInt(saved, 10);
+            if (!Number.isNaN(y) && y > 0) {
+                window.requestAnimationFrame(() => window.scrollTo(0, y));
+            }
+        } catch (_) {}
+    };
+
+    restoreScroll();
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', saveScroll);
+    });
+    document.querySelectorAll('a.page-link').forEach(link => {
+        link.addEventListener('click', saveScroll);
+    });
+
     const style = document.createElement('style');
     style.textContent = `
         .modal.fade .modal-dialog {
