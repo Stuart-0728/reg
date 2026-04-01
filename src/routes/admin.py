@@ -3834,6 +3834,7 @@ def export_activity_registrations(id):
         if not _scope_guard_activity(activity):
             flash('您只能导出所属社团活动报名', 'danger')
             return redirect(url_for('admin.activities'))
+        is_team_mode = (getattr(activity, 'registration_mode', 'individual') or 'individual') == 'team'
         
         # 获取报名学生列表
         registrations = Registration.query.filter_by(
@@ -3846,12 +3847,15 @@ def export_activity_registrations(id):
             ActivityTeam, Registration.team_id == ActivityTeam.id
         ).add_columns(
             Registration.id.label('registration_id'),
+            Registration.user_id,
             Registration.register_time,
             Registration.check_in_time,
             Registration.status,
+            Registration.remark,
             Registration.team_id,
             ActivityTeam.name.label('team_name'),
             ActivityTeam.team_code.label('team_code'),
+            ActivityTeam.leader_user_id,
             StudentInfo.real_name,
             StudentInfo.student_id,
             StudentInfo.grade,
@@ -3888,7 +3892,7 @@ def export_activity_registrations(id):
             if reg.team_id and reg.leader_user_id and reg.user_id == reg.leader_user_id:
                 remark_text = f"{remark_text}；队长" if remark_text else '队长'
             
-            data.append({
+            row = {
                 '报名ID': reg.registration_id,
                 '姓名': reg.real_name,
                 '学号': reg.student_id,
@@ -3896,15 +3900,17 @@ def export_activity_registrations(id):
                 '学院': reg.college,
                 '专业': reg.major,
                 '手机号': reg.phone,
-                '队伍名称': reg.team_name or '',
-                '团队码': reg.team_code or '',
                 '报名时间': register_time_bj.strftime('%Y-%m-%d %H:%M:%S') if register_time_bj else '',
                 '状态': '已报名' if reg.status == 'registered' else '已取消' if reg.status == 'cancelled' else '已参加',
                 '积分': reg.points or 0,
                 '备注': remark_text,
                 '签到状态': '已签到' if reg.check_in_time else '未签到',
                 '签到时间': check_in_time_bj.strftime('%Y-%m-%d %H:%M:%S') if check_in_time_bj else ''
-            })
+            }
+            if is_team_mode:
+                row['队伍名称'] = reg.team_name or ''
+                row['团队码'] = reg.team_code or ''
+            data.append(row)
         
         df = pd.DataFrame(data)
         df.to_excel(writer, sheet_name='报名信息', index=False)

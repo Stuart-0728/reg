@@ -215,8 +215,10 @@
                             <th>学院</th>
                             <th>专业</th>
                             <th>联系方式</th>
+                            {% if (activity.registration_mode or 'individual') == 'team' %}
                             <th>队伍</th>
                             <th>团队码</th>
+                            {% endif %}
                             <th>报名时间</th>
                             <th>状态</th>
                             <th>积分</th>
@@ -232,8 +234,10 @@
                                 <td>{{ reg.college }}</td>
                                 <td>{{ reg.major }}</td>
                                 <td>{{ reg.phone }}</td>
+                                {% if (activity.registration_mode or 'individual') == 'team' %}
                                 <td>{{ reg.team_name or '-' }}</td>
                                 <td>{{ reg.team_code or '-' }}</td>
+                                {% endif %}
                                 <td>{{ display_datetime(reg.register_time) }}</td>
                                 <td>
                                     {% if reg.status == 'registered' %}
@@ -291,7 +295,7 @@
                             </tr>
                         {% else %}
                             <tr>
-                                <td colspan="12" class="text-center">暂无报名信息</td>
+                                <td colspan="{{ 12 if (activity.registration_mode or 'individual') == 'team' else 10 }}" class="text-center">暂无报名信息</td>
                             </tr>
                         {% endfor %}
                     </tbody>
