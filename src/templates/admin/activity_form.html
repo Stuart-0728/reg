@@ -89,6 +89,62 @@
                 </div>
               {% endif %}
             </div>
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  {{ form.registration_mode.label(class="form-label fw-medium") }}
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-user-friends"></i></span>
+                    {{ form.registration_mode(class="form-select" + (" is-invalid" if form.registration_mode.errors else ""), id="registration_mode") }}
+                  </div>
+                  <small class="form-text text-muted">建议先选择报名模式，再填写人数相关限制。</small>
+                  {% if form.registration_mode.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.registration_mode.errors %}
+                        {{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+
+            <div class="row" id="teamConfigRow">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  {{ form.team_max_members.label(class="form-label fw-medium") }}
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-users"></i></span>
+                    {{ form.team_max_members(class="form-control" + (" is-invalid" if form.team_max_members.errors else ""), type="number", min="1", max="50", id="team_max_members") }}
+                  </div>
+                  {% if form.team_max_members.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.team_max_members.errors %}
+                        {{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  {{ form.team_max_count.label(class="form-label fw-medium") }}
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-flag-checkered"></i></span>
+                    {{ form.team_max_count(class="form-control" + (" is-invalid" if form.team_max_count.errors else ""), type="number", min="0", id="team_max_count") }}
+                  </div>
+                  <small class="form-text text-muted">填 0 表示队伍数量不限制。</small>
+                  {% if form.team_max_count.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.team_max_count.errors %}
+                        {{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
             
             <div class="row">
               <div class="col-md-6">
@@ -160,10 +216,10 @@
               </div>
               <div class="col-md-12">
                 <div class="mb-3">
-                  {{ form.max_participants.label(class="form-label fw-medium") }}
+                  <label class="form-label fw-medium" id="maxParticipantsLabel">{{ form.max_participants.label.text }}</label>
                   <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-users"></i></span>
-                    {{ form.max_participants(class="form-control" + (" is-invalid" if form.max_participants.errors else ""), type="number", min="0", placeholder="0或留空表示不限制") }}
+                    {{ form.max_participants(class="form-control" + (" is-invalid" if form.max_participants.errors else ""), type="number", min="0", placeholder="0或留空表示不限制", id="max_participants") }}
                   </div>
                   {% if form.max_participants.errors %}
                     <div class="invalid-feedback">
@@ -172,7 +228,7 @@
                       {% endfor %}
                     </div>
                   {% endif %}
-                  <small class="form-text text-muted">填写 0 或留空均表示不限人数。</small>
+                  <small class="form-text text-muted" id="maxParticipantsHint">填写 0 或留空均表示不限人数。</small>
                 </div>
               </div>
               <div class="col-md-12">
@@ -192,23 +248,7 @@
             </div>
             
             <div class="row">
-              <div class="col-md-6">
-                <div class="mb-3">
-                  {{ form.registration_mode.label(class="form-label fw-medium") }}
-                  <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-user-friends"></i></span>
-                    {{ form.registration_mode(class="form-select" + (" is-invalid" if form.registration_mode.errors else ""), id="registration_mode") }}
-                  </div>
-                  {% if form.registration_mode.errors %}
-                    <div class="invalid-feedback d-block">
-                      {% for error in form.registration_mode.errors %}
-                        {{ error }}
-                      {% endfor %}
-                    </div>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="col-md-6">
+              <div class="col-md-12">
                 <div class="mb-3">
                   {{ form.points.label(class="form-label fw-medium") }}
                   <div class="input-group">
@@ -223,42 +263,6 @@
                     </div>
                   {% endif %}
                   <small class="form-text text-muted">{{ form.points.description }}</small>
-                </div>
-              </div>
-            </div>
-
-            <div class="row" id="teamConfigRow">
-              <div class="col-md-6">
-                <div class="mb-3">
-                  {{ form.team_max_members.label(class="form-label fw-medium") }}
-                  <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-users"></i></span>
-                    {{ form.team_max_members(class="form-control" + (" is-invalid" if form.team_max_members.errors else ""), type="number", min="1", max="50", id="team_max_members") }}
-                  </div>
-                  {% if form.team_max_members.errors %}
-                    <div class="invalid-feedback d-block">
-                      {% for error in form.team_max_members.errors %}
-                        {{ error }}
-                      {% endfor %}
-                    </div>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="mb-3">
-                  {{ form.team_max_count.label(class="form-label fw-medium") }}
-                  <div class="input-group">
-                    <span class="input-group-text"><i class="fas fa-flag-checkered"></i></span>
-                    {{ form.team_max_count(class="form-control" + (" is-invalid" if form.team_max_count.errors else ""), type="number", min="0", id="team_max_count") }}
-                  </div>
-                  <small class="form-text text-muted">填 0 表示队伍数量不限制。</small>
-                  {% if form.team_max_count.errors %}
-                    <div class="invalid-feedback d-block">
-                      {% for error in form.team_max_count.errors %}
-                        {{ error }}
-                      {% endfor %}
-                    </div>
-                  {% endif %}
                 </div>
               </div>
             </div>
@@ -628,6 +632,9 @@
     const teamConfigRow = document.getElementById('teamConfigRow');
     const teamMaxMembersInput = document.getElementById('team_max_members');
     const teamMaxCountInput = document.getElementById('team_max_count');
+    const maxParticipantsLabel = document.getElementById('maxParticipantsLabel');
+    const maxParticipantsHint = document.getElementById('maxParticipantsHint');
+    const maxParticipantsInputForMode = document.getElementById('max_participants');
 
     function syncTeamConfigVisibility() {
       if (!registrationModeInput || !teamConfigRow) {
@@ -636,6 +643,18 @@
 
       const isTeamMode = registrationModeInput.value === 'team';
       teamConfigRow.classList.toggle('d-none', !isTeamMode);
+
+      if (maxParticipantsLabel) {
+        maxParticipantsLabel.textContent = isTeamMode ? '最大参赛人数（总人数）' : '最大参与人数';
+      }
+      if (maxParticipantsHint) {
+        maxParticipantsHint.textContent = isTeamMode
+          ? '该值用于限制团队报名总人数（跨所有队伍）。填写 0 或留空表示不限。'
+          : '填写 0 或留空均表示不限人数。';
+      }
+      if (maxParticipantsInputForMode) {
+        maxParticipantsInputForMode.placeholder = isTeamMode ? '限制所有队伍总人数，0表示不限' : '0或留空表示不限制';
+      }
 
       if (!isTeamMode) {
         if (teamMaxMembersInput) {
@@ -647,9 +666,93 @@
       }
     }
 
+    function parsePositiveInt(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) {
+        return 0;
+      }
+      const intVal = Math.floor(num);
+      return intVal > 0 ? intVal : 0;
+    }
+
+    function autoCompleteTeamCapacity(changedFieldId = '') {
+      if (!registrationModeInput || registrationModeInput.value !== 'team') {
+        return;
+      }
+      if (!teamMaxMembersInput || !teamMaxCountInput || !maxParticipantsInputForMode) {
+        return;
+      }
+
+      const total = parsePositiveInt(maxParticipantsInputForMode.value);
+      const members = parsePositiveInt(teamMaxMembersInput.value);
+      const teams = parsePositiveInt(teamMaxCountInput.value);
+
+      const totalEmpty = total === 0;
+      const membersEmpty = members === 0;
+      const teamsEmpty = teams === 0;
+
+      // 已有两项时自动补第三项
+      if (totalEmpty && members > 0 && teams > 0) {
+        maxParticipantsInputForMode.value = String(members * teams);
+        return;
+      }
+
+      if (membersEmpty && total > 0 && teams > 0) {
+        teamMaxMembersInput.value = String(Math.max(1, Math.ceil(total / teams)));
+        return;
+      }
+
+      if (teamsEmpty && total > 0 && members > 0) {
+        teamMaxCountInput.value = String(Math.max(1, Math.ceil(total / members)));
+        return;
+      }
+
+      // 三项都有值时，不强制改写；仅在用户刚改动一项且有另两项时给出柔性对齐
+      if (total > 0 && members > 0 && teams > 0) {
+        if (changedFieldId === 'team_max_members' || changedFieldId === 'team_max_count') {
+          const computedTotal = members * teams;
+          if (computedTotal !== total) {
+            maxParticipantsInputForMode.value = String(computedTotal);
+          }
+        } else if (changedFieldId === 'max_participants' && members > 0) {
+          teamMaxCountInput.value = String(Math.max(1, Math.ceil(total / members)));
+        }
+      }
+    }
+
     if (registrationModeInput) {
       registrationModeInput.addEventListener('change', syncTeamConfigVisibility);
+      registrationModeInput.addEventListener('change', function() {
+        autoCompleteTeamCapacity('registration_mode');
+      });
       syncTeamConfigVisibility();
+    }
+
+    if (teamMaxMembersInput) {
+      teamMaxMembersInput.addEventListener('input', function() {
+        autoCompleteTeamCapacity('team_max_members');
+      });
+      teamMaxMembersInput.addEventListener('blur', function() {
+        autoCompleteTeamCapacity('team_max_members');
+      });
+    }
+
+    if (teamMaxCountInput) {
+      teamMaxCountInput.addEventListener('input', function() {
+        autoCompleteTeamCapacity('team_max_count');
+      });
+      teamMaxCountInput.addEventListener('blur', function() {
+        autoCompleteTeamCapacity('team_max_count');
+      });
+    }
+
+    if (maxParticipantsInputForMode) {
+      maxParticipantsInputForMode.addEventListener('input', function() {
+        autoCompleteTeamCapacity('max_participants');
+      });
+      maxParticipantsInputForMode.addEventListener('blur', function() {
+        autoCompleteTeamCapacity('max_participants');
+      });
     }
     
     // 海报文件上传预览功能

@@ -140,8 +140,12 @@ def home_activities_api():
 
             poster_name = (getattr(activity, 'poster_image', None) or '').strip()
             if poster_name:
-                # 优先静态路径，便于 EdgeOne/CDN 加速与缓存
-                poster_url = url_for('static', filename=f'uploads/posters/{poster_name}')
+                # 仅在静态文件真实存在时使用静态路径，避免返回404海报链接
+                poster_path = os.path.join(current_app.static_folder or '', 'uploads', 'posters', poster_name)
+                if poster_path and os.path.isfile(poster_path):
+                    poster_url = url_for('static', filename=f'uploads/posters/{poster_name}')
+                else:
+                    poster_url = url_for('static', filename='img/landscape.jpg')
             else:
                 poster_url = url_for('static', filename='img/landscape.jpg')
 
