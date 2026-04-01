@@ -953,6 +953,40 @@ def register_activity(id):
                     if reg_count >= activity.max_participants:
                         return jsonify({'success': False, 'message': '该活动报名人数已满'})
 
+                team = None
+                if is_team_mode:
+                    if existing_reg.team_id:
+                        team = db.session.get(ActivityTeam, existing_reg.team_id)
+
+                    # 原队伍不存在（被解散/删除）时，为重新报名用户自动创建新队伍。
+                    if not team:
+                        team_limit = max(0, int(getattr(activity, 'team_max_count', 0) or 0))
+                        current_team_count = _count_activity_teams(id)
+                        if team_limit > 0 and current_team_count >= team_limit:
+                            return jsonify({'success': False, 'message': '参赛队伍数量已满，请联系队长邀请加入已有队伍'})
+
+                        team_name = sanitize_plain_text(payload.get('team_name') or request.form.get('team_name'), max_length=80)
+                        if not team_name:
+                            fallback_name = (current_user.student_info.real_name if current_user.student_info and current_user.student_info.real_name else current_user.username)
+                            team_name = f"{fallback_name}的小队"
+
+                        team = ActivityTeam(
+                            activity_id=id,
+                            leader_user_id=current_user.id,
+                            name=team_name,
+                            team_code=_generate_team_code(id),
+                            join_token=_generate_join_token(id)
+                        )
+                        db.session.add(team)
+                        db.session.flush()
+                    else:
+                        team_max_members = max(1, int(getattr(activity, 'team_max_members', 1) or 1))
+                        current_members = _count_team_members(team.id)
+                        if current_members >= team_max_members:
+                            return jsonify({'success': False, 'message': '该队伍人数已满，请联系队长处理队伍名额'})
+
+                    existing_reg.team_id = team.id
+
                 existing_reg.status = 'registered'
                 existing_reg.register_time = now
                 student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
@@ -960,7 +994,15 @@ def register_activity(id):
                     _ensure_student_join_society(student_info, activity.society_id)
                 _create_registration_success_notification(current_user.id, activity)
                 db.session.commit()
-                return jsonify({'success': True, 'message': '已成功重新报名活动', 'team_mode': is_team_mode})
+                response_data = {'success': True, 'message': '已成功重新报名活动', 'team_mode': is_team_mode}
+                if is_team_mode and team:
+                    response_data.update({
+                        'team_name': team.name,
+                        'team_code': team.team_code,
+                        'team_join_link': _build_team_join_link(activity.id, team.join_token),
+                        'team_join_token': team.join_token
+                    })
+                return jsonify(response_data)
 
         if activity.max_participants > 0:
             reg_count = _count_activity_registered(id)
@@ -1062,6 +1104,7 @@ def cancel_registration(id):
                 ).scalars().all()
                 if not other_regs:
                     db.session.delete(team)
+                    registration.team_id = None
         else:
             registration.status = 'cancelled'
 

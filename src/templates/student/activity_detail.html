@@ -262,16 +262,27 @@
                                     </button>
                                     {% endif %}
                                 {% elif registration.status == 'cancelled' %}
-                                                 <div class="alert alert-warning d-inline-block p-2 mb-2">您已取消报名</div>
-                                                 {% if can_register %}
-                                                 <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
-                                                     <i class="fas fa-redo me-1"></i>重新报名
-                                                 </button>
-                                                 {% else %}
-                                                 <button class="btn btn-secondary" disabled>
-                                                     <i class="fas fa-ban me-1"></i>当前不可重新报名
-                                                 </button>
-                                                 {% endif %}
+                                    <div class="alert alert-warning d-inline-block p-2 mb-2">您已取消报名</div>
+                                    {% if is_team_mode %}
+                                        {% if can_register %}
+                                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTeamModal" data-no-loading="true" data-no-global-loading="true">
+                                            <i class="fas fa-user-plus me-1"></i>创建队伍并报名
+                                        </button>
+                                        {% endif %}
+                                        {% if can_join_team %}
+                                        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#joinTeamModal" data-no-loading="true" data-no-global-loading="true">
+                                            <i class="fas fa-sign-in-alt me-1"></i>加入队伍
+                                        </button>
+                                        {% endif %}
+                                    {% elif can_register %}
+                                    <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
+                                        <i class="fas fa-redo me-1"></i>重新报名
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-secondary" disabled>
+                                        <i class="fas fa-ban me-1"></i>当前不可重新报名
+                                    </button>
+                                    {% endif %}
                                 {% endif %}
                             {% else %}
                                 {% if is_team_mode %}
@@ -315,7 +326,7 @@
                         </a>
                     </div>
 
-                    {% if is_team_mode and (not registration) %}
+                    {% if is_team_mode and ((not registration) or registration.status == 'cancelled') %}
                     {% if can_register %}
                     <div class="modal fade" id="createTeamModal" tabindex="-1" aria-labelledby="createTeamModalLabel" aria-hidden="true">
                         <div class="modal-dialog modal-dialog-centered">
@@ -1390,16 +1401,27 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="alert alert-warning d-inline-block p-2 mb-0">
                             <i class="fas fa-exclamation-triangle me-1"></i>您已取消报名
                         </div>
+                        ${isTeamMode ? `
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTeamModal" data-no-loading="true" data-no-global-loading="true">
+                            <i class="fas fa-user-plus me-1"></i>创建队伍并报名
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#joinTeamModal" data-no-loading="true" data-no-global-loading="true">
+                            <i class="fas fa-sign-in-alt me-1"></i>加入队伍
+                        </button>
+                        ` : `
                         <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
                             <i class="fas fa-user-plus me-1"></i>重新报名
                         </button>
+                        `}
                     </div>
                     <a href="#" class="btn btn-outline-secondary mt-2 mt-md-0" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='{{ url_for('student.activities') }}'; } return false;">
                         <i class="fas fa-arrow-left me-1"></i>返回上一页
                     </a>
                 `;
                 updateRegistrationCount(-1);
-                bindRegisterButton(document.getElementById('register-btn'));
+                if (!isTeamMode) {
+                    bindRegisterButton(document.getElementById('register-btn'));
+                }
 
                 if (window.showToast) {
                     window.showToast(data.message || '取消报名成功', 'success');
