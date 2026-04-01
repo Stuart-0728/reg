@@ -2358,7 +2358,7 @@ def create_activity():
     tags = db.session.execute(tags_stmt).scalars().all()
     choices = [(tag.id, tag.name) for tag in tags]
     form.tags.choices = choices
-    action = (request.form.get('action') or 'publish').strip().lower() if request.method == 'POST' else 'publish'
+    action = (request.form.get('submit_action') or request.form.get('action') or 'publish').strip().lower() if request.method == 'POST' else 'publish'
     is_draft_save = request.method == 'POST' and action == 'save_draft'
     
     if form.validate_on_submit() or is_draft_save:
@@ -2525,7 +2525,7 @@ def create_activity():
     if request.method == 'POST' and not form.validate_on_submit() and not is_draft_save:
         _flash_form_errors(form)
         if _is_ajax_request():
-            action = (request.form.get('action') or 'publish').strip().lower()
+            action = (request.form.get('submit_action') or request.form.get('action') or 'publish').strip().lower()
             action_text = '发布' if action == 'publish' else '保存'
             return jsonify({
                 'success': False,
@@ -2569,7 +2569,7 @@ def edit_activity(id):
                 .order_by(ActivityDocument.created_at.desc())
             ).scalars().all()
 
-        action = (request.form.get('action') or 'publish').strip().lower() if request.method == 'POST' else 'publish'
+        action = (request.form.get('submit_action') or request.form.get('action') or 'publish').strip().lower() if request.method == 'POST' else 'publish'
         is_draft_save = request.method == 'POST' and action == 'save_draft'
 
         if form.validate_on_submit() or is_draft_save:
@@ -2850,7 +2850,7 @@ def edit_activity(id):
         if request.method == 'POST' and not form.validate_on_submit() and not is_draft_save:
             _flash_form_errors(form)
             if _is_ajax_request():
-                action = (request.form.get('action') or 'publish').strip().lower()
+                action = (request.form.get('submit_action') or request.form.get('action') or 'publish').strip().lower()
                 action_text = '发布' if action == 'publish' else '保存'
                 return jsonify({
                     'success': False,

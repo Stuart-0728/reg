@@ -32,7 +32,7 @@
     <div class="card-body">
       <form method="post" enctype="multipart/form-data" id="activityForm" data-no-loading action="{% if activity %}{{ url_for('admin.edit_activity', id=activity.id) }}{% else %}{{ url_for('admin.create_activity') }}{% endif %}">
         {{ form.csrf_token }}
-        <input type="hidden" name="action" id="actionInput" value="publish">
+        <input type="hidden" name="submit_action" id="actionInput" value="publish">
         
         <div class="row">
           <div class="col-md-12">
@@ -458,10 +458,10 @@
           </a>
           <div class="d-flex flex-column align-items-end gap-2" style="min-width: 320px;">
             <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-outline-secondary" id="saveDraftBtn" name="action" value="save_draft">
+              <button type="submit" class="btn btn-outline-secondary" id="saveDraftBtn" value="save_draft">
                 <i class="fas fa-file-alt me-1"></i> <span id="saveDraftText">保存草稿</span>
               </button>
-              <button type="submit" class="btn btn-primary" id="publishBtn" name="action" value="publish">
+              <button type="submit" class="btn btn-primary" id="publishBtn" value="publish">
                 <i class="fas fa-paper-plane me-1"></i> <span id="publishText">发布</span>
               </button>
             </div>
@@ -1577,7 +1577,8 @@
         }
 
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', form.action, true);
+        const submitUrl = form.getAttribute('action') || form.action;
+        xhr.open('POST', submitUrl, true);
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
         xhr.upload.onprogress = function(event) {
@@ -1622,7 +1623,7 @@
         };
 
         const formData = new FormData(form);
-        formData.set('action', submitAction);
+        formData.set('submit_action', submitAction);
         xhr.timeout = 15 * 60 * 1000;
         xhr.send(formData);
       });
@@ -1649,7 +1650,7 @@
 
         try {
           const xhr = await submitFormWithProgress();
-          const redirectUrl = xhr.responseURL || form.action;
+          const redirectUrl = xhr.responseURL || form.getAttribute('action') || form.action;
           window.location.href = redirectUrl;
         } catch (error) {
           const message = error?.message || '保存失败，请稍后重试';
