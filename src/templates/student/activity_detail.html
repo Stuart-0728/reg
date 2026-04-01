@@ -1070,6 +1070,14 @@ function initPosterZoomModal() {
 document.addEventListener('DOMContentLoaded', function() {
     initPosterZoomModal();
 
+    // 将弹窗节点提升到 body，避免被页面局部层叠上下文遮挡只剩黑色遮罩。
+    ['createTeamModal', 'joinTeamModal'].forEach((modalId) => {
+        const modalEl = document.getElementById(modalId);
+        if (modalEl && modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+    });
+
     const shareActivityBtn = document.getElementById('share-activity-btn');
     const shareActivityLinkInput = document.getElementById('share-activity-link');
     const shareActivityLinkWrap = document.getElementById('share-activity-link-wrap');
