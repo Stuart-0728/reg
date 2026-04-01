@@ -134,20 +134,21 @@ def home_activities_api():
             ).limit(12)
         ).scalars().all()
 
+        upload_folder = current_app.config.get('UPLOAD_FOLDER') or os.path.join(current_app.root_path, 'static', 'uploads', 'posters')
+
         activities = []
         for activity in active_activities:
-            poster_url = url_for('main.poster_image', activity_id=activity.id)
+            poster_url = url_for('static', filename='img/landscape.jpg')
 
             poster_name = (getattr(activity, 'poster_image', None) or '').strip()
-            if poster_name:
-                # 仅在静态文件真实存在时使用静态路径，避免返回404海报链接
-                poster_path = os.path.join(current_app.static_folder or '', 'uploads', 'posters', poster_name)
-                if poster_path and os.path.isfile(poster_path):
-                    poster_url = url_for('static', filename=f'uploads/posters/{poster_name}')
-                else:
-                    poster_url = url_for('static', filename='img/landscape.jpg')
-            else:
-                poster_url = url_for('static', filename='img/landscape.jpg')
+            poster_data = getattr(activity, 'poster_data', None)
+            if poster_data:
+                # 优先使用数据库中的二进制海报，避免静态路径与上传目录不一致造成404。
+                poster_url = url_for('main.poster_image', activity_id=activity.id)
+            elif poster_name:
+                poster_path = os.path.join(upload_folder, poster_name)
+                if os.path.isfile(poster_path):
+                    poster_url = url_for('main.uploaded_file', filename=poster_name)
 
             # 为图片URL增加版本号，避免CDN长缓存导致更新后仍命中旧图
             version_dt = getattr(activity, 'updated_at', None) or getattr(activity, 'created_at', None)
@@ -324,7 +325,10 @@ def activities():
         # 分页
         try:
             # 分页
-            activities_list = get_compatible_paginate(db, query, page=page, per_page=9, error_out=False)
+            activities_page = get_compatible_paginate(db, query, page=page, per_page=9, error_out=False)
+            activities_items = getattr(activities_page, 'items', activities_page)
+            if not isinstance(activities_items, list):
+                activities_items = list(activities_items)
             
             # 获取用户已报名的活动ID列表
             registered_activity_ids = []
@@ -337,7 +341,7 @@ def activities():
                 registered_activity_ids = [r[0] for r in registered]
             
             return render_template('main/search.html',
-                                   activities=activities_list,
+                                   activities=activities_items,
                                    search_query=search_query,
                                    current_status=status,
                                    registered_activity_ids=registered_activity_ids,
