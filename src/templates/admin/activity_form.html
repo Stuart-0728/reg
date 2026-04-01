@@ -32,6 +32,7 @@
     <div class="card-body">
       <form method="post" enctype="multipart/form-data" id="activityForm" data-no-loading action="{% if activity %}{{ url_for('admin.edit_activity', id=activity.id) }}{% else %}{{ url_for('admin.create_activity') }}{% endif %}">
         {{ form.csrf_token }}
+        <input type="hidden" name="action" id="actionInput" value="publish">
         
         <div class="row">
           <div class="col-md-12">
@@ -455,10 +456,15 @@
           <a href="{{ url_for('admin.activities') }}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i> 返回
           </a>
-          <div class="d-flex flex-column align-items-end gap-2" style="min-width: 280px;">
-            <button type="submit" class="btn btn-primary" id="submitBtn">
-              <i class="fas fa-save me-1"></i> <span id="submitText">保存</span>
-            </button>
+          <div class="d-flex flex-column align-items-end gap-2" style="min-width: 320px;">
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-outline-secondary" id="saveDraftBtn" name="action" value="save_draft">
+                <i class="fas fa-file-alt me-1"></i> <span id="saveDraftText">保存草稿</span>
+              </button>
+              <button type="submit" class="btn btn-primary" id="publishBtn" name="action" value="publish">
+                <i class="fas fa-paper-plane me-1"></i> <span id="publishText">发布</span>
+              </button>
+            </div>
             <div id="uploadProgressWrap" class="w-100 d-none">
               <div class="progress" style="height: 10px;">
                 <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;"></div>
@@ -1452,12 +1458,29 @@
 
     // 表单提交处理
     const form = document.getElementById('activityForm');
-    const submitBtn = document.getElementById('submitBtn');
-    const submitText = document.getElementById('submitText');
+    const publishBtn = document.getElementById('publishBtn');
+    const publishText = document.getElementById('publishText');
+    const saveDraftBtn = document.getElementById('saveDraftBtn');
+    const saveDraftText = document.getElementById('saveDraftText');
+    const actionInput = document.getElementById('actionInput');
     const maxParticipantsInputForValidation = document.getElementById('max_participants');
     const uploadProgressWrap = document.getElementById('uploadProgressWrap');
     const uploadProgressBar = document.getElementById('uploadProgressBar');
     const uploadProgressText = document.getElementById('uploadProgressText');
+    let submitAction = 'publish';
+
+    function setSubmitAction(action) {
+      submitAction = action === 'save_draft' ? 'save_draft' : 'publish';
+      if (actionInput) {
+        actionInput.value = submitAction;
+      }
+    }
+
+    setSubmitAction('publish');
+    [publishBtn, saveDraftBtn].forEach((btn) => {
+      if (!btn) return;
+      btn.addEventListener('click', () => setSubmitAction(btn.value || 'publish'));
+    });
 
     function clearFormValidationState() {
       if (!form) {
@@ -1478,7 +1501,7 @@
       }
     }
 
-    function validateBeforeSubmit() {
+    function validateBeforeSubmit(action) {
       if (!form) {
         return true;
       }
@@ -1497,13 +1520,28 @@
         }
       }
 
+      if (action === 'save_draft') {
+        return true;
+      }
+
       if (!form.checkValidity()) {
         const firstInvalid = form.querySelector(':invalid');
+        const invalidLabels = [];
+        form.querySelectorAll(':invalid').forEach((field) => {
+          const fieldId = field.getAttribute('id');
+          if (!fieldId) return;
+          const labelEl = form.querySelector(`label[for="${fieldId}"]`);
+          const labelText = (labelEl?.textContent || '').trim();
+          if (labelText && !invalidLabels.includes(labelText)) {
+            invalidLabels.push(labelText);
+          }
+        });
         if (firstInvalid) {
           firstInvalid.classList.add('is-invalid');
         }
         form.reportValidity();
-        showValidationHint('表单有未填写或填写错误的字段，请先修正后再保存。', firstInvalid);
+        const detailText = invalidLabels.length ? `请完善：${invalidLabels.join('、')}` : '请检查未填写或格式错误的字段';
+        showValidationHint(`发布失败，${detailText}。`, firstInvalid);
         return false;
       }
 
@@ -1563,6 +1601,19 @@
           setUploadProgress(100, '上传完成，正在处理服务器响应...');
           if (xhr.status >= 200 && xhr.status < 400) {
             resolve(xhr);
+          } else if (xhr.status === 422) {
+            let message = '发布失败，请修正表单后重试';
+            try {
+              const data = JSON.parse(xhr.responseText || '{}');
+              const errors = Array.isArray(data.errors) ? data.errors.filter(Boolean) : [];
+              if (data.message) {
+                message = data.message;
+              }
+              if (errors.length) {
+                message += `：${errors.join('；')}`;
+              }
+            } catch (_) {}
+            reject(new Error(message));
           } else if (xhr.status === 413) {
             reject(new Error('上传失败：文件过大（413），请压缩或分批上传'));
           } else {
@@ -1571,23 +1622,29 @@
         };
 
         const formData = new FormData(form);
+        formData.set('action', submitAction);
         xhr.timeout = 15 * 60 * 1000;
         xhr.send(formData);
       });
     }
 
-    if (form && submitBtn) {
+    if (form && (publishBtn || saveDraftBtn)) {
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
 
-        if (!validateBeforeSubmit()) {
+        if (!validateBeforeSubmit(submitAction)) {
           return;
         }
 
         syncStagedDocsToForm();
 
-        submitBtn.disabled = true;
-        submitText.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>保存中...';
+        if (publishBtn) publishBtn.disabled = true;
+        if (saveDraftBtn) saveDraftBtn.disabled = true;
+        if (submitAction === 'save_draft') {
+          if (saveDraftText) saveDraftText.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>保存中...';
+        } else {
+          if (publishText) publishText.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>发布中...';
+        }
         setUploadProgress(0, '准备上传...');
 
         try {
@@ -1601,8 +1658,10 @@
           } else {
             alert(message);
           }
-          submitBtn.disabled = false;
-          submitText.textContent = '保存';
+          if (publishBtn) publishBtn.disabled = false;
+          if (saveDraftBtn) saveDraftBtn.disabled = false;
+          if (publishText) publishText.textContent = '发布';
+          if (saveDraftText) saveDraftText.textContent = '保存草稿';
           resetUploadUI();
         }
       });

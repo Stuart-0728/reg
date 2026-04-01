@@ -138,6 +138,20 @@ def _flash_form_errors(form, fallback_message='表单填写有误，请检查后
         flash(fallback_message, 'warning')
 
 
+def _collect_form_error_messages(form):
+    """收集表单错误信息，供AJAX接口返回前端展示。"""
+    messages = []
+    try:
+        for field_name, field_messages in (form.errors or {}).items():
+            field = getattr(form, field_name, None)
+            label = getattr(getattr(field, 'label', None), 'text', None) or field_name
+            for msg in (field_messages or []):
+                messages.append(f"{label}：{msg}")
+    except Exception:
+        return []
+    return messages
+
+
 def _is_ajax_request():
     return (
         request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -2272,6 +2286,8 @@ def activities(status='all'):
             query = query.filter(Activity.status == 'completed')
         elif status == 'cancelled':
             query = query.filter(Activity.status == 'cancelled')
+        elif status == 'draft':
+            query = query.filter(Activity.status == 'draft')
         
         # 排序
         query = query.order_by(Activity.created_at.desc())
@@ -2342,8 +2358,10 @@ def create_activity():
     tags = db.session.execute(tags_stmt).scalars().all()
     choices = [(tag.id, tag.name) for tag in tags]
     form.tags.choices = choices
+    action = (request.form.get('action') or 'publish').strip().lower() if request.method == 'POST' else 'publish'
+    is_draft_save = request.method == 'POST' and action == 'save_draft'
     
-    if form.validate_on_submit():
+    if form.validate_on_submit() or is_draft_save:
         try:
             # 获取表单数据
             title = sanitize_plain_text(form.title.data, max_length=120)
@@ -2365,11 +2383,16 @@ def create_activity():
             if max_participants is None:
                 max_participants = 0
             points = form.points.data
-            status = form.status.data
+            status = 'draft' if is_draft_save else 'active'
             is_featured = False
             ai_poster_url = (request.form.get('ai_poster_url') or '').strip()
 
-            if not title or not description or not location:
+            if is_draft_save:
+                if not title:
+                    title = '未命名草稿'
+                if not location:
+                    location = '待定'
+            elif not title or not description or not location:
                 flash('标题、活动描述、活动地点不能为空（不支持HTML脚本内容）', 'warning')
                 return render_template('admin/activity_form.html', form=form, activity=None, existing_documents=[], document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
             
@@ -2491,7 +2514,7 @@ def create_activity():
                 details=f"创建了活动 {activity.id}: {activity.title}"
             )
             
-            flash('活动创建成功', 'success')
+            flash('草稿已保存' if is_draft_save else '活动发布成功', 'success')
             return redirect(url_for('admin.activities'))
         
         except Exception as e:
@@ -2499,8 +2522,16 @@ def create_activity():
             logger.error(f"Error in create_activity: {str(e)}")
             flash(f'创建活动失败: {str(e)}', 'danger')
     
-    if request.method == 'POST' and not form.validate_on_submit():
+    if request.method == 'POST' and not form.validate_on_submit() and not is_draft_save:
         _flash_form_errors(form)
+        if _is_ajax_request():
+            action = (request.form.get('action') or 'publish').strip().lower()
+            action_text = '发布' if action == 'publish' else '保存'
+            return jsonify({
+                'success': False,
+                'message': f'{action_text}失败，请修正表单后重试',
+                'errors': _collect_form_error_messages(form)
+            }), 422
 
     # GET请求或表单验证失败
     return render_template('admin/activity_form.html', form=form, activity=None, existing_documents=[], document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
@@ -2538,7 +2569,10 @@ def edit_activity(id):
                 .order_by(ActivityDocument.created_at.desc())
             ).scalars().all()
 
-        if form.validate_on_submit():
+        action = (request.form.get('action') or 'publish').strip().lower() if request.method == 'POST' else 'publish'
+        is_draft_save = request.method == 'POST' and action == 'save_draft'
+
+        if form.validate_on_submit() or is_draft_save:
             try:
                 # 更新活动信息，但先保存标签引用
                 selected_tag_ids = request.form.getlist('tags')
@@ -2572,7 +2606,7 @@ def edit_activity(id):
                 activity.location = sanitize_plain_text(form.location.data, max_length=200)
                 activity.max_participants = form.max_participants.data if form.max_participants.data is not None else 0
                 activity.points = form.points.data
-                activity.status = form.status.data
+                activity.status = 'draft' if is_draft_save else 'active'
                 activity.is_featured = False
                 activity.registration_mode = (form.registration_mode.data or 'individual').strip().lower()
                 activity.team_max_members = form.team_max_members.data if form.team_max_members.data is not None else 1
@@ -2585,7 +2619,12 @@ def edit_activity(id):
                 activity.activity_type = form.activity_type.data if hasattr(form, 'activity_type') else None
                 # 不处理tags字段，它会在后面单独处理
 
-                if not activity.title or not activity.description or not activity.location:
+                if is_draft_save:
+                    if not activity.title:
+                        activity.title = '未命名草稿'
+                    if not activity.location:
+                        activity.location = '待定'
+                elif not activity.title or not activity.description or not activity.location:
                     flash('标题、活动描述、活动地点不能为空（不支持HTML脚本内容）', 'warning')
                     return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
 
@@ -2795,7 +2834,7 @@ def edit_activity(id):
                     if new_docs:
                         flash(f'新增 {len(new_docs)} 份活动资料并已通知相关学生', 'success')
                     
-                    flash('活动更新成功!', 'success')
+                    flash('草稿已保存' if is_draft_save else '活动发布成功', 'success')
                     return redirect(url_for('admin.activities'))
                 except Exception as e:
                     db.session.rollback()
@@ -2808,8 +2847,16 @@ def edit_activity(id):
                 flash(f'编辑活动时出错: {str(e)}', 'danger')
                 return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
         
-        if request.method == 'POST' and not form.validate_on_submit():
+        if request.method == 'POST' and not form.validate_on_submit() and not is_draft_save:
             _flash_form_errors(form)
+            if _is_ajax_request():
+                action = (request.form.get('action') or 'publish').strip().lower()
+                action_text = '发布' if action == 'publish' else '保存'
+                return jsonify({
+                    'success': False,
+                    'message': f'{action_text}失败，请修正表单后重试',
+                    'errors': _collect_form_error_messages(form)
+                }), 422
 
         return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
     except Exception as e:

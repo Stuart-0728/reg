@@ -86,6 +86,11 @@
                         <i class="fas fa-ban me-1"></i>已取消
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if current_status == 'draft' %}active fw-medium{% endif %}" href="{{ url_for('admin.activities', status='draft') }}">
+                        <i class="fas fa-file-alt me-1"></i>草稿箱
+                    </a>
+                </li>
             </ul>
         </div>
         <div class="card-body p-0">
@@ -124,8 +129,8 @@
                             <td title="{{ display_datetime(activity.start_time) }}"><span class="table-cell-ellipsis">{{ display_datetime(activity.start_time) }}</span></td>
                             <td title="{{ display_datetime(activity.registration_deadline) }}"><span class="table-cell-ellipsis">{{ display_datetime(activity.registration_deadline) }}</span></td>
                             <td>
-                                <span class="badge {% if activity.status == 'active' %}bg-success{% elif activity.status == 'completed' %}bg-secondary{% else %}bg-danger{% endif %} rounded-pill">
-                                    {% if activity.status == 'active' %}进行中{% elif activity.status == 'completed' %}已结束{% else %}已取消{% endif %}
+                                <span class="badge {% if activity.status == 'active' %}bg-success{% elif activity.status == 'completed' %}bg-secondary{% elif activity.status == 'draft' %}bg-warning text-dark{% else %}bg-danger{% endif %} rounded-pill">
+                                    {% if activity.status == 'active' %}进行中{% elif activity.status == 'completed' %}已结束{% elif activity.status == 'draft' %}草稿{% else %}已取消{% endif %}
                                 </span>
                             </td>
                             <td class="text-center">
@@ -193,12 +198,19 @@
                                                 <i class="fas fa-ban text-danger me-2"></i>取消活动
                                             </button>
                                         </li>
-                                        {% elif activity.status == 'completed' or activity.status == 'cancelled' %}
+                                        {% elif activity.status == 'completed' or activity.status == 'cancelled' or activity.status == 'draft' %}
                                         <li>
                                             <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'active', event); return false;" data-no-loading="true" data-no-global-loading="true">
-                                                <i class="fas fa-play-circle text-success me-2"></i>恢复为进行中
+                                                <i class="fas fa-play-circle text-success me-2"></i>{% if activity.status == 'draft' %}发布活动{% else %}恢复为进行中{% endif %}
                                             </button>
                                         </li>
+                                        {% if activity.status != 'draft' %}
+                                        <li>
+                                            <button class="dropdown-item activity-status-btn" onclick="updateActivityStatus('{{ activity.id }}', 'draft', event); return false;" data-no-loading="true" data-no-global-loading="true">
+                                                <i class="fas fa-file-alt text-warning me-2"></i>转为草稿
+                                            </button>
+                                        </li>
+                                        {% endif %}
                                         {% endif %}
                                         <li><hr class="dropdown-divider"></li>
                                         <li>
@@ -507,7 +519,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 添加更新活动状态的函数
 function updateActivityStatus(activityId, status) {
-    const statusLabel = status === 'active' ? '进行中' : status === 'completed' ? '已结束' : '已取消';
+    const statusLabel = status === 'active'
+        ? '进行中'
+        : status === 'completed'
+            ? '已结束'
+            : status === 'draft'
+                ? '草稿'
+                : '已取消';
     if (!confirm(`确定要将活动状态更改为"${statusLabel}"吗？`)) return;
 
     // 禁用所有状态按钮，防止重复点击
