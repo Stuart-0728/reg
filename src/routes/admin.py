@@ -32,7 +32,7 @@ from sqlalchemy import func, desc, or_, and_, extract, text, case
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 from src import cache, limiter
-from src.models import db, User, Role, StudentInfo, Activity, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, ActivityDocument, student_tags, activity_tags, student_societies, Announcement, Society
+from src.models import db, User, Role, StudentInfo, Activity, ActivityTeam, Registration, SystemLog, Tag, Message, Notification, NotificationRead, PointsHistory, ActivityReview, ActivityCheckin, AIChatHistory, AIChatSession, AIUserPreferences, ActivityDocument, student_tags, activity_tags, student_societies, Announcement, Society
 from src.routes.utils import admin_required, log_action, is_super_admin
 from src.utils.time_helpers import normalize_datetime_for_db, display_datetime, ensure_timezone_aware, get_localized_now, get_beijing_time, safe_less_than, safe_greater_than, get_activity_status
 from src.forms import ActivityForm  # 添加ActivityForm导入
@@ -2334,12 +2334,15 @@ def create_activity():
                 allow_multiline=True,
                 max_length=1000
             )
+            registration_mode = (form.registration_mode.data or 'individual').strip().lower()
+            team_max_members = form.team_max_members.data if form.team_max_members.data is not None else 1
+            team_max_count = form.team_max_count.data if form.team_max_count.data is not None else 0
             max_participants = form.max_participants.data
             if max_participants is None:
                 max_participants = 0
             points = form.points.data
             status = form.status.data
-            is_featured = form.is_featured.data
+            is_featured = False
             ai_poster_url = (request.form.get('ai_poster_url') or '').strip()
 
             if not title or not description or not location:
@@ -2351,6 +2354,12 @@ def create_activity():
             end_time = _to_utc_naive_datetime(end_time)
             registration_start_time = _to_utc_naive_datetime(registration_start_time)
             registration_deadline = _to_utc_naive_datetime(registration_deadline)
+
+            if registration_mode not in ('individual', 'team'):
+                registration_mode = 'individual'
+            if registration_mode == 'individual':
+                team_max_members = 1
+                team_max_count = 0
 
             if registration_start_time and registration_deadline and registration_start_time > registration_deadline:
                 flash('报名开始时间不能晚于报名截止时间', 'warning')
@@ -2366,6 +2375,9 @@ def create_activity():
                 registration_start_time=registration_start_time,
                 registration_deadline=registration_deadline,
                 registration_success_message=registration_success_message,
+                registration_mode=registration_mode,
+                team_max_members=max(1, int(team_max_members or 1)),
+                team_max_count=max(0, int(team_max_count or 0)),
                 max_participants=max_participants,
                 points=points,
                 status=status,
@@ -2537,7 +2549,10 @@ def edit_activity(id):
                 activity.max_participants = form.max_participants.data if form.max_participants.data is not None else 0
                 activity.points = form.points.data
                 activity.status = form.status.data
-                activity.is_featured = form.is_featured.data
+                activity.is_featured = False
+                activity.registration_mode = (form.registration_mode.data or 'individual').strip().lower()
+                activity.team_max_members = form.team_max_members.data if form.team_max_members.data is not None else 1
+                activity.team_max_count = form.team_max_count.data if form.team_max_count.data is not None else 0
                 activity.registration_success_message = sanitize_plain_text(
                     form.registration_success_message.data,
                     allow_multiline=True,
@@ -2549,6 +2564,15 @@ def edit_activity(id):
                 if not activity.title or not activity.description or not activity.location:
                     flash('标题、活动描述、活动地点不能为空（不支持HTML脚本内容）', 'warning')
                     return render_template('admin/activity_form.html', form=form, title='编辑活动', activity=activity, existing_documents=_load_activity_documents(), document_categories=DOCUMENT_CATEGORY_LABELS, display_datetime=display_datetime)
+
+                if activity.registration_mode not in ('individual', 'team'):
+                    activity.registration_mode = 'individual'
+                if activity.registration_mode == 'individual':
+                    activity.team_max_members = 1
+                    activity.team_max_count = 0
+                else:
+                    activity.team_max_members = max(1, int(activity.team_max_members or 1))
+                    activity.team_max_count = max(0, int(activity.team_max_count or 0))
                 
                 # 使用转换后的时间覆盖填充的时间字段
                 activity.start_time = start_time
@@ -3607,11 +3631,16 @@ def activity_registrations(id):
             User, Registration.user_id == User.id
         ).join(
             StudentInfo, User.id == StudentInfo.user_id
+        ).outerjoin(
+            ActivityTeam, Registration.team_id == ActivityTeam.id
         ).add_columns(
             Registration.id.label('registration_id'),
             Registration.register_time,
             Registration.check_in_time,
             Registration.status,
+            Registration.team_id,
+            ActivityTeam.name.label('team_name'),
+            ActivityTeam.team_code.label('team_code'),
             StudentInfo.real_name,
             StudentInfo.student_id,
             StudentInfo.grade,
@@ -3662,11 +3691,16 @@ def export_activity_registrations(id):
             User, Registration.user_id == User.id
         ).join(
             StudentInfo, User.id == StudentInfo.user_id
+        ).outerjoin(
+            ActivityTeam, Registration.team_id == ActivityTeam.id
         ).add_columns(
             Registration.id.label('registration_id'),
             Registration.register_time,
             Registration.check_in_time,
             Registration.status,
+            Registration.team_id,
+            ActivityTeam.name.label('team_name'),
+            ActivityTeam.team_code.label('team_code'),
             StudentInfo.real_name,
             StudentInfo.student_id,
             StudentInfo.grade,
@@ -3695,6 +3729,8 @@ def export_activity_registrations(id):
                 '学院': reg.college,
                 '专业': reg.major,
                 '手机号': reg.phone,
+                '队伍名称': reg.team_name or '',
+                '团队码': reg.team_code or '',
                 '报名时间': register_time_bj.strftime('%Y-%m-%d %H:%M:%S') if register_time_bj else '',
                 '状态': '已报名' if reg.status == 'registered' else '已取消' if reg.status == 'cancelled' else '已参加',
                 '积分': reg.points or 0,

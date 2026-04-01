@@ -33,6 +33,14 @@
                 <div class="col-md-6">
                     <p><strong>报名截止：</strong>{{ display_datetime(activity.registration_deadline) }}</p>
                     <p><strong>最大人数：</strong>{{ activity.max_participants if activity.max_participants > 0 else '不限' }}</p>
+                    <p><strong>报名模式：</strong>
+                        {% if (activity.registration_mode or 'individual') == 'team' %}
+                            <span class="badge bg-primary">团队报名</span>
+                            <span class="text-muted ms-1">每队{{ activity.team_max_members or 1 }}人，队伍上限{{ activity.team_max_count if (activity.team_max_count or 0) > 0 else '不限' }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary">个人报名</span>
+                        {% endif %}
+                    </p>
                     <p><strong>状态：</strong>
                         {% if activity.status == 'active' %}
                             <span class="badge bg-success">进行中</span>
@@ -96,6 +104,8 @@
                             <th>学院</th>
                             <th>专业</th>
                             <th>联系方式</th>
+                            <th>队伍</th>
+                            <th>团队码</th>
                             <th>报名时间</th>
                             <th>状态</th>
                             <th>积分</th>
@@ -111,6 +121,8 @@
                                 <td>{{ reg.college }}</td>
                                 <td>{{ reg.major }}</td>
                                 <td>{{ reg.phone }}</td>
+                                <td>{{ reg.team_name or '-' }}</td>
+                                <td>{{ reg.team_code or '-' }}</td>
                                 <td>{{ display_datetime(reg.register_time) }}</td>
                                 <td>
                                     {% if reg.status == 'registered' %}
@@ -168,7 +180,7 @@
                             </tr>
                         {% else %}
                             <tr>
-                                <td colspan="10" class="text-center">暂无报名信息</td>
+                                <td colspan="12" class="text-center">暂无报名信息</td>
                             </tr>
                         {% endfor %}
                     </tbody>

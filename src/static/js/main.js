@@ -37,6 +37,69 @@ document.addEventListener('DOMContentLoaded', function() {
         activityDetail: routeFlags.isMainActivityDetail || routeFlags.isStudentActivityDetail,
     };
 
+    function initMobileNavbarToggleFallback() {
+        const toggler = document.querySelector('.navbar-toggler[data-bs-target="#navbarNav"]');
+        const collapseEl = document.getElementById('navbarNav');
+        if (!toggler || !collapseEl || typeof bootstrap === 'undefined' || !bootstrap.Collapse) {
+            return;
+        }
+
+        let lastToggleAt = 0;
+        const isCoarsePointer = () => {
+            try {
+                return window.matchMedia('(pointer: coarse), (max-width: 1199.98px)').matches;
+            } catch (_) {
+                return false;
+            }
+        };
+
+        const safeToggle = (event) => {
+            const now = Date.now();
+            if (now - lastToggleAt < 240) {
+                return;
+            }
+            lastToggleAt = now;
+            if (event) {
+                event.preventDefault();
+            }
+
+            const instance = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+            if (collapseEl.classList.contains('show')) {
+                instance.hide();
+            } else {
+                instance.show();
+            }
+        };
+
+        toggler.style.touchAction = 'manipulation';
+
+        toggler.addEventListener('touchend', function(event) {
+            if (!isCoarsePointer()) {
+                return;
+            }
+            safeToggle(event);
+        }, { passive: false });
+
+        toggler.addEventListener('click', function(event) {
+            if (!isCoarsePointer()) {
+                return;
+            }
+            safeToggle(event);
+        }, true);
+
+        collapseEl.querySelectorAll('a.nav-link').forEach((link) => {
+            link.addEventListener('click', function() {
+                if (!isCoarsePointer() || !collapseEl.classList.contains('show')) {
+                    return;
+                }
+                const instance = bootstrap.Collapse.getOrCreateInstance(collapseEl, { toggle: false });
+                instance.hide();
+            });
+        });
+    }
+
+    initMobileNavbarToggleFallback();
+
     const pageFlags = {
         hasLoginLink: document.querySelector('a[href="/auth/login"]') !== null,
         hasTooltip: document.querySelector('[data-bs-toggle="tooltip"]') !== null,

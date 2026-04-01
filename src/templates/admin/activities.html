@@ -92,13 +92,13 @@
             <div class="table-responsive has-sticky-action" style="overflow-x: auto; overflow-y: visible;">
                 <table class="table table-hover align-middle mb-0 table-cell-scroll table-has-sticky-action activities-table">
                     <colgroup>
-                        <col style="width: 27%;">
-                        <col style="width: 16%;">
-                        <col style="width: 16%;">
-                        <col style="width: 16%;">
-                        <col style="width: 8%;">
-                        <col style="width: 8%;">
-                        <col style="width: 9%;">
+                        <col style="width: 320px;">
+                        <col style="width: 180px;">
+                        <col style="width: 190px;">
+                        <col style="width: 190px;">
+                        <col style="width: 110px;">
+                        <col style="width: 130px;">
+                        <col style="width: 120px;">
                     </colgroup>
                     <thead class="table-light">
                         <tr>
@@ -654,13 +654,14 @@ async function shareActivityFromAdminList(downloadUrl, shareLink, evt) {
 
 .activities-card .activities-table {
     table-layout: fixed;
-    width: 100%;
-    min-width: 0;
+    width: max-content;
+    min-width: 100%;
 }
 
 .activities-card .activities-table th,
 .activities-card .activities-table td {
     overflow: hidden;
+    white-space: nowrap;
 }
 
 .activities-card .activities-table th {

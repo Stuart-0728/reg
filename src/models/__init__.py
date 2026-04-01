@@ -89,6 +89,7 @@ class User(db.Model, UserMixin):
     uploaded_activity_documents = relationship('ActivityDocument', backref='uploader', lazy='dynamic', cascade="all, delete-orphan")
     ai_chat_sessions = relationship('AIChatSession', backref='user', lazy='dynamic', cascade="all, delete-orphan")
     ai_preferences = relationship('AIUserPreferences', backref='user', uselist=False, cascade="all, delete-orphan")
+    led_activity_teams = relationship('ActivityTeam', foreign_keys='ActivityTeam.leader_user_id', backref='leader', lazy='dynamic')
     managed_society = relationship('Society', foreign_keys=[managed_society_id])
     
     @property
@@ -191,6 +192,9 @@ class Activity(db.Model):
     
     # 参与人数
     max_participants = Column(Integer, default=0)  # 0表示不限制
+    registration_mode = Column(String(20), default='individual')  # individual, team
+    team_max_members = Column(Integer, default=1)  # 团队活动每队最多人数
+    team_max_count = Column(Integer, default=0)  # 团队活动最多队伍数，0表示不限制
     
     # 积分和类型
     points = Column(Integer, default=10)  # 参与可获得的积分
@@ -217,6 +221,7 @@ class Activity(db.Model):
     # 关系
     creator = relationship('User', backref='created_activities')
     registrations = relationship('Registration', backref='activity', lazy='dynamic', cascade='all, delete-orphan')
+    teams = relationship('ActivityTeam', backref='activity', lazy='dynamic', cascade='all, delete-orphan')
     reviews = relationship('ActivityReview', backref='activity', lazy='dynamic', cascade='all, delete-orphan')
     checkins = relationship('ActivityCheckin', backref='activity', lazy='dynamic', cascade='all, delete-orphan')
     tags = relationship('Tag', secondary=activity_tags, backref=backref('activities', lazy='dynamic'))
@@ -252,6 +257,7 @@ class Registration(db.Model):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     activity_id = Column(Integer, ForeignKey('activities.id'))
+    team_id = Column(Integer, ForeignKey('activity_teams.id'), nullable=True, index=True)
     status = Column(String(20), default='registered')  # registered, attended, cancelled
     register_time = Column(DateTime, default=func.now())
     check_in_time = Column(DateTime)  # 签到时间
@@ -266,6 +272,27 @@ class Registration(db.Model):
     
     def __repr__(self):
         return f'<Registration {self.user_id} {self.activity_id}>'
+
+
+class ActivityTeam(db.Model):
+    __tablename__ = 'activity_teams'
+    id = Column(Integer, primary_key=True)
+    activity_id = Column(Integer, ForeignKey('activities.id'), nullable=False, index=True)
+    leader_user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    team_code = Column(String(24), nullable=False, unique=True, index=True)
+    join_token = Column(String(64), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, default=func.now(), index=True)
+
+    registrations = relationship('Registration', backref='team', lazy='dynamic')
+
+    __table_args__ = (
+        Index('idx_activity_team_activity_created', 'activity_id', 'created_at'),
+        Index('idx_activity_team_activity_leader', 'activity_id', 'leader_user_id'),
+    )
+
+    def __repr__(self):
+        return f'<ActivityTeam {self.activity_id} {self.team_code}>'
 
 
 class ActivityDocument(db.Model):

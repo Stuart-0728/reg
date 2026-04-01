@@ -161,6 +161,68 @@ def ensure_db_structure(app, db):
     else:
         app.logger.info('字段 activities.registration_success_message 已存在，跳过补齐')
 
+    # 团队报名相关字段
+    if not _column_exists(inspector, 'activities', 'registration_mode'):
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE activities ADD COLUMN registration_mode VARCHAR(20) DEFAULT 'individual'"))
+        app.logger.info('已补齐 activities.registration_mode 字段')
+    else:
+        app.logger.info('字段 activities.registration_mode 已存在，跳过补齐')
+
+    if not _column_exists(inspector, 'activities', 'team_max_members'):
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE activities ADD COLUMN team_max_members INTEGER DEFAULT 1"))
+        app.logger.info('已补齐 activities.team_max_members 字段')
+    else:
+        app.logger.info('字段 activities.team_max_members 已存在，跳过补齐')
+
+    if not _column_exists(inspector, 'activities', 'team_max_count'):
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE activities ADD COLUMN team_max_count INTEGER DEFAULT 0"))
+        app.logger.info('已补齐 activities.team_max_count 字段')
+    else:
+        app.logger.info('字段 activities.team_max_count 已存在，跳过补齐')
+
+    if not _column_exists(inspector, 'registrations', 'team_id'):
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE registrations ADD COLUMN team_id INTEGER"))
+        app.logger.info('已补齐 registrations.team_id 字段')
+    else:
+        app.logger.info('字段 registrations.team_id 已存在，跳过补齐')
+
+    # 团队表
+    if 'activity_teams' not in table_names:
+        if dialect == 'postgresql':
+            create_activity_teams_sql = """
+            CREATE TABLE activity_teams (
+                id SERIAL PRIMARY KEY,
+                activity_id INTEGER NOT NULL,
+                leader_user_id INTEGER NOT NULL,
+                name VARCHAR(120) NOT NULL,
+                team_code VARCHAR(24) NOT NULL UNIQUE,
+                join_token VARCHAR(64) NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        else:
+            create_activity_teams_sql = """
+            CREATE TABLE activity_teams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                activity_id INTEGER NOT NULL,
+                leader_user_id INTEGER NOT NULL,
+                name VARCHAR(120) NOT NULL,
+                team_code VARCHAR(24) NOT NULL UNIQUE,
+                join_token VARCHAR(64) NOT NULL UNIQUE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+
+        with engine.begin() as conn:
+            conn.execute(text(create_activity_teams_sql))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_activity_team_activity_created ON activity_teams (activity_id, created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_activity_team_activity_leader ON activity_teams (activity_id, leader_user_id)"))
+        app.logger.info('已创建 activity_teams 表')
+
     if not _column_exists(inspector, 'notification_read', 'is_deleted'):
         if dialect == 'postgresql':
             alter_sql = "ALTER TABLE notification_read ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE"

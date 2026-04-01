@@ -211,7 +211,6 @@ def create_app(config_name=None):
 
             # 公共JSON接口允许短期边缘缓存，提升高并发命中率
             public_edge_paths = {
-                '/api/home-activities',
                 '/api/public-notifications',
             }
             if path in public_edge_paths and response.status_code == 200:

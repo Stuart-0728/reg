@@ -361,6 +361,44 @@ document.addEventListener('DOMContentLoaded', async function () {
         }).join('');
     };
 
+    const loadLatestActivities = async () => {
+        const url = `/api/home-activities?_t=${Date.now()}`;
+        let response;
+        try {
+            response = await fetch(url, {
+                method: 'GET',
+                cache: 'no-store',
+                credentials: 'same-origin',
+                headers: {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+        } catch (_) {
+            return;
+        }
+
+        if (!response.ok) {
+            return;
+        }
+
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (_) {
+            data = {};
+        }
+
+        if (!data || data.success !== true || !Array.isArray(data.activities)) {
+            return;
+        }
+
+        renderActivities(data.activities);
+    };
+
+    loadLatestActivities();
+
     const authUrls = {
         login: '{{ url_for("auth.login") }}',
         register: '{{ url_for("auth.register") }}',

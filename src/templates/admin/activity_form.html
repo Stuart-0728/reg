@@ -193,21 +193,19 @@
             
             <div class="row">
               <div class="col-md-6">
-                <div class="card border-0 shadow-sm mb-3">
-                  <div class="card-body">
-                    <div class="form-check form-switch">
-                  {{ form.is_featured(class="form-check-input" + (" is-invalid" if form.is_featured.errors else "")) }}
-                      {{ form.is_featured.label(class="form-check-label fw-medium") }}
-                    </div>
-                    <small class="text-muted">重点活动将会在首页展示，并获得更多积分</small>
-                  {% if form.is_featured.errors %}
-                    <div class="invalid-feedback">
-                      {% for error in form.is_featured.errors %}
+                <div class="mb-3">
+                  {{ form.registration_mode.label(class="form-label fw-medium") }}
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-user-friends"></i></span>
+                    {{ form.registration_mode(class="form-select" + (" is-invalid" if form.registration_mode.errors else ""), id="registration_mode") }}
+                  </div>
+                  {% if form.registration_mode.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.registration_mode.errors %}
                         {{ error }}
                       {% endfor %}
                     </div>
                   {% endif %}
-                  </div>
                 </div>
               </div>
               <div class="col-md-6">
@@ -225,6 +223,42 @@
                     </div>
                   {% endif %}
                   <small class="form-text text-muted">{{ form.points.description }}</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="row" id="teamConfigRow">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  {{ form.team_max_members.label(class="form-label fw-medium") }}
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-users"></i></span>
+                    {{ form.team_max_members(class="form-control" + (" is-invalid" if form.team_max_members.errors else ""), type="number", min="1", max="50", id="team_max_members") }}
+                  </div>
+                  {% if form.team_max_members.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.team_max_members.errors %}
+                        {{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  {{ form.team_max_count.label(class="form-label fw-medium") }}
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-flag-checkered"></i></span>
+                    {{ form.team_max_count(class="form-control" + (" is-invalid" if form.team_max_count.errors else ""), type="number", min="0", id="team_max_count") }}
+                  </div>
+                  <small class="form-text text-muted">填 0 表示队伍数量不限制。</small>
+                  {% if form.team_max_count.errors %}
+                    <div class="invalid-feedback d-block">
+                      {% for error in form.team_max_count.errors %}
+                        {{ error }}
+                      {% endfor %}
+                    </div>
+                  {% endif %}
                 </div>
               </div>
             </div>
@@ -590,18 +624,32 @@
       minuteIncrement: 10
     });
     
-    // 重点活动与积分联动
-    const isFeaturedCheckbox = document.getElementById('is_featured');
-    const pointsInput = document.getElementById('points');
-    
-    if (isFeaturedCheckbox && pointsInput) {
-      isFeaturedCheckbox.addEventListener('change', function() {
-        if (this.checked && (!pointsInput.value || pointsInput.value == "10")) {
-          pointsInput.value = "20";
-        } else if (!this.checked && (!pointsInput.value || pointsInput.value == "20")) {
-          pointsInput.value = "10";
+    const registrationModeInput = document.getElementById('registration_mode');
+    const teamConfigRow = document.getElementById('teamConfigRow');
+    const teamMaxMembersInput = document.getElementById('team_max_members');
+    const teamMaxCountInput = document.getElementById('team_max_count');
+
+    function syncTeamConfigVisibility() {
+      if (!registrationModeInput || !teamConfigRow) {
+        return;
+      }
+
+      const isTeamMode = registrationModeInput.value === 'team';
+      teamConfigRow.classList.toggle('d-none', !isTeamMode);
+
+      if (!isTeamMode) {
+        if (teamMaxMembersInput) {
+          teamMaxMembersInput.value = '1';
         }
-      });
+        if (teamMaxCountInput) {
+          teamMaxCountInput.value = '0';
+        }
+      }
+    }
+
+    if (registrationModeInput) {
+      registrationModeInput.addEventListener('change', syncTeamConfigVisibility);
+      syncTeamConfigVisibility();
     }
     
     // 海报文件上传预览功能
@@ -844,7 +892,9 @@
     const maxParticipantsInput = document.getElementById('max_participants');
     const pointsInputForAI = document.getElementById('points');
     const statusInput = document.getElementById('status');
-    const isFeaturedInput = document.getElementById('is_featured');
+    const registrationModeInputForAI = document.getElementById('registration_mode');
+    const teamMaxMembersInputForAI = document.getElementById('team_max_members');
+    const teamMaxCountInputForAI = document.getElementById('team_max_count');
 
     function toTwoDigits(num) {
       return String(num).padStart(2, '0');
@@ -944,7 +994,12 @@
           if (parsed.max_participants !== '' && maxParticipantsInput) maxParticipantsInput.value = parsed.max_participants;
           if (parsed.points !== '' && pointsInputForAI) pointsInputForAI.value = parsed.points;
           if (parsed.status && statusInput) statusInput.value = parsed.status;
-          if (typeof parsed.is_featured === 'boolean' && isFeaturedInput) isFeaturedInput.checked = parsed.is_featured;
+          if (parsed.registration_mode && registrationModeInputForAI) {
+            registrationModeInputForAI.value = parsed.registration_mode;
+            syncTeamConfigVisibility();
+          }
+          if (parsed.team_max_members !== '' && teamMaxMembersInputForAI) teamMaxMembersInputForAI.value = parsed.team_max_members;
+          if (parsed.team_max_count !== '' && teamMaxCountInputForAI) teamMaxCountInputForAI.value = parsed.team_max_count;
           if (window.showToast) {
             showToast('AI已自动填充表单', 'success');
           }

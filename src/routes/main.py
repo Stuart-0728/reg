@@ -122,7 +122,6 @@ def index():
 
 
 @main_bp.route('/api/home-activities')
-@cache.memoize(timeout=20)
 @limiter.limit('180/minute')
 def home_activities_api():
     """首页活动预告实时接口：每次加载都应获取最新活动。"""
@@ -170,9 +169,11 @@ def home_activities_api():
             })
 
         response = jsonify({'success': True, 'activities': activities})
-        response.headers['Cache-Control'] = 'public, max-age=20, s-maxage=30, stale-while-revalidate=30'
-        response.headers['Surrogate-Control'] = 'max-age=30, stale-while-revalidate=30'
-        response.headers['Vary'] = 'Accept-Encoding'
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+        response.headers['Surrogate-Control'] = 'no-store'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['Vary'] = 'Accept-Encoding, Cookie, Authorization'
         return response
     except Exception as e:
         logger.error(f"首页活动实时接口失败: {e}", exc_info=True)

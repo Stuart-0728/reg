@@ -589,6 +589,8 @@ table tbody td {
     
     .navbar-toggler {
         padding: 0.25rem 0.5rem;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
     }
 }
 

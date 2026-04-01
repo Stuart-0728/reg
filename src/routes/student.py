@@ -1,9 +1,10 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app, abort, session, Response, send_file
 from flask_login import login_required, current_user
-from src.models import db, Activity, Registration, User, StudentInfo, PointsHistory, ActivityReview, Tag, Message, Notification, NotificationRead, Role, Society, ActivityDocument
+from src.models import db, Activity, ActivityTeam, Registration, User, StudentInfo, PointsHistory, ActivityReview, Tag, Message, Notification, NotificationRead, Role, Society, ActivityDocument
 from datetime import datetime, timedelta
 import logging
 import json
+import io
 from functools import wraps
 from src.routes.utils import log_action, random_string
 from sqlalchemy import func, desc, or_, and_, not_
@@ -21,6 +22,7 @@ from flask_wtf.csrf import CSRFProtect
 from src import cache, limiter
 from src.utils.input_safety import sanitize_plain_text
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+import qrcode
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +200,68 @@ def _cached_registered_activity_ids(user_id):
     )
     registered = db.session.execute(reg_stmt).all()
     return [r[0] for r in registered]
+
+
+def _is_team_activity(activity):
+    return bool(activity and (getattr(activity, 'registration_mode', 'individual') or 'individual') == 'team')
+
+
+def _count_activity_registered(activity_id):
+    return db.session.execute(
+        db.select(func.count()).select_from(Registration).filter(
+            Registration.activity_id == activity_id,
+            Registration.status.in_(['registered', 'attended'])
+        )
+    ).scalar() or 0
+
+
+def _count_activity_teams(activity_id):
+    return db.session.execute(
+        db.select(func.count()).select_from(ActivityTeam).filter(
+            ActivityTeam.activity_id == activity_id
+        )
+    ).scalar() or 0
+
+
+def _count_team_members(team_id):
+    return db.session.execute(
+        db.select(func.count()).select_from(Registration).filter(
+            Registration.team_id == team_id,
+            Registration.status.in_(['registered', 'attended'])
+        )
+    ).scalar() or 0
+
+
+def _generate_team_code(activity_id):
+    for _ in range(16):
+        code = f"A{activity_id}{random_string(5).upper()}"
+        exists = db.session.execute(db.select(ActivityTeam.id).filter(ActivityTeam.team_code == code)).scalar_one_or_none()
+        if not exists:
+            return code
+    return f"A{activity_id}{random_string(8).upper()}"
+
+
+def _generate_join_token(activity_id):
+    return f"{activity_id}-{random_string(28)}"
+
+
+def _build_team_join_link(activity_id, join_token):
+    return url_for('student.activity_detail', id=activity_id, join_team=join_token, _external=True)
+
+
+def _find_team_by_code_or_token(activity_id, value):
+    token = (value or '').strip()
+    if not token:
+        return None
+    return db.session.execute(
+        db.select(ActivityTeam).filter(
+            ActivityTeam.activity_id == activity_id,
+            or_(
+                ActivityTeam.team_code == token,
+                ActivityTeam.join_token == token
+            )
+        )
+    ).scalar_one_or_none()
 
 def _ensure_activity_start_reminders(user_id):
     """为学生生成活动开始前提醒：提前1天、3小时、1小时。"""
@@ -649,13 +713,47 @@ def activity_detail(id):
         has_registered = registration is not None and registration.status in ['registered', 'attended']
         has_checked_in = bool(registration and registration.status == 'attended')
         has_successful_participation = bool(registration and registration.status == 'attended')
+        is_team_mode = _is_team_activity(activity)
 
         registered_count = db.session.execute(db.select(func.count()).select_from(Registration).filter_by(activity_id=id, status='registered')).scalar() or 0
         checked_in_count = db.session.execute(db.select(func.count()).select_from(Registration).filter_by(activity_id=id, status='attended')).scalar() or 0
         total_registered = registered_count + checked_in_count
 
+        current_team = None
+        current_team_members = []
+        team_join_link = ''
+        team_join_code = ''
+        if is_team_mode and registration and registration.team_id:
+            current_team = db.session.get(ActivityTeam, registration.team_id)
+            if current_team:
+                team_join_code = current_team.team_code or ''
+                team_join_link = _build_team_join_link(activity.id, current_team.join_token)
+                current_team_members = db.session.execute(
+                    db.select(User.username, StudentInfo.real_name, Registration.status)
+                    .join(Registration, Registration.user_id == User.id)
+                    .outerjoin(StudentInfo, StudentInfo.user_id == User.id)
+                    .filter(
+                        Registration.team_id == current_team.id,
+                        Registration.status.in_(['registered', 'attended'])
+                    )
+                    .order_by(Registration.register_time.asc())
+                ).all()
+
+        team_count = _count_activity_teams(activity.id) if is_team_mode else 0
+        team_max_count = max(0, int(getattr(activity, 'team_max_count', 0) or 0))
+        can_create_team = is_team_mode and (team_max_count == 0 or team_count < team_max_count)
+
         can_register = (
             not has_registered and
+            activity.status == 'active' and
+            (activity.registration_start_time is None or safe_less_than_equal(activity.registration_start_time, now)) and
+            (activity.registration_deadline is None or safe_greater_than(activity.registration_deadline, now)) and
+            (activity.max_participants == 0 or total_registered < activity.max_participants) and
+            ((not is_team_mode) or can_create_team)
+        )
+        can_join_team = (
+            is_team_mode and
+            (not has_registered) and
             activity.status == 'active' and
             (activity.registration_start_time is None or safe_less_than_equal(activity.registration_start_time, now)) and
             (activity.registration_deadline is None or safe_greater_than(activity.registration_deadline, now)) and
@@ -774,6 +872,16 @@ def activity_detail(id):
                               activity_documents=accessible_documents,
                               locked_document_count=locked_document_count,
                               has_successful_participation=has_successful_participation,
+                              is_team_mode=is_team_mode,
+                              current_team=current_team,
+                              current_team_members=current_team_members,
+                              team_join_link=team_join_link,
+                              team_join_code=team_join_code,
+                              team_count=team_count,
+                              team_max_count=team_max_count,
+                              team_max_members=max(1, int(getattr(activity, 'team_max_members', 1) or 1)),
+                              can_join_team=can_join_team,
+                              team_join_token=(request.args.get('join_team', '') or '').strip(),
                               document_category_labels=DOCUMENT_CATEGORY_LABELS)
 
     except Exception as e:
@@ -802,18 +910,15 @@ def register_activity(id):
         if activity.registration_deadline and safe_less_than(activity.registration_deadline, now):
             return jsonify({'success': False, 'message': '该活动已过报名截止时间'})
 
+        payload = request.get_json(silent=True) or {}
         existing_reg = db.session.execute(db.select(Registration).filter_by(user_id=current_user.id, activity_id=id)).scalar_one_or_none()
+        is_team_mode = _is_team_activity(activity)
         if existing_reg:
             if existing_reg.status == 'registered':
                 return jsonify({'success': False, 'message': '您已报名此活动'})
             elif existing_reg.status == 'cancelled':
                 if activity.max_participants > 0:
-                    reg_count = db.session.execute(
-                        db.select(func.count()).select_from(Registration).filter(
-                            Registration.activity_id == id,
-                            Registration.status.in_(['registered', 'attended'])
-                        )
-                    ).scalar() or 0
+                    reg_count = _count_activity_registered(id)
                     if reg_count >= activity.max_participants:
                         return jsonify({'success': False, 'message': '该活动报名人数已满'})
 
@@ -824,21 +929,39 @@ def register_activity(id):
                     _ensure_student_join_society(student_info, activity.society_id)
                 _create_registration_success_notification(current_user.id, activity)
                 db.session.commit()
-                return jsonify({'success': True, 'message': '已成功重新报名活动'})
+                return jsonify({'success': True, 'message': '已成功重新报名活动', 'team_mode': is_team_mode})
 
         if activity.max_participants > 0:
-            reg_count = db.session.execute(
-                db.select(func.count()).select_from(Registration).filter(
-                    Registration.activity_id == id,
-                    Registration.status.in_(['registered', 'attended'])
-                )
-            ).scalar() or 0
+            reg_count = _count_activity_registered(id)
             if reg_count >= activity.max_participants:
                 return jsonify({'success': False, 'message': '该活动报名人数已满'})
+
+        team = None
+        if is_team_mode:
+            team_limit = max(0, int(getattr(activity, 'team_max_count', 0) or 0))
+            current_team_count = _count_activity_teams(id)
+            if team_limit > 0 and current_team_count >= team_limit:
+                return jsonify({'success': False, 'message': '参赛队伍数量已满，请联系队长邀请加入已有队伍'})
+
+            team_name = sanitize_plain_text(payload.get('team_name') or request.form.get('team_name'), max_length=80)
+            if not team_name:
+                fallback_name = (current_user.student_info.real_name if current_user.student_info and current_user.student_info.real_name else current_user.username)
+                team_name = f"{fallback_name}的小队"
+
+            team = ActivityTeam(
+                activity_id=id,
+                leader_user_id=current_user.id,
+                name=team_name,
+                team_code=_generate_team_code(id),
+                join_token=_generate_join_token(id)
+            )
+            db.session.add(team)
+            db.session.flush()
 
         new_registration = Registration(
             user_id=current_user.id,
             activity_id=id,
+            team_id=(team.id if team else None),
             register_time=now,
             status='registered'
         )
@@ -853,7 +976,15 @@ def register_activity(id):
         db.session.commit()
         cache.delete_memoized(_cached_registered_activity_ids, current_user.id)
 
-        return jsonify({'success': True, 'message': '报名成功！'})
+        response_data = {'success': True, 'message': '报名成功！', 'team_mode': is_team_mode}
+        if is_team_mode and team:
+            response_data.update({
+                'team_name': team.name,
+                'team_code': team.team_code,
+                'team_join_link': _build_team_join_link(activity.id, team.join_token),
+                'team_join_token': team.join_token
+            })
+        return jsonify(response_data)
     except IntegrityError:
         db.session.rollback()
         logger.warning(f"并发报名触发唯一约束: user_id={current_user.id}, activity_id={id}")
@@ -883,7 +1014,26 @@ def cancel_registration(id):
         if not registration:
             return jsonify({'success': False, 'message': '未找到有效的报名记录'})
 
-        registration.status = 'cancelled'
+        if _is_team_activity(activity) and registration.team_id:
+            team = db.session.get(ActivityTeam, registration.team_id)
+            active_members = _count_team_members(registration.team_id)
+            if team and team.leader_user_id == current_user.id and active_members > 1:
+                return jsonify({'success': False, 'message': '你是队长，队伍仍有成员，请先让成员退出后再取消报名'})
+
+            registration.status = 'cancelled'
+
+            if team and active_members <= 1:
+                other_regs = db.session.execute(
+                    db.select(Registration).filter(
+                        Registration.team_id == team.id,
+                        Registration.status.in_(['registered', 'attended'])
+                    )
+                ).scalars().all()
+                if not other_regs:
+                    db.session.delete(team)
+        else:
+            registration.status = 'cancelled'
+
         db.session.commit()
         cache.delete_memoized(_cached_registered_activity_ids, current_user.id)
 
@@ -892,6 +1042,129 @@ def cancel_registration(id):
         logger.error(f"Error in cancel registration: {e}")
         db.session.rollback()
         return jsonify({'success': False, 'message': '取消报名过程中发生错误，请稍后再试'})
+
+
+@student_bp.route('/activity/<int:id>/team/join', methods=['POST'])
+@student_required
+def join_activity_team(id):
+    try:
+        activity = db.session.execute(
+            db.select(Activity).where(Activity.id == id).with_for_update()
+        ).scalar_one_or_none()
+        if not activity:
+            return jsonify({'success': False, 'message': '活动不存在'})
+
+        if not _is_team_activity(activity):
+            return jsonify({'success': False, 'message': '该活动不是团队报名模式'})
+
+        if activity.status != 'active':
+            return jsonify({'success': False, 'message': '该活动不在进行中，无法加入队伍'})
+
+        now = get_localized_now()
+        if activity.registration_start_time and safe_greater_than(activity.registration_start_time, now):
+            return jsonify({'success': False, 'message': '报名尚未开始'})
+        if activity.registration_deadline and safe_less_than(activity.registration_deadline, now):
+            return jsonify({'success': False, 'message': '该活动已过报名截止时间'})
+
+        payload = request.get_json(silent=True) or {}
+        team_token = sanitize_plain_text(payload.get('team_token') or request.form.get('team_token'), max_length=80)
+        if not team_token:
+            return jsonify({'success': False, 'message': '请先输入团队码或邀请令牌'})
+
+        team = _find_team_by_code_or_token(id, team_token)
+        if not team:
+            return jsonify({'success': False, 'message': '未找到对应队伍，请检查团队码'})
+
+        existing_reg = db.session.execute(
+            db.select(Registration).filter_by(user_id=current_user.id, activity_id=id)
+        ).scalar_one_or_none()
+        if existing_reg and existing_reg.status in ['registered', 'attended']:
+            return jsonify({'success': False, 'message': '您已报名该活动'})
+
+        team_max_members = max(1, int(getattr(activity, 'team_max_members', 1) or 1))
+        current_members = _count_team_members(team.id)
+        if current_members >= team_max_members:
+            return jsonify({'success': False, 'message': '该队伍人数已满'})
+
+        if activity.max_participants > 0:
+            reg_count = _count_activity_registered(id)
+            if reg_count >= activity.max_participants:
+                return jsonify({'success': False, 'message': '该活动报名人数已满'})
+
+        if existing_reg and existing_reg.status == 'cancelled':
+            existing_reg.status = 'registered'
+            existing_reg.register_time = now
+            existing_reg.team_id = team.id
+        else:
+            db.session.add(Registration(
+                user_id=current_user.id,
+                activity_id=id,
+                team_id=team.id,
+                register_time=now,
+                status='registered'
+            ))
+
+        if activity.society_id and current_user.student_info:
+            _ensure_student_join_society(current_user.student_info, activity.society_id)
+
+        _create_registration_success_notification(current_user.id, activity)
+        db.session.commit()
+        cache.delete_memoized(_cached_registered_activity_ids, current_user.id)
+
+        return jsonify({
+            'success': True,
+            'message': f'已加入队伍：{team.name}',
+            'team_name': team.name,
+            'team_code': team.team_code
+        })
+    except Exception as e:
+        logger.error(f"join_activity_team error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({'success': False, 'message': '加入队伍失败，请稍后重试'})
+
+
+@student_bp.route('/activity/<int:id>/team/join/<string:join_token>')
+@student_required
+def join_activity_team_entry(id, join_token):
+    safe_token = sanitize_plain_text(join_token, max_length=80)
+    if not safe_token:
+        flash('邀请链接无效', 'warning')
+        return redirect(url_for('student.activity_detail', id=id))
+    return redirect(url_for('student.activity_detail', id=id, join_team=safe_token))
+
+
+@student_bp.route('/activity/<int:id>/team/<int:team_id>/qrcode')
+@student_required
+def activity_team_qrcode(id, team_id):
+    try:
+        team = db.session.execute(
+            db.select(ActivityTeam).filter(
+                ActivityTeam.id == team_id,
+                ActivityTeam.activity_id == id
+            )
+        ).scalar_one_or_none()
+        if not team:
+            abort(404)
+
+        is_member = db.session.execute(
+            db.select(Registration.id).filter(
+                Registration.team_id == team.id,
+                Registration.user_id == current_user.id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalar_one_or_none()
+        if not is_member:
+            abort(403)
+
+        join_link = _build_team_join_link(id, team.join_token)
+        qr_img = qrcode.make(join_link)
+        buffer = io.BytesIO()
+        qr_img.save(buffer, format='PNG')
+        buffer.seek(0)
+        return send_file(buffer, mimetype='image/png', as_attachment=False)
+    except Exception as e:
+        logger.error(f"activity_team_qrcode error: {e}", exc_info=True)
+        abort(500)
 
 @student_bp.route('/my_activities')
 @student_required

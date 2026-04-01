@@ -246,6 +246,11 @@
                                 <span class="badge bg-success rounded-pill px-3 py-2 me-2">
                                     <i class="fas fa-check-circle me-1"></i>已报名
                                 </span>
+                                {% if is_team_mode and current_team %}
+                                    <span class="badge bg-light text-dark border rounded-pill px-3 py-2 me-2">
+                                        队伍：{{ current_team.name }}（{{ team_join_code }}）
+                                    </span>
+                                {% endif %}
                                 {% if can_cancel %}
                                     <button id="cancel-btn" type="button" class="btn btn-outline-danger" data-no-loading="true" data-no-global-loading="true">
                                         <i class="fas fa-times-circle me-1"></i>取消报名
@@ -269,7 +274,26 @@
                                                  {% endif %}
                                 {% endif %}
                             {% else %}
-                                {% if can_register %}
+                                {% if is_team_mode %}
+                                    {% if can_register %}
+                                    <div class="input-group input-group-sm" style="max-width: 320px;">
+                                        <span class="input-group-text">队伍名</span>
+                                        <input id="team-name-input" type="text" class="form-control" maxlength="80" placeholder="例如：火箭队">
+                                        <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
+                                            <i class="fas fa-user-plus me-1"></i>创建队伍并报名
+                                        </button>
+                                    </div>
+                                    {% endif %}
+                                    {% if can_join_team %}
+                                    <div class="input-group input-group-sm" style="max-width: 320px;">
+                                        <span class="input-group-text">团队码</span>
+                                        <input id="team-token-input" type="text" class="form-control" maxlength="80" value="{{ team_join_token or '' }}" placeholder="输入团队码/邀请令牌">
+                                        <button id="join-team-btn" type="button" class="btn btn-outline-primary" data-no-loading="true" data-no-global-loading="true">
+                                            <i class="fas fa-sign-in-alt me-1"></i>加入队伍
+                                        </button>
+                                    </div>
+                                    {% endif %}
+                                {% elif can_register %}
                                 <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
                                     <i class="fas fa-user-plus me-1"></i>立即报名
                                 </button>
@@ -298,6 +322,27 @@
                             <i class="fas fa-arrow-left me-1"></i>返回上一页
                         </a>
                     </div>
+
+                    {% if is_team_mode and current_team %}
+                    <div class="card border-0 bg-light mt-3">
+                        <div class="card-body py-3">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                <h6 class="fw-bold mb-0">我的队伍：{{ current_team.name }}</h6>
+                                <span class="badge bg-primary">团队码：{{ team_join_code }}</span>
+                            </div>
+                            <div class="small text-muted mb-2">邀请链接（分享给队友即可加入）：</div>
+                            <div class="input-group input-group-sm mb-2">
+                                <input id="team-join-link" type="text" class="form-control" readonly value="{{ team_join_link }}">
+                                <button id="copy-team-link-btn" type="button" class="btn btn-outline-secondary">复制链接</button>
+                            </div>
+                            <div class="small text-muted">队伍人数：{{ current_team_members|length }} / {{ team_max_members }}</div>
+                            <div class="mt-2">
+                                <img src="{{ url_for('student.activity_team_qrcode', id=activity.id, team_id=current_team.id) }}" alt="队伍邀请二维码" class="img-thumbnail" style="max-width: 180px;">
+                                <div class="small text-muted mt-1">扫码即可打开邀请链接加入队伍</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
 
                     {% if activity.status == 'completed' and registration and registration.status == 'attended' %}
                     <div class="mt-4 d-flex justify-content-end">
@@ -959,6 +1004,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const actionButtons = document.getElementById('action-buttons');
     const csrfToken = "{{ csrf_token() }}";
+    const isTeamMode = {{ 'true' if is_team_mode else 'false' }};
 
     function updateRegistrationCount(delta) {
         const countElements = document.querySelectorAll('.registration-count');
@@ -985,6 +1031,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         button.addEventListener('click', function() {
+            const teamNameInput = document.getElementById('team-name-input');
+            const payload = {};
+            if (isTeamMode) {
+                payload.team_name = (teamNameInput?.value || '').trim();
+            }
+
             const originalText = button.innerHTML;
             button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
             button.disabled = true;
@@ -995,6 +1047,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrfToken
                 },
+                body: JSON.stringify(payload),
                 credentials: 'same-origin'
             })
             .then(response => response.json())
@@ -1019,6 +1072,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     } else {
                         alert(data.message || '报名失败，请稍后再试');
                     }
+                    return;
+                }
+
+                if (data.team_mode) {
+                    if (window.showToast) {
+                        window.showToast(data.message || '团队报名成功', 'success');
+                    }
+                    setTimeout(() => {
+                        location.reload();
+                    }, 450);
                     return;
                 }
 
@@ -1057,6 +1120,61 @@ document.addEventListener('DOMContentLoaded', function() {
                     window.showToast('报名请求失败，请检查网络连接', 'danger');
                 } else {
                     alert('报名请求失败，请检查网络连接');
+                }
+            });
+        });
+    }
+
+    function bindJoinTeamButton(button) {
+        if (!button) {
+            return;
+        }
+        button.addEventListener('click', function() {
+            const teamTokenInput = document.getElementById('team-token-input');
+            const teamToken = (teamTokenInput?.value || '').trim();
+            if (!teamToken) {
+                if (window.showToast) {
+                    window.showToast('请先输入团队码或邀请令牌', 'warning');
+                }
+                return;
+            }
+
+            const originalText = button.innerHTML;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>处理中...';
+            button.disabled = true;
+
+            fetch('{{ url_for("student.join_activity_team", id=activity.id) }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ team_token: teamToken }),
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                    if (window.showToast) {
+                        window.showToast(data.message || '加入队伍失败', 'danger');
+                    }
+                    return;
+                }
+
+                if (window.showToast) {
+                    window.showToast(data.message || '加入队伍成功', 'success');
+                }
+                setTimeout(() => {
+                    location.reload();
+                }, 450);
+            })
+            .catch(() => {
+                button.innerHTML = originalText;
+                button.disabled = false;
+                if (window.showToast) {
+                    window.showToast('加入队伍请求失败，请检查网络连接', 'danger');
                 }
             });
         });
@@ -1131,8 +1249,46 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const copyTeamLinkBtn = document.getElementById('copy-team-link-btn');
+    const teamJoinLinkInput = document.getElementById('team-join-link');
+    if (copyTeamLinkBtn && teamJoinLinkInput) {
+        copyTeamLinkBtn.addEventListener('click', async function() {
+            const value = (teamJoinLinkInput.value || '').trim();
+            if (!value) {
+                return;
+            }
+
+            let copied = false;
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(value);
+                    copied = true;
+                }
+            } catch (_) {}
+
+            if (!copied) {
+                teamJoinLinkInput.select();
+                copied = document.execCommand('copy');
+                window.getSelection()?.removeAllRanges();
+            }
+
+            if (window.showToast) {
+                window.showToast(copied ? '邀请链接已复制' : '复制失败，请手动复制', copied ? 'success' : 'warning');
+            }
+        });
+    }
+
     bindRegisterButton(document.getElementById('register-btn'));
+    bindJoinTeamButton(document.getElementById('join-team-btn'));
     bindCancelButton(document.getElementById('cancel-btn'));
+
+    const autoJoinToken = (document.getElementById('team-token-input')?.value || '').trim();
+    const autoJoinButton = document.getElementById('join-team-btn');
+    if (autoJoinToken && autoJoinButton && !autoJoinButton.disabled) {
+        setTimeout(() => {
+            autoJoinButton.click();
+        }, 320);
+    }
 });
 </script>
 {% endblock %}
