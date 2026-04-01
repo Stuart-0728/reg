@@ -1089,22 +1089,33 @@ def cancel_registration(id):
 
         if _is_team_activity(activity) and registration.team_id:
             team = db.session.get(ActivityTeam, registration.team_id)
-            active_members = _count_team_members(registration.team_id)
-            if team and team.leader_user_id == current_user.id and active_members > 1:
-                return jsonify({'success': False, 'message': '你是队长，队伍仍有成员，请先让成员退出后再取消报名'})
-
-            registration.status = 'cancelled'
-
-            if team and active_members <= 1:
-                other_regs = db.session.execute(
+            active_regs = []
+            if team:
+                active_regs = db.session.execute(
                     db.select(Registration).filter(
                         Registration.team_id == team.id,
                         Registration.status.in_(['registered', 'attended'])
                     )
                 ).scalars().all()
-                if not other_regs:
+
+            registration.status = 'cancelled'
+            registration.team_id = None
+
+            if team:
+                remaining_regs = [
+                    reg for reg in active_regs
+                    if reg.user_id != current_user.id and reg.status in ['registered', 'attended']
+                ]
+
+                if team.leader_user_id == current_user.id:
+                    # 队长退出时自动转移给最早报名的现有成员；若无人则解散队伍。
+                    if remaining_regs:
+                        remaining_regs.sort(key=lambda reg: (reg.register_time or datetime.min, reg.id or 0))
+                        team.leader_user_id = remaining_regs[0].user_id
+                    else:
+                        db.session.delete(team)
+                elif not remaining_regs:
                     db.session.delete(team)
-                    registration.team_id = None
         else:
             registration.status = 'cancelled'
 
