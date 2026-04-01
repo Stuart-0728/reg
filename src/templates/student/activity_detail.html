@@ -340,6 +340,88 @@
                                 <img src="{{ url_for('student.activity_team_qrcode', id=activity.id, team_id=current_team.id) }}" alt="队伍邀请二维码" class="img-thumbnail" style="max-width: 180px;">
                                 <div class="small text-muted mt-1">扫码即可打开邀请链接加入队伍</div>
                             </div>
+
+                            {% if is_current_team_leader %}
+                            <hr class="my-3">
+                            <h6 class="fw-bold mb-2">队长管理</h6>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <form method="post" action="{{ url_for('student.rename_my_team', id=activity.id, team_id=current_team.id) }}" data-no-loading>
+                                        {{ form.hidden_tag() }}
+                                        <label class="form-label small mb-1">队伍名称</label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" name="team_name" class="form-control" value="{{ current_team.name }}" maxlength="80" required>
+                                            <button type="submit" class="btn btn-outline-primary">保存</button>
+                                        </div>
+                                    </form>
+                                </div>
+                                <div class="col-md-6">
+                                    <form method="post" action="{{ url_for('student.transfer_my_team_leader', id=activity.id, team_id=current_team.id) }}" data-no-loading>
+                                        {{ form.hidden_tag() }}
+                                        <label class="form-label small mb-1">转移队长</label>
+                                        <div class="input-group input-group-sm">
+                                            <select name="leader_registration_id" class="form-select" required>
+                                                {% for member in current_team_members %}
+                                                <option value="{{ member.registration_id }}" {% if member.user_id == current_team.leader_user_id %}selected{% endif %}>
+                                                    {{ member.real_name or member.username }}{% if member.student_id %}（{{ member.student_id }}）{% endif %}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="btn btn-outline-warning">转移</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive mt-3">
+                                <table class="table table-sm align-middle mb-2">
+                                    <thead>
+                                        <tr>
+                                            <th>成员</th>
+                                            <th>学号</th>
+                                            <th>状态</th>
+                                            <th class="text-end">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for member in current_team_members %}
+                                        <tr>
+                                            <td>
+                                                {{ member.real_name or member.username }}
+                                                {% if member.user_id == current_team.leader_user_id %}
+                                                <span class="badge bg-warning text-dark ms-1">队长</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ member.student_id or '-' }}</td>
+                                            <td>
+                                                {% if member.status == 'attended' %}
+                                                <span class="badge bg-success">已参加</span>
+                                                {% else %}
+                                                <span class="badge bg-light text-dark border">已报名</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-end">
+                                                {% if member.user_id != current_team.leader_user_id %}
+                                                <form method="post" action="{{ url_for('student.remove_my_team_member', id=activity.id, team_id=current_team.id) }}" class="d-inline js-remove-member-form" data-no-loading>
+                                                    {{ form.hidden_tag() }}
+                                                    <input type="hidden" name="registration_id" value="{{ member.registration_id }}">
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm">移出并取消报名</button>
+                                                </form>
+                                                {% else %}
+                                                <span class="text-muted small">-</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <form method="post" action="{{ url_for('student.disband_my_team', id=activity.id, team_id=current_team.id) }}" class="js-disband-team-form" data-no-loading>
+                                {{ form.hidden_tag() }}
+                                <button type="submit" class="btn btn-outline-danger btn-sm">解散队伍（全队取消报名）</button>
+                            </form>
+                            {% endif %}
                         </div>
                     </div>
                     {% endif %}
@@ -1281,6 +1363,23 @@ document.addEventListener('DOMContentLoaded', function() {
     bindRegisterButton(document.getElementById('register-btn'));
     bindJoinTeamButton(document.getElementById('join-team-btn'));
     bindCancelButton(document.getElementById('cancel-btn'));
+
+    document.querySelectorAll('.js-remove-member-form').forEach((formEl) => {
+        formEl.addEventListener('submit', function(e) {
+            if (!confirm('确认将该成员移出队伍并取消其本次报名吗？')) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    const disbandTeamForm = document.querySelector('.js-disband-team-form');
+    if (disbandTeamForm) {
+        disbandTeamForm.addEventListener('submit', function(e) {
+            if (!confirm('确认解散队伍吗？该队全部成员将被取消报名。')) {
+                e.preventDefault();
+            }
+        });
+    }
 
     const autoJoinToken = (document.getElementById('team-token-input')?.value || '').trim();
     const autoJoinButton = document.getElementById('join-team-btn');

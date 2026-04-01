@@ -1044,6 +1044,22 @@
       return text;
     }
 
+    function fillIfEmpty(inputEl, value, transformer = null) {
+      if (!inputEl) {
+        return false;
+      }
+      const incoming = (value === undefined || value === null) ? '' : String(value).trim();
+      if (!incoming) {
+        return false;
+      }
+      const current = String(inputEl.value || '').trim();
+      if (current) {
+        return false;
+      }
+      inputEl.value = transformer ? transformer(incoming) : incoming;
+      return true;
+    }
+
     if (aiGenerateDescBtn && titleInput && descriptionInput) {
       aiGenerateDescBtn.addEventListener('click', async function() {
         const title = (titleInput.value || '').trim();
@@ -1087,25 +1103,27 @@
             data = await pollParseJob(task.job_id);
           }
           const parsed = data.data || {};
-          if (parsed.title && titleInput) titleInput.value = parsed.title;
-          if (parsed.description && descriptionInput) descriptionInput.value = parsed.description;
-          if (parsed.location && locationInput) locationInput.value = parsed.location;
-          if (parsed.start_time && startTimeInput) startTimeInput.value = normalizeAIFormDateTime(parsed.start_time);
-          if (parsed.end_time && endTimeInput) endTimeInput.value = normalizeAIFormDateTime(parsed.end_time);
-          if (parsed.registration_start_time && regStartInput) regStartInput.value = normalizeAIFormDateTime(parsed.registration_start_time);
-          if (parsed.registration_deadline && regDeadlineInput) regDeadlineInput.value = normalizeAIFormDateTime(parsed.registration_deadline);
-          if (parsed.max_participants !== '' && maxParticipantsInput) maxParticipantsInput.value = parsed.max_participants;
-          if (parsed.points !== '' && pointsInputForAI) pointsInputForAI.value = parsed.points;
-          if (parsed.status && statusInput) statusInput.value = parsed.status;
-          if (parsed.registration_mode && registrationModeInputForAI) {
-            registrationModeInputForAI.value = parsed.registration_mode;
+          let filledCount = 0;
+
+          if (fillIfEmpty(titleInput, parsed.title)) filledCount += 1;
+          if (fillIfEmpty(descriptionInput, parsed.description)) filledCount += 1;
+          if (fillIfEmpty(locationInput, parsed.location)) filledCount += 1;
+          if (fillIfEmpty(startTimeInput, parsed.start_time, normalizeAIFormDateTime)) filledCount += 1;
+          if (fillIfEmpty(endTimeInput, parsed.end_time, normalizeAIFormDateTime)) filledCount += 1;
+          if (fillIfEmpty(regStartInput, parsed.registration_start_time, normalizeAIFormDateTime)) filledCount += 1;
+          if (fillIfEmpty(regDeadlineInput, parsed.registration_deadline, normalizeAIFormDateTime)) filledCount += 1;
+          if (parsed.max_participants !== '' && fillIfEmpty(maxParticipantsInput, parsed.max_participants)) filledCount += 1;
+          if (parsed.points !== '' && fillIfEmpty(pointsInputForAI, parsed.points)) filledCount += 1;
+          if (fillIfEmpty(statusInput, parsed.status)) filledCount += 1;
+          if (fillIfEmpty(registrationModeInputForAI, parsed.registration_mode)) {
             syncTeamConfigVisibility();
+            filledCount += 1;
           }
-          if (parsed.team_max_members !== '' && teamMaxMembersInputForAI) teamMaxMembersInputForAI.value = parsed.team_max_members;
-          if (parsed.team_max_count !== '' && teamMaxCountInputForAI) teamMaxCountInputForAI.value = parsed.team_max_count;
+          if (parsed.team_max_members !== '' && fillIfEmpty(teamMaxMembersInputForAI, parsed.team_max_members)) filledCount += 1;
+          if (parsed.team_max_count !== '' && fillIfEmpty(teamMaxCountInputForAI, parsed.team_max_count)) filledCount += 1;
           autoCompleteTeamCapacity('ai_parse');
           if (window.showToast) {
-            showToast('AI已自动填充表单', 'success');
+            showToast(filledCount > 0 ? `AI已填充 ${filledCount} 项（不会覆盖已填写内容）` : '未填充新字段（已填写内容不会被覆盖）', 'success');
           }
         } catch (error) {
           alert(error.message || 'AI解析失败');

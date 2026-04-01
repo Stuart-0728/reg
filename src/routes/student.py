@@ -723,13 +723,23 @@ def activity_detail(id):
         current_team_members = []
         team_join_link = ''
         team_join_code = ''
+        is_current_team_leader = False
         if is_team_mode and registration and registration.team_id:
             current_team = db.session.get(ActivityTeam, registration.team_id)
             if current_team:
+                is_current_team_leader = (current_team.leader_user_id == current_user.id)
                 team_join_code = current_team.team_code or ''
                 team_join_link = _build_team_join_link(activity.id, current_team.join_token)
                 current_team_members = db.session.execute(
-                    db.select(User.username, StudentInfo.real_name, Registration.status)
+                    db.select(
+                        Registration.id.label('registration_id'),
+                        Registration.user_id,
+                        User.username,
+                        StudentInfo.real_name,
+                        StudentInfo.student_id,
+                        Registration.status,
+                        Registration.register_time
+                    )
                     .join(Registration, Registration.user_id == User.id)
                     .outerjoin(StudentInfo, StudentInfo.user_id == User.id)
                     .filter(
@@ -875,6 +885,7 @@ def activity_detail(id):
                               is_team_mode=is_team_mode,
                               current_team=current_team,
                               current_team_members=current_team_members,
+                              is_current_team_leader=is_current_team_leader,
                               team_join_link=team_join_link,
                               team_join_code=team_join_code,
                               team_count=team_count,
@@ -1165,6 +1176,210 @@ def activity_team_qrcode(id, team_id):
     except Exception as e:
         logger.error(f"activity_team_qrcode error: {e}", exc_info=True)
         abort(500)
+
+
+@student_bp.route('/activity/<int:id>/team/<int:team_id>/rename', methods=['POST'])
+@student_required
+def rename_my_team(id, team_id):
+    try:
+        activity = db.get_or_404(Activity, id)
+        team = db.session.execute(
+            db.select(ActivityTeam).filter(
+                ActivityTeam.id == team_id,
+                ActivityTeam.activity_id == id
+            )
+        ).scalar_one_or_none()
+        if not team:
+            flash('队伍不存在', 'warning')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        leader_registration = db.session.execute(
+            db.select(Registration).filter(
+                Registration.activity_id == id,
+                Registration.team_id == team_id,
+                Registration.user_id == current_user.id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalar_one_or_none()
+        if not leader_registration or team.leader_user_id != current_user.id:
+            flash('仅队长可管理队伍', 'danger')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        new_name = sanitize_plain_text(request.form.get('team_name', ''), max_length=80)
+        if not new_name:
+            flash('队伍名称不能为空', 'warning')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        team.name = new_name
+        db.session.commit()
+        flash('队伍名称已更新', 'success')
+        return redirect(url_for('student.activity_detail', id=id))
+    except Exception as e:
+        logger.error(f"rename_my_team error: {e}", exc_info=True)
+        db.session.rollback()
+        flash('更新队伍名称失败，请稍后重试', 'danger')
+        return redirect(url_for('student.activity_detail', id=id))
+
+
+@student_bp.route('/activity/<int:id>/team/<int:team_id>/transfer_leader', methods=['POST'])
+@student_required
+def transfer_my_team_leader(id, team_id):
+    try:
+        team = db.session.execute(
+            db.select(ActivityTeam).filter(
+                ActivityTeam.id == team_id,
+                ActivityTeam.activity_id == id
+            )
+        ).scalar_one_or_none()
+        if not team:
+            flash('队伍不存在', 'warning')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        leader_registration = db.session.execute(
+            db.select(Registration).filter(
+                Registration.activity_id == id,
+                Registration.team_id == team_id,
+                Registration.user_id == current_user.id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalar_one_or_none()
+        if not leader_registration or team.leader_user_id != current_user.id:
+            flash('仅队长可转移队长权限', 'danger')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        new_leader_registration_id = request.form.get('leader_registration_id', type=int)
+        target_registration = db.session.execute(
+            db.select(Registration).filter(
+                Registration.id == new_leader_registration_id,
+                Registration.activity_id == id,
+                Registration.team_id == team_id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalar_one_or_none()
+        if not target_registration:
+            flash('新队长必须是当前队伍有效成员', 'warning')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        team.leader_user_id = target_registration.user_id
+        db.session.commit()
+        flash('队长已转移', 'success')
+        return redirect(url_for('student.activity_detail', id=id))
+    except Exception as e:
+        logger.error(f"transfer_my_team_leader error: {e}", exc_info=True)
+        db.session.rollback()
+        flash('转移队长失败，请稍后重试', 'danger')
+        return redirect(url_for('student.activity_detail', id=id))
+
+
+@student_bp.route('/activity/<int:id>/team/<int:team_id>/remove_member', methods=['POST'])
+@student_required
+def remove_my_team_member(id, team_id):
+    try:
+        team = db.session.execute(
+            db.select(ActivityTeam).filter(
+                ActivityTeam.id == team_id,
+                ActivityTeam.activity_id == id
+            )
+        ).scalar_one_or_none()
+        if not team:
+            flash('队伍不存在', 'warning')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        leader_registration = db.session.execute(
+            db.select(Registration).filter(
+                Registration.activity_id == id,
+                Registration.team_id == team_id,
+                Registration.user_id == current_user.id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalar_one_or_none()
+        if not leader_registration or team.leader_user_id != current_user.id:
+            flash('仅队长可移除队员', 'danger')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        registration_id = request.form.get('registration_id', type=int)
+        target_registration = db.session.execute(
+            db.select(Registration).filter(
+                Registration.id == registration_id,
+                Registration.activity_id == id,
+                Registration.team_id == team_id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalar_one_or_none()
+        if not target_registration:
+            flash('队员不存在或状态无效', 'warning')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        if target_registration.user_id == current_user.id:
+            flash('不能移除自己，如需退出请使用取消报名', 'warning')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        target_registration.status = 'cancelled'
+        target_registration.team_id = None
+        db.session.commit()
+        cache.delete_memoized(_cached_registered_activity_ids, target_registration.user_id)
+        flash('已将队员移出队伍并取消其本次报名', 'success')
+        return redirect(url_for('student.activity_detail', id=id))
+    except Exception as e:
+        logger.error(f"remove_my_team_member error: {e}", exc_info=True)
+        db.session.rollback()
+        flash('移除队员失败，请稍后重试', 'danger')
+        return redirect(url_for('student.activity_detail', id=id))
+
+
+@student_bp.route('/activity/<int:id>/team/<int:team_id>/disband', methods=['POST'])
+@student_required
+def disband_my_team(id, team_id):
+    try:
+        team = db.session.execute(
+            db.select(ActivityTeam).filter(
+                ActivityTeam.id == team_id,
+                ActivityTeam.activity_id == id
+            )
+        ).scalar_one_or_none()
+        if not team:
+            flash('队伍不存在', 'warning')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        leader_registration = db.session.execute(
+            db.select(Registration).filter(
+                Registration.activity_id == id,
+                Registration.team_id == team_id,
+                Registration.user_id == current_user.id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalar_one_or_none()
+        if not leader_registration or team.leader_user_id != current_user.id:
+            flash('仅队长可解散队伍', 'danger')
+            return redirect(url_for('student.activity_detail', id=id))
+
+        team_regs = db.session.execute(
+            db.select(Registration).filter(
+                Registration.activity_id == id,
+                Registration.team_id == team_id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalars().all()
+
+        affected_user_ids = []
+        for reg in team_regs:
+            reg.status = 'cancelled'
+            reg.team_id = None
+            affected_user_ids.append(reg.user_id)
+
+        db.session.delete(team)
+        db.session.commit()
+
+        for uid in affected_user_ids:
+            cache.delete_memoized(_cached_registered_activity_ids, uid)
+
+        flash('队伍已解散，所有队员报名已取消', 'success')
+        return redirect(url_for('student.activity_detail', id=id))
+    except Exception as e:
+        logger.error(f"disband_my_team error: {e}", exc_info=True)
+        db.session.rollback()
+        flash('解散队伍失败，请稍后重试', 'danger')
+        return redirect(url_for('student.activity_detail', id=id))
 
 @student_bp.route('/my_activities')
 @student_required
