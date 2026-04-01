@@ -89,7 +89,7 @@
             </ul>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive has-sticky-action" style="overflow-x: auto; overflow-y: visible;">
+            <div class="table-responsive has-sticky-action" style="overflow-x: auto; overflow-y: hidden;">
                 <table class="table table-hover align-middle mb-0 table-cell-scroll table-has-sticky-action activities-table">
                     <colgroup>
                         <col style="width: 320px;">
@@ -636,15 +636,16 @@ async function shareActivityFromAdminList(downloadUrl, shareLink, evt) {
 }
 
 .activities-card,
-.activities-card .card-body,
-.activities-card .table-responsive {
-    overflow: visible !important;
+.activities-card .card-body {
+    overflow: hidden;
 }
 
 .activities-card .table-responsive {
     position: relative;
     z-index: 1;
     max-width: 100%;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
 }
 
 .activities-card .table-has-sticky-action {
