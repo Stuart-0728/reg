@@ -666,6 +666,14 @@ def _normalize_activity_ai_payload(payload):
     if not isinstance(payload, dict):
         return {}
 
+    raw_mode = str(payload.get('registration_mode', '') or '').strip().lower()
+    if raw_mode in ('team', 'teams', 'group', 'grouped', '团队', '组队', '团队报名', '小组'):
+        normalized_mode = 'team'
+    elif raw_mode in ('individual', 'single', 'solo', '个人', '个人报名', '单人'):
+        normalized_mode = 'individual'
+    else:
+        normalized_mode = ''
+
     normalized = {
         'title': str(payload.get('title', '') or '').strip(),
         'description': str(payload.get('description', '') or '').strip(),
@@ -677,10 +685,13 @@ def _normalize_activity_ai_payload(payload):
         'max_participants': payload.get('max_participants', ''),
         'points': payload.get('points', ''),
         'status': str(payload.get('status', '') or '').strip(),
-        'is_featured': bool(payload.get('is_featured', False))
+        'is_featured': bool(payload.get('is_featured', False)),
+        'registration_mode': normalized_mode,
+        'team_max_members': payload.get('team_max_members', ''),
+        'team_max_count': payload.get('team_max_count', '')
     }
 
-    for int_key in ('max_participants', 'points'):
+    for int_key in ('max_participants', 'points', 'team_max_members', 'team_max_count'):
         value = normalized[int_key]
         if value in ('', None):
             normalized[int_key] = ''
@@ -689,6 +700,11 @@ def _normalize_activity_ai_payload(payload):
             normalized[int_key] = int(value)
         except Exception:
             normalized[int_key] = ''
+
+    if normalized['team_max_members'] != '':
+        normalized['team_max_members'] = max(1, int(normalized['team_max_members']))
+    if normalized['team_max_count'] != '':
+        normalized['team_max_count'] = max(0, int(normalized['team_max_count']))
 
     if normalized['status'] not in ('active', 'completed', 'cancelled'):
         normalized['status'] = 'active'
@@ -1181,14 +1197,22 @@ def _cleanup_expired_parse_jobs(app):
 
 def _parse_activity_content_with_ai(raw_content):
     system_prompt = "你是活动表单解析助手，必须输出严格JSON。"
+    now_beijing = get_beijing_time()
+    weekday_map = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+    weekday_text = weekday_map[now_beijing.weekday()]
+    now_text = now_beijing.strftime('%Y-%m-%d %H:%M')
     user_prompt = (
         "请从下面文本提取活动表单字段，并仅输出JSON对象，不要其他文字。\n"
-        "字段: title, description, location, start_time, end_time, registration_start_time, registration_deadline, max_participants, points, status, is_featured\n"
+        "字段: title, description, location, start_time, end_time, registration_start_time, registration_deadline, max_participants, points, status, is_featured, registration_mode, team_max_members, team_max_count\n"
         "规则:\n"
         "1) 时间格式必须是 YYYY-MM-DD HH:MM，无法确定填空字符串\n"
         "2) status 仅可为 active/completed/cancelled，默认active\n"
         "3) max_participants/points 返回数字；未知返回空字符串\n"
         "4) is_featured 返回布尔值\n"
+        "5) registration_mode 仅可为 individual 或 team\n"
+        "6) 团队报名信息出现时提取 team_max_members 和 team_max_count（数字）\n"
+        "7) 允许解析相对时间表达（例如 今天/明天/后天/本周四/下周一/今晚）\n"
+        f"当前北京时间: {now_text} {weekday_text}（解析相对时间时请严格基于此时间）\n"
         f"\n原始文本:\n{raw_content}"
     )
     parsed_text = _call_ark_chat_completion(
@@ -3649,6 +3673,82 @@ def activity_registrations(id):
             StudentInfo.phone,
             StudentInfo.points
         ).all()
+
+        team_rows = db.session.execute(
+            db.select(
+                ActivityTeam.id,
+                ActivityTeam.name,
+                ActivityTeam.team_code,
+                ActivityTeam.join_token,
+                ActivityTeam.leader_user_id,
+                ActivityTeam.created_at,
+                func.count(Registration.id).label('member_count'),
+                User.username.label('leader_username'),
+                StudentInfo.real_name.label('leader_real_name')
+            )
+            .filter(ActivityTeam.activity_id == id)
+            .outerjoin(
+                Registration,
+                and_(
+                    Registration.team_id == ActivityTeam.id,
+                    Registration.status.in_(['registered', 'attended'])
+                )
+            )
+            .outerjoin(User, User.id == ActivityTeam.leader_user_id)
+            .outerjoin(StudentInfo, StudentInfo.user_id == ActivityTeam.leader_user_id)
+            .group_by(
+                ActivityTeam.id,
+                ActivityTeam.name,
+                ActivityTeam.team_code,
+                ActivityTeam.join_token,
+                ActivityTeam.leader_user_id,
+                ActivityTeam.created_at,
+                User.username,
+                StudentInfo.real_name
+            )
+            .order_by(ActivityTeam.created_at.asc())
+        ).all()
+
+        team_ids = [row.id for row in team_rows]
+        team_members_map = {team_id: [] for team_id in team_ids}
+        if team_ids:
+            member_rows = db.session.execute(
+                db.select(
+                    Registration.id.label('registration_id'),
+                    Registration.team_id,
+                    Registration.user_id,
+                    Registration.status,
+                    Registration.register_time,
+                    StudentInfo.real_name,
+                    StudentInfo.student_id,
+                    User.username
+                )
+                .join(User, Registration.user_id == User.id)
+                .join(StudentInfo, StudentInfo.user_id == User.id)
+                .filter(
+                    Registration.activity_id == id,
+                    Registration.team_id.in_(team_ids),
+                    Registration.status.in_(['registered', 'attended'])
+                )
+                .order_by(Registration.register_time.asc())
+            ).all()
+            for member in member_rows:
+                team_members_map.setdefault(member.team_id, []).append(member)
+
+        team_cards = []
+        for row in team_rows:
+            members = team_members_map.get(row.id, [])
+            team_cards.append({
+                'id': row.id,
+                'name': row.name,
+                'team_code': row.team_code,
+                'join_token': row.join_token,
+                'leader_user_id': row.leader_user_id,
+                'leader_name': row.leader_real_name or row.leader_username or f'用户{row.leader_user_id}',
+                'member_count': int(row.member_count or 0),
+                'created_at': row.created_at,
+                'members': members,
+            })
         
         # 统计报名状态
         registered_count = db.session.execute(db.select(func.count()).select_from(Registration).filter_by(activity_id=id, status='registered')).scalar()
@@ -3665,6 +3765,7 @@ def activity_registrations(id):
         return render_template('admin/activity_registrations.html',
                               activity=activity,
                               registrations=registrations,
+                              team_cards=team_cards,
                               registered_count=registered_count,
                               cancelled_count=cancelled_count,
                               attended_count=attended_count,
@@ -3762,6 +3863,166 @@ def export_activity_registrations(id):
         logger.error(f"Error exporting activity registrations: {e}")
         flash('导出报名信息时出错', 'danger')
         return redirect(url_for('admin.activity_registrations', id=id))
+
+
+@admin_bp.route('/activity/<int:activity_id>/team/<int:team_id>/rename', methods=['POST'])
+@admin_required
+def rename_activity_team(activity_id, team_id):
+    activity = db.get_or_404(Activity, activity_id)
+    if not _scope_guard_activity(activity):
+        flash('您只能管理所属社团活动队伍', 'danger')
+        return redirect(url_for('admin.activities'))
+
+    team = db.session.execute(
+        db.select(ActivityTeam).filter(
+            ActivityTeam.id == team_id,
+            ActivityTeam.activity_id == activity_id
+        )
+    ).scalar_one_or_none()
+    if not team:
+        flash('队伍不存在', 'warning')
+        return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+    new_name = sanitize_plain_text(request.form.get('team_name', ''), max_length=120)
+    if not new_name:
+        flash('队伍名称不能为空', 'warning')
+        return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+    team.name = new_name
+    db.session.commit()
+    log_action('rename_activity_team', f'活动{activity_id} 队伍{team_id}重命名为 {new_name}')
+    flash('队伍名称已更新', 'success')
+    return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+
+@admin_bp.route('/activity/<int:activity_id>/team/<int:team_id>/transfer_leader', methods=['POST'])
+@admin_required
+def transfer_activity_team_leader(activity_id, team_id):
+    activity = db.get_or_404(Activity, activity_id)
+    if not _scope_guard_activity(activity):
+        flash('您只能管理所属社团活动队伍', 'danger')
+        return redirect(url_for('admin.activities'))
+
+    team = db.session.execute(
+        db.select(ActivityTeam).filter(
+            ActivityTeam.id == team_id,
+            ActivityTeam.activity_id == activity_id
+        )
+    ).scalar_one_or_none()
+    if not team:
+        flash('队伍不存在', 'warning')
+        return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+    target_registration_id = request.form.get('leader_registration_id', type=int)
+    if not target_registration_id:
+        flash('请选择新队长', 'warning')
+        return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+    target_registration = db.session.execute(
+        db.select(Registration).filter(
+            Registration.id == target_registration_id,
+            Registration.activity_id == activity_id,
+            Registration.team_id == team_id,
+            Registration.status.in_(['registered', 'attended'])
+        )
+    ).scalar_one_or_none()
+
+    if not target_registration:
+        flash('新队长必须是该队当前有效成员', 'warning')
+        return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+    team.leader_user_id = target_registration.user_id
+    db.session.commit()
+    log_action('transfer_activity_team_leader', f'活动{activity_id} 队伍{team_id}转移队长为用户{target_registration.user_id}')
+    flash('队长已转移', 'success')
+    return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+
+@admin_bp.route('/activity/<int:activity_id>/team/<int:team_id>/remove_member', methods=['POST'])
+@admin_required
+def remove_activity_team_member(activity_id, team_id):
+    activity = db.get_or_404(Activity, activity_id)
+    if not _scope_guard_activity(activity):
+        flash('您只能管理所属社团活动队伍', 'danger')
+        return redirect(url_for('admin.activities'))
+
+    team = db.session.execute(
+        db.select(ActivityTeam).filter(
+            ActivityTeam.id == team_id,
+            ActivityTeam.activity_id == activity_id
+        )
+    ).scalar_one_or_none()
+    if not team:
+        flash('队伍不存在', 'warning')
+        return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+    registration_id = request.form.get('registration_id', type=int)
+    member_registration = db.session.execute(
+        db.select(Registration).filter(
+            Registration.id == registration_id,
+            Registration.activity_id == activity_id,
+            Registration.team_id == team_id,
+            Registration.status.in_(['registered', 'attended'])
+        )
+    ).scalar_one_or_none()
+    if not member_registration:
+        flash('成员不存在或状态无效', 'warning')
+        return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+    if member_registration.user_id == team.leader_user_id:
+        next_leader = db.session.execute(
+            db.select(Registration).filter(
+                Registration.activity_id == activity_id,
+                Registration.team_id == team_id,
+                Registration.status.in_(['registered', 'attended']),
+                Registration.user_id != team.leader_user_id
+            ).order_by(Registration.register_time.asc())
+        ).scalar_one_or_none()
+        if not next_leader:
+            flash('该队仅剩队长本人，请直接解散队伍', 'warning')
+            return redirect(url_for('admin.activity_registrations', id=activity_id))
+        team.leader_user_id = next_leader.user_id
+
+    member_registration.team_id = None
+    db.session.commit()
+    log_action('remove_activity_team_member', f'活动{activity_id} 从队伍{team_id}移除报名{registration_id}')
+    flash('已移除成员，成员仍保留活动报名状态', 'success')
+    return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+
+@admin_bp.route('/activity/<int:activity_id>/team/<int:team_id>/disband', methods=['POST'])
+@admin_required
+def disband_activity_team(activity_id, team_id):
+    activity = db.get_or_404(Activity, activity_id)
+    if not _scope_guard_activity(activity):
+        flash('您只能管理所属社团活动队伍', 'danger')
+        return redirect(url_for('admin.activities'))
+
+    team = db.session.execute(
+        db.select(ActivityTeam).filter(
+            ActivityTeam.id == team_id,
+            ActivityTeam.activity_id == activity_id
+        )
+    ).scalar_one_or_none()
+    if not team:
+        flash('队伍不存在', 'warning')
+        return redirect(url_for('admin.activity_registrations', id=activity_id))
+
+    member_regs = db.session.execute(
+        db.select(Registration).filter(
+            Registration.activity_id == activity_id,
+            Registration.team_id == team_id
+        )
+    ).scalars().all()
+
+    for reg in member_regs:
+        reg.team_id = None
+
+    db.session.delete(team)
+    db.session.commit()
+    log_action('disband_activity_team', f'活动{activity_id} 解散队伍{team_id}，成员转为无队伍报名')
+    flash('队伍已解散，队员报名记录已保留', 'success')
+    return redirect(url_for('admin.activity_registrations', id=activity_id))
 
 @admin_bp.route('/students/export_excel')
 @admin_required

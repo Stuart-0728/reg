@@ -68,7 +68,7 @@
               <label class="form-label fw-medium">AI智能填表</label>
               <textarea class="form-control" id="aiRawContent" rows="4" placeholder="可粘贴通知文案/活动策划文本，AI将尝试自动填充标题、地点、时间、人数、积分等字段"></textarea>
               <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
-                <small class="text-muted">建议粘贴包含时间、地点、人数等信息的完整文本，自动填表更准确。</small>
+                <small class="text-muted">支持相对时间表达（如 本周四/下周一/今晚），系统会按当前北京时间辅助AI解析。</small>
                 <button type="button" class="btn btn-outline-primary btn-sm" id="aiParseContentBtn">
                   <i class="fas fa-file-import me-1"></i>AI自动填充表格
                 </button>
@@ -1103,6 +1103,7 @@
           }
           if (parsed.team_max_members !== '' && teamMaxMembersInputForAI) teamMaxMembersInputForAI.value = parsed.team_max_members;
           if (parsed.team_max_count !== '' && teamMaxCountInputForAI) teamMaxCountInputForAI.value = parsed.team_max_count;
+          autoCompleteTeamCapacity('ai_parse');
           if (window.showToast) {
             showToast('AI已自动填充表单', 'success');
           }
