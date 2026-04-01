@@ -276,22 +276,14 @@
                             {% else %}
                                 {% if is_team_mode %}
                                     {% if can_register %}
-                                    <div class="input-group input-group-sm" style="max-width: 320px;">
-                                        <span class="input-group-text">队伍名</span>
-                                        <input id="team-name-input" type="text" class="form-control" maxlength="80" placeholder="例如：火箭队">
-                                        <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
-                                            <i class="fas fa-user-plus me-1"></i>创建队伍并报名
-                                        </button>
-                                    </div>
+                                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTeamModal" data-no-loading="true" data-no-global-loading="true">
+                                        <i class="fas fa-user-plus me-1"></i>创建队伍并报名
+                                    </button>
                                     {% endif %}
                                     {% if can_join_team %}
-                                    <div class="input-group input-group-sm" style="max-width: 320px;">
-                                        <span class="input-group-text">团队码</span>
-                                        <input id="team-token-input" type="text" class="form-control" maxlength="80" value="{{ team_join_token or '' }}" placeholder="输入团队码/邀请令牌">
-                                        <button id="join-team-btn" type="button" class="btn btn-outline-primary" data-no-loading="true" data-no-global-loading="true">
-                                            <i class="fas fa-sign-in-alt me-1"></i>加入队伍
-                                        </button>
-                                    </div>
+                                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#joinTeamModal" data-no-loading="true" data-no-global-loading="true">
+                                        <i class="fas fa-sign-in-alt me-1"></i>加入队伍
+                                    </button>
                                     {% endif %}
                                 {% elif can_register %}
                                 <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
@@ -322,6 +314,56 @@
                             <i class="fas fa-arrow-left me-1"></i>返回上一页
                         </a>
                     </div>
+
+                    {% if is_team_mode and (not registration) %}
+                    {% if can_register %}
+                    <div class="modal fade" id="createTeamModal" tabindex="-1" aria-labelledby="createTeamModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="createTeamModalLabel">创建队伍并报名</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <label for="team-name-input" class="form-label">队伍名称</label>
+                                    <input id="team-name-input" type="text" class="form-control" maxlength="80" placeholder="例如：火箭队">
+                                    <div class="form-text">创建成功后你将成为队长，可邀请队友加入。</div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+                                    <button id="register-btn" type="button" class="btn btn-primary" data-no-loading="true" data-no-global-loading="true">
+                                        <i class="fas fa-user-plus me-1"></i>确认创建并报名
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if can_join_team %}
+                    <div class="modal fade" id="joinTeamModal" tabindex="-1" aria-labelledby="joinTeamModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="joinTeamModalLabel">加入队伍</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <label for="team-token-input" class="form-label">团队码 / 邀请令牌</label>
+                                    <input id="team-token-input" type="text" class="form-control" maxlength="80" value="{{ team_join_token or '' }}" placeholder="输入团队码或邀请令牌">
+                                    <div class="form-text">可输入队伍分享链接中的令牌，或直接输入团队码。</div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button>
+                                    <button id="join-team-btn" type="button" class="btn btn-outline-primary" data-no-loading="true" data-no-global-loading="true">
+                                        <i class="fas fa-sign-in-alt me-1"></i>确认加入
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endif %}
 
                     {% if is_team_mode and current_team %}
                     <div class="card border-0 bg-light mt-3">
