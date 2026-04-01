@@ -3659,12 +3659,15 @@ def activity_registrations(id):
             ActivityTeam, Registration.team_id == ActivityTeam.id
         ).add_columns(
             Registration.id.label('registration_id'),
+            Registration.user_id,
             Registration.register_time,
             Registration.check_in_time,
             Registration.status,
+            Registration.remark,
             Registration.team_id,
             ActivityTeam.name.label('team_name'),
             ActivityTeam.team_code.label('team_code'),
+            ActivityTeam.leader_user_id,
             StudentInfo.real_name,
             StudentInfo.student_id,
             StudentInfo.grade,
@@ -3834,6 +3837,9 @@ def export_activity_registrations(id):
             # 将UTC时间转换为北京时间
             register_time_bj = localize_time(reg.register_time)
             check_in_time_bj = localize_time(reg.check_in_time) if reg.check_in_time else None
+            remark_text = (reg.remark or '').strip()
+            if reg.team_id and reg.leader_user_id and reg.user_id == reg.leader_user_id:
+                remark_text = f"{remark_text}；队长" if remark_text else '队长'
             
             data.append({
                 '报名ID': reg.registration_id,
@@ -3848,6 +3854,7 @@ def export_activity_registrations(id):
                 '报名时间': register_time_bj.strftime('%Y-%m-%d %H:%M:%S') if register_time_bj else '',
                 '状态': '已报名' if reg.status == 'registered' else '已取消' if reg.status == 'cancelled' else '已参加',
                 '积分': reg.points or 0,
+                '备注': remark_text,
                 '签到状态': '已签到' if reg.check_in_time else '未签到',
                 '签到时间': check_in_time_bj.strftime('%Y-%m-%d %H:%M:%S') if check_in_time_bj else ''
             })

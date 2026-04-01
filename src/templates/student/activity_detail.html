@@ -1048,6 +1048,27 @@ function showToast(message, type = 'info') {
     });
 }
 
+function buildStudentModeSwitchUrl(actionType = '', options = {}) {
+    const targetUrl = new URL(window.location.href);
+    if (actionType === 'register') {
+        targetUrl.searchParams.set('auto_register', '1');
+    } else if (actionType === 'join') {
+        const token = (options.teamToken || '').trim();
+        if (token) {
+            targetUrl.searchParams.set('join_team', token);
+        }
+    }
+
+    const returnPath = `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash || ''}`;
+    return `{{ url_for("student.enter_student_mode") }}?next=${encodeURIComponent(returnPath)}`;
+}
+
+function showStudentModeRequiredToast(actionType = '', options = {}) {
+    const safeUrl = buildStudentModeSwitchUrl(actionType, options);
+    const message = `请切换学生模式参与。<a href="${safeUrl}" class="btn btn-sm btn-light ms-2">快捷切换</a>`;
+    showToast(message, 'warning');
+}
+
 function initPosterZoomModal() {
     const posterZoomModalEl = document.getElementById('posterZoomModal');
     const posterZoomModalImage = document.getElementById('posterZoomModalImage');
@@ -1177,7 +1198,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
                 },
                 body: JSON.stringify(payload),
                 credentials: 'same-origin'
@@ -1185,6 +1207,13 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (!data.success) {
+                    if (data.require_student_mode) {
+                        button.innerHTML = originalText;
+                        button.disabled = false;
+                        showStudentModeRequiredToast('register');
+                        return;
+                    }
+
                     if (isCapacityFullMessage(data.message)) {
                         if (window.showToast) {
                             window.showToast('当前无名额，页面将刷新同步最新状态', 'warning');
@@ -1279,7 +1308,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
                 },
                 body: JSON.stringify({ team_token: teamToken }),
                 credentials: 'same-origin'
@@ -1289,6 +1319,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!data.success) {
                     button.innerHTML = originalText;
                     button.disabled = false;
+                    if (data.require_student_mode) {
+                        showStudentModeRequiredToast('join', { teamToken });
+                        return;
+                    }
                     if (window.showToast) {
                         window.showToast(data.message || '加入队伍失败', 'danger');
                     }
@@ -1329,7 +1363,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
                 },
                 credentials: 'same-origin'
             })
@@ -1338,6 +1373,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!data.success) {
                     button.innerHTML = originalText;
                     button.disabled = false;
+                    if (data.require_student_mode) {
+                        showStudentModeRequiredToast();
+                        return;
+                    }
                     if (window.showToast) {
                         window.showToast(data.message || '取消报名失败，请稍后再试', 'danger');
                     } else {

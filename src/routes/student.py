@@ -350,12 +350,30 @@ def _create_registration_success_notification(user_id, activity):
 
 # 检查是否为学生的装饰器
 def student_required(func):
+    def _is_json_like_request():
+        requested_with = (request.headers.get('X-Requested-With') or '').lower()
+        if requested_with == 'xmlhttprequest':
+            return True
+        if request.is_json:
+            return True
+        accept = (request.headers.get('Accept') or '').lower()
+        return 'application/json' in accept
+
     @login_required
     def decorated_view(*args, **kwargs):
         try:
             is_student_role = bool(current_user.role and current_user.role.name == 'Student')
             if not is_student_role and not _is_admin_student_mode_enabled():
-                flash('您没有权限访问此页面', 'danger')
+                switch_url = url_for('student.enter_student_mode', next=request.url)
+                message = '请切换学生模式参与活动'
+                if _is_json_like_request():
+                    return jsonify({
+                        'success': False,
+                        'message': message,
+                        'require_student_mode': True,
+                        'switch_url': switch_url
+                    }), 403
+                flash(message, 'warning')
                 return redirect(url_for('main.index'))
 
             if _is_admin_student_mode_enabled():
@@ -364,6 +382,8 @@ def student_required(func):
             return func(*args, **kwargs)
         except Exception as e:
             logger.error(f"Error in student_required: {e}")
+            if request.is_json or (request.headers.get('X-Requested-With') or '').lower() == 'xmlhttprequest':
+                return jsonify({'success': False, 'message': '发生错误，请稍后再试'}), 500
             flash('发生错误，请稍后再试', 'danger')
             return redirect(url_for('main.index'))
     decorated_view.__name__ = func.__name__
@@ -1826,6 +1846,9 @@ def enter_student_mode():
         session['admin_student_mode'] = True
         _ensure_student_profile_for_admin_mode()
         flash('已切换到学生模式，可正常报名参与活动。', 'success')
+        next_url = request.args.get('next', type=str)
+        if next_url and next_url.startswith('/'):
+            return redirect(next_url)
         return redirect(url_for('student.dashboard'))
     except Exception as e:
         db.session.rollback()
