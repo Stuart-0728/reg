@@ -139,7 +139,7 @@
                             <div class="col-md-4 d-flex align-items-end">
                                 <form method="post" action="{{ url_for('admin.disband_activity_team', activity_id=activity.id, team_id=team.id) }}" data-no-loading class="w-100 js-disband-team-form">
                                     {{ form.hidden_tag() }}
-                                    <button type="submit" class="btn btn-outline-danger btn-sm w-100">解散队伍（保留成员报名）</button>
+                                    <button type="submit" class="btn btn-outline-danger btn-sm w-100">解散队伍（取消队员报名）</button>
                                 </form>
                             </div>
                         </div>
@@ -334,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const disbandForms = document.querySelectorAll('.js-disband-team-form');
     disbandForms.forEach(function(form) {
         form.addEventListener('submit', function(e) {
-            if (!confirm('确定解散该队伍吗？队员会保留报名，但失去当前队伍关系。')) {
+            if (!confirm('确定解散该队伍吗？该队全部成员将被取消报名。')) {
                 e.preventDefault();
             }
         });

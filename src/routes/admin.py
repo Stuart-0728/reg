@@ -3810,6 +3810,19 @@ def export_activity_registrations(id):
             StudentInfo.phone,
             StudentInfo.points
         ).all()
+
+        # 以队伍为单位排序：先队伍，再队员；无队伍记录放在最后
+        registrations = sorted(
+            registrations,
+            key=lambda reg: (
+                1 if not reg.team_id else 0,
+                str(reg.team_name or ''),
+                str(reg.team_code or ''),
+                reg.register_time or datetime.min,
+                str(reg.real_name or ''),
+                str(reg.student_id or '')
+            )
+        )
         
         # 创建Excel文件
         output = io.BytesIO()
@@ -4015,13 +4028,18 @@ def disband_activity_team(activity_id, team_id):
         )
     ).scalars().all()
 
+    affected_count = 0
     for reg in member_regs:
+        # 管理员解散队伍时，队员报名一并取消，避免“无队伍但仍占用名额”。
+        reg.status = 'cancelled'
+        reg.check_in_time = None
         reg.team_id = None
+        affected_count += 1
 
     db.session.delete(team)
     db.session.commit()
-    log_action('disband_activity_team', f'活动{activity_id} 解散队伍{team_id}，成员转为无队伍报名')
-    flash('队伍已解散，队员报名记录已保留', 'success')
+    log_action('disband_activity_team', f'活动{activity_id} 解散队伍{team_id}，并取消{affected_count}名成员报名')
+    flash(f'队伍已解散，并已取消 {affected_count} 名队员报名', 'success')
     return redirect(url_for('admin.activity_registrations', id=activity_id))
 
 @admin_bp.route('/students/export_excel')
