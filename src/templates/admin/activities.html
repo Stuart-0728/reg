@@ -436,13 +436,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const menu = dropdown.querySelector('.dropdown-menu');
         const toggle = dropdown.querySelector('[data-bs-toggle="dropdown"]');
 
-        const applyMobileMenuPosition = () => {
+        const applyMenuPosition = () => {
             if (!menu || !toggle) return;
-            if (window.innerWidth > 1199.98) return;
+            if (!menu.classList.contains('dropdown-portal')) return;
 
             const rect = toggle.getBoundingClientRect();
-            const menuWidth = Math.min(320, window.innerWidth - 16);
+            const naturalWidth = Math.max(menu.offsetWidth || 220, 220);
+            const menuWidth = Math.min(naturalWidth, window.innerWidth - 16);
             menu.style.position = 'fixed';
+            menu.style.width = `${menuWidth}px`;
             menu.style.minWidth = `${menuWidth}px`;
             menu.style.left = `${Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth))}px`;
 
@@ -455,25 +457,25 @@ document.addEventListener('DOMContentLoaded', function() {
             const row = this.closest('tr');
             if (row) row.classList.add('dropdown-row-open');
 
-            if (window.innerWidth <= 1199.98 && menu) {
-                const marker = document.createComment('mobile-dropdown-anchor');
+            if (menu) {
+                const marker = document.createComment('dropdown-anchor');
                 menu.__mobileAnchor = marker;
                 dropdown.insertBefore(marker, menu);
                 document.body.appendChild(menu);
-                menu.classList.add('mobile-dropdown-portal');
+                menu.classList.add('dropdown-portal');
             }
         });
 
         dropdown.addEventListener('shown.bs.dropdown', function() {
-            applyMobileMenuPosition();
+            applyMenuPosition();
         });
 
         dropdown.addEventListener('hide.bs.dropdown', function() {
             const row = this.closest('tr');
             if (row) row.classList.remove('dropdown-row-open');
 
-            if (menu && menu.classList.contains('mobile-dropdown-portal')) {
-                menu.classList.remove('mobile-dropdown-portal');
+            if (menu && menu.classList.contains('dropdown-portal')) {
+                menu.classList.remove('dropdown-portal');
                 menu.removeAttribute('style');
                 const marker = menu.__mobileAnchor;
                 if (marker && marker.parentNode) {
@@ -485,8 +487,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        window.addEventListener('resize', applyMobileMenuPosition);
-        window.addEventListener('scroll', applyMobileMenuPosition, true);
+        window.addEventListener('resize', applyMenuPosition);
+        window.addEventListener('scroll', applyMenuPosition, true);
     });
     
     // 添加键盘导航支持
@@ -708,7 +710,7 @@ async function shareActivityFromAdminList(downloadUrl, shareLink, evt) {
     z-index: 2200;
 }
 
-.activities-card .dropdown-menu.mobile-dropdown-portal {
+.activities-card .dropdown-menu.dropdown-portal {
     z-index: 2600;
 }
 
