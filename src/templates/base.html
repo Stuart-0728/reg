@@ -1055,7 +1055,9 @@
     </footer>
     </div>
 
-    <!-- Bootstrap Lite: 本地兜底，保障 dropdown/modal/collapse 在受限网络下可用 -->
+    <!-- Bootstrap JS：优先完整版（保留动态效果），失败时自动回退Lite -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js';"></script>
+    <!-- 本地兜底：当完整版不可用时启用，保证 dropdown/modal/collapse 可用 -->
     <script src="{{ url_for('static', filename='js/bootstrap_lite.js', v='20260402a') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
