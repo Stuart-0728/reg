@@ -15,11 +15,46 @@
   max-height: 80vh;
   object-fit: contain;
 }
+
+.activity-form-page .form-actions {
+  gap: 0.75rem;
+}
+
+@media (max-width: 991.98px) {
+  .activity-form-page .form-actions {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .activity-form-page .form-actions-right {
+    min-width: 0 !important;
+    width: 100%;
+    align-items: stretch !important;
+  }
+
+  .activity-form-page .form-actions-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .activity-form-page .form-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 576px) {
+  .activity-form-page .form-actions-buttons {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4 activity-form-page">
   <div class="card border-0 shadow-sm">
     <div class="card-header bg-white border-0">
       <div class="d-flex align-items-center">
@@ -452,17 +487,19 @@
           </div>
         </div>
         
-        <div class="d-flex justify-content-between mt-4">
-          <a href="{{ url_for('admin.activities') }}" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left me-1"></i> 返回
+        <div class="d-flex justify-content-between mt-4 form-actions">
+          <a href="{{ url_for('admin.activities') }}" class="btn btn-outline-secondary btn-mobile-adaptive" title="返回活动管理" aria-label="返回活动管理">
+            <i class="fas fa-arrow-left"></i>
+            <span class="btn-label-full">返回</span>
+            <span class="btn-label-short">返回</span>
           </a>
-          <div class="d-flex flex-column align-items-end gap-2" style="min-width: 320px;">
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-outline-secondary" id="saveDraftBtn" value="save_draft">
-                <i class="fas fa-file-alt me-1"></i> <span id="saveDraftText">保存草稿</span>
+          <div class="d-flex flex-column align-items-end gap-2 form-actions-right" style="min-width: 320px;">
+            <div class="d-flex gap-2 form-actions-buttons">
+              <button type="submit" class="btn btn-outline-secondary btn-mobile-adaptive" id="saveDraftBtn" value="save_draft" title="保存草稿" aria-label="保存草稿">
+                <i class="fas fa-file-alt"></i> <span id="saveDraftText" class="btn-label-full">保存草稿</span><span class="btn-label-short">草稿</span>
               </button>
-              <button type="submit" class="btn btn-primary" id="publishBtn" value="publish">
-                <i class="fas fa-paper-plane me-1"></i> <span id="publishText">发布</span>
+              <button type="submit" class="btn btn-primary btn-mobile-adaptive" id="publishBtn" value="publish" title="发布活动" aria-label="发布活动">
+                <i class="fas fa-paper-plane"></i> <span id="publishText" class="btn-label-full">发布</span><span class="btn-label-short">发布</span>
               </button>
             </div>
             <div id="uploadProgressWrap" class="w-100 d-none">
