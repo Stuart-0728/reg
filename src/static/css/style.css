@@ -4016,17 +4016,19 @@ body {
     .btn {
         min-height: 40px !important;
         padding: 0.48rem 0.84rem !important;
-        border-radius: 14px !important;
+        border-radius: 999px !important;
     }
 
     .btn-sm {
         min-height: 36px !important;
         padding: 0.38rem 0.68rem !important;
+        border-radius: 999px !important;
     }
 
     .btn-lg {
         min-height: 44px !important;
         padding: 0.6rem 1.02rem !important;
+        border-radius: 999px !important;
     }
 
     .form-control,
@@ -4067,7 +4069,7 @@ body {
     }
 
     .btn {
-        border-radius: 16px !important;
+        border-radius: 999px !important;
     }
 
     .pagination .page-link {
