@@ -108,7 +108,7 @@
                     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3 activity-title-row">
                         <h2 class="fw-bold mb-0">{{ activity.title }}</h2>
                         <div class="d-flex align-items-center gap-2 activity-top-actions">
-                            <button id="share-activity-btn" type="button" class="btn btn-sm btn-outline-success text-nowrap" data-no-loading="true" data-no-global-loading="true">
+                            <button id="share-activity-btn" type="button" class="btn btn-sm btn-outline-primary text-nowrap" data-no-loading="true" data-no-global-loading="true">
                                 <i class="fas fa-share-alt me-1"></i>分享活动
                             </button>
                             <a href="#" class="btn btn-sm btn-outline-secondary text-nowrap" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='{{ url_for('student.activities') }}'; } return false;">
