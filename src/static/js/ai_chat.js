@@ -93,31 +93,13 @@ function loadScriptWithTimeout(src, timeoutMs = 5000) {
 }
 
 function loadMarkedLibrary() {
-    return new Promise(async (resolve) => {
+    return new Promise((resolve) => {
         if (window.marked && typeof window.marked.parse === 'function') {
             resolve(window.marked);
             return;
         }
 
-        const sources = [
-            'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
-            'https://unpkg.com/marked/marked.min.js',
-            'https://lf9-cdn-tos.bytecdntp.com/cdn/expire-1-M/marked/12.0.2/marked.min.js',
-            'https://cdn.bootcdn.net/ajax/libs/marked/12.0.2/marked.min.js'
-        ];
-
-        for (const src of sources) {
-            try {
-                await loadScriptWithTimeout(src, 2500);
-                if (window.marked && typeof window.marked.parse === 'function') {
-                    resolve(window.marked);
-                    return;
-                }
-            } catch (_) {
-                // 尝试下一个源
-            }
-        }
-
+        // 受限网络环境下直接使用内置降级解析，避免外链脚本反复报错。
         const fallback = buildFallbackMarked();
         window.marked = fallback;
         resolve(fallback);

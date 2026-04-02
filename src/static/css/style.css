@@ -3831,4 +3831,12 @@ body {
     .card .card > :last-child {
         margin-bottom: 0 !important;
     }
+
+    .btn,
+    .dropdown-item,
+    .navbar .nav-link {
+        min-height: 42px;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
 }

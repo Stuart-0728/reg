@@ -27,6 +27,31 @@
 }
 
 @media (max-width: 576px) {
+    .activity-title-row {
+        gap: 0.75rem !important;
+    }
+
+    .activity-title-row > h2 {
+        width: 100%;
+        font-size: 2rem;
+        line-height: 1.25;
+    }
+
+    .activity-top-actions {
+        width: 100%;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+
+    .activity-top-actions > .btn {
+        width: 100%;
+        min-height: 44px;
+        justify-content: center;
+        white-space: nowrap;
+        touch-action: manipulation;
+    }
+
     #action-buttons {
         align-items: flex-start !important;
         gap: 0.6rem;
@@ -80,13 +105,13 @@
         <div class="col-12 col-xl-8 activity-detail-main">
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body p-4">
-                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3 activity-title-row">
                         <h2 class="fw-bold mb-0">{{ activity.title }}</h2>
-                        <div class="d-flex align-items-center gap-2">
-                            <button id="share-activity-btn" type="button" class="btn btn-sm btn-outline-success" data-no-loading="true" data-no-global-loading="true">
+                        <div class="d-flex align-items-center gap-2 activity-top-actions">
+                            <button id="share-activity-btn" type="button" class="btn btn-sm btn-outline-success text-nowrap" data-no-loading="true" data-no-global-loading="true">
                                 <i class="fas fa-share-alt me-1"></i>分享活动
                             </button>
-                            <a href="#" class="btn btn-sm btn-outline-secondary" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='{{ url_for('student.activities') }}'; } return false;">
+                            <a href="#" class="btn btn-sm btn-outline-secondary text-nowrap" onclick="if (window.history.length > 1) { window.history.back(); } else { window.location.href='{{ url_for('student.activities') }}'; } return false;">
                                 <i class="fas fa-arrow-left me-1"></i>返回上一页
                             </a>
                         </div>
