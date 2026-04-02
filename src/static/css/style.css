@@ -3793,3 +3793,42 @@ body {
 .activities-card .dropdown-menu {
     z-index: 2000 !important;
 }
+
+/* ========================================================
+   MOBILE: NESTED CARD DENSITY REDUCTION
+   将外层卡片中的内层卡片在小屏上做“去壳化”，减少拥挤感
+   ======================================================== */
+@media (max-width: 768px) {
+    .card .card {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        border-radius: 12px !important;
+        margin-bottom: 0.75rem !important;
+    }
+
+    .card .card .card-header {
+        background: transparent !important;
+        border-bottom: 0 !important;
+        padding: 0.625rem 0.75rem 0.25rem !important;
+    }
+
+    .card .card .card-body {
+        padding: 0.625rem 0.75rem !important;
+    }
+
+    .card .card .card-footer {
+        background: transparent !important;
+        border-top-color: rgba(15, 23, 42, 0.08) !important;
+        padding: 0.5rem 0.75rem 0.75rem !important;
+    }
+
+    .card .card .list-group-item {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    .card .card > :last-child {
+        margin-bottom: 0 !important;
+    }
+}
