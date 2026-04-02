@@ -4,7 +4,7 @@
     --primary-color: #0d6efd;   /* Bootstrap蓝色 */
     --secondary-color: #6c757d; /* Bootstrap灰色 */
     --accent-color: #ffd93d;    /* 活力黄色 */
-    --success-color: #4caf50;
+    --success-color: #4f46e5;
     --danger-color: #ff4e50;
     --warning-color: #ff9800;
     --info-color: #2196f3;
@@ -14,7 +14,7 @@
     /* 渐变色定义 */
     --gradient-primary: linear-gradient(135deg, #0d6efd, #0b5ed7);
     --gradient-secondary: linear-gradient(135deg, #6c757d, #5c636a);
-    --gradient-success: linear-gradient(135deg, #4caf50, #2e7d32);
+    --gradient-success: linear-gradient(135deg, #6366f1, #4f46e5);
     --gradient-danger: linear-gradient(135deg, #ff4e50, #c9184a);
     --gradient-warning: linear-gradient(135deg, #ff9800, #ef6c00);
     --gradient-info: linear-gradient(135deg, #3bc9db, #228be6);
@@ -25,7 +25,7 @@
     /* 图标背景色定义 - 更美观的配色 */
     --icon-bg-primary: #e3f2fd;
     --icon-bg-secondary: #f5f5f5;
-    --icon-bg-success: #e8f5e9;
+    --icon-bg-success: #eef2ff;
     --icon-bg-danger: #fff8f8;
     --icon-bg-warning: #fff8eb;
     --icon-bg-info: #e6f7ff;
@@ -205,6 +205,44 @@ body {
 .btn-outline-primary:hover {
     background-color: var(--primary-color);
     color: white;
+}
+
+/* 将 success 语义统一映射到主色系，避免突兀绿色 */
+.text-success,
+.link-success {
+    color: #4f46e5 !important;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+    border-color: #4f46e5 !important;
+    color: #fff !important;
+}
+
+.btn-success:hover,
+.btn-success:focus {
+    background: linear-gradient(135deg, #4f46e5, #4338ca) !important;
+    border-color: #4338ca !important;
+    color: #fff !important;
+}
+
+.btn-outline-success {
+    color: #4f46e5 !important;
+    border-color: #4f46e5 !important;
+    background: transparent !important;
+}
+
+.btn-outline-success:hover,
+.btn-outline-success:focus {
+    color: #fff !important;
+    background: #4f46e5 !important;
+    border-color: #4338ca !important;
+}
+
+.alert-success {
+    color: #3730a3 !important;
+    background-color: #eef2ff !important;
+    border-color: #c7d2fe !important;
 }
 
 /* 表单样式 */
@@ -2136,7 +2174,7 @@ a.btn.disabled::before {
     --accent-color: #4299e1;
     --accent-hover: #3182ce;
     --danger-color: #fc8181;
-    --success-color: #68d391;
+    --success-color: #4f46e5;
 
     /* Glass Island Effects */
     --glass-bg: rgba(255, 255, 255, 0.75);

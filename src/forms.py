@@ -91,7 +91,7 @@ class ActivityForm(FlaskForm):
     max_participants = IntegerField('最大参与人数', validators=[Optional(), NumberRange(min=0, message='参与人数不能为负数')], default=0)
     status = SelectField('活动状态', choices=[('active', '进行中'), ('completed', '已结束'), ('cancelled', '已取消')], default='active')
     is_featured = BooleanField('设为重点活动', default=False)
-    points = IntegerField('活动积分', validators=[NumberRange(min=0, max=100, message='积分值必须在0-100之间')], default=10, description='学生参加活动获得的积分值，默认普通活动10分，重点活动20分')
+    points = IntegerField('活动积分', validators=[NumberRange(min=0, max=100, message='积分值必须在0-100之间')], default=10)
     tags = SelectMultipleField('活动标签', coerce=int, validators=[Optional()])
     poster = FileField('活动海报', validators=[
         Optional(),

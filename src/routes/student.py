@@ -790,7 +790,7 @@ def activity_detail(id):
             (activity.max_participants == 0 or total_registered < activity.max_participants)
         )
 
-        can_cancel = has_registered and safe_greater_than(activity.start_time, now)
+        can_cancel = bool(registration and registration.status == 'registered')
 
         can_checkin = (
             has_registered and 
@@ -1073,10 +1073,6 @@ def cancel_registration(id):
     """取消报名"""
     try:
         activity = db.get_or_404(Activity, id)
-
-        now = get_localized_now()
-        if not safe_greater_than(activity.start_time, now):
-            return jsonify({'success': False, 'message': '活动已开始，无法取消报名'})
 
         registration = db.session.execute(db.select(Registration).filter_by(
             user_id=current_user.id,
