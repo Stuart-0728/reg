@@ -3946,3 +3946,131 @@ body {
         -webkit-tap-highlight-color: transparent;
     }
 }
+
+/* ========================================================
+   GLOBAL COMPACT TUNING
+   全站移动端“减臃肿”统一收口
+   ======================================================== */
+@media (max-width: 991.98px) {
+    .container,
+    .container-fluid {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .container.py-4,
+    .container.mt-4,
+    .container.my-4 {
+        padding-top: 0.9rem !important;
+        padding-bottom: 1rem !important;
+        margin-top: 0.9rem !important;
+    }
+
+    .card {
+        border-radius: 16px !important;
+        margin-bottom: 0.85rem !important;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08) !important;
+    }
+
+    .card-header {
+        padding: 0.7rem 0.85rem !important;
+    }
+
+    .card-body {
+        padding: 0.85rem !important;
+    }
+
+    .card-footer {
+        padding: 0.7rem 0.85rem !important;
+    }
+
+    h1, .h1 {
+        font-size: 1.7rem !important;
+    }
+
+    h2, .h2 {
+        font-size: 1.45rem !important;
+    }
+
+    h3, .h3 {
+        font-size: 1.22rem !important;
+    }
+
+    .breadcrumb {
+        margin-bottom: 0.65rem !important;
+    }
+
+    .list-group-item {
+        padding: 0.75rem 0.85rem !important;
+    }
+
+    .table td,
+    .table th {
+        padding: 0.55rem 0.6rem !important;
+    }
+
+    .table-responsive {
+        font-size: 0.93rem !important;
+    }
+
+    .btn {
+        min-height: 40px !important;
+        padding: 0.45rem 0.78rem !important;
+    }
+
+    .btn-sm {
+        min-height: 36px !important;
+        padding: 0.35rem 0.62rem !important;
+    }
+
+    .btn-lg {
+        min-height: 44px !important;
+        padding: 0.56rem 0.95rem !important;
+    }
+
+    .form-control,
+    .form-select {
+        min-height: 40px !important;
+        padding-top: 0.4rem !important;
+        padding-bottom: 0.4rem !important;
+    }
+
+    .form-label {
+        margin-bottom: 0.24rem !important;
+        font-size: 0.87rem !important;
+    }
+
+    .nav-tabs {
+        gap: 0.2rem;
+        flex-wrap: wrap;
+    }
+
+    .nav-tabs .nav-link {
+        padding: 0.45rem 0.72rem !important;
+        font-size: 0.93rem !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .container,
+    .container-fluid {
+        padding-left: 0.7rem !important;
+        padding-right: 0.7rem !important;
+    }
+
+    .card-header,
+    .card-body,
+    .card-footer {
+        padding-left: 0.72rem !important;
+        padding-right: 0.72rem !important;
+    }
+
+    .btn {
+        border-radius: 12px !important;
+    }
+
+    .pagination .page-link {
+        min-width: 34px;
+        padding: 0.3rem 0.56rem;
+    }
+}
