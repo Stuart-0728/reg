@@ -6,10 +6,10 @@
     <meta name="description" content="智能社团+ - 活动管理系统">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{% block title %}智能社团+{% endblock %}</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome（使用JS SVG版，避免webfont在受限网络下加载失败） -->
-    <script defer src="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/js/all.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js';"></script>
+    <!-- Bootstrap CSS（本地优先，外链兜底） -->
+    <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css', v='20260402a') }}" rel="stylesheet" onerror="this.onerror=null;this.href='https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css';">
+    <!-- Font Awesome（本地CSS+webfont，避免每页JS图标重解析造成卡顿） -->
+    <link href="{{ url_for('static', filename='vendor/fontawesome/css/all.min.css', v='20260402a') }}" rel="stylesheet" onerror="this.onerror=null;this.href='https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css';">
     <!-- 字体使用系统栈，避免外网字体在受限网络下触发阻塞/报错 -->
     <!-- AOS CSS（仅含 data-aos 元素的页面动态加载） -->
     <!-- Custom CSS -->
@@ -1055,8 +1055,8 @@
     </footer>
     </div>
 
-    <!-- Bootstrap JS：优先完整版（保留动态效果），失败时自动回退Lite -->
-    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js';"></script>
+    <!-- Bootstrap JS：本地优先（保留动态效果），失败时外链兜底 -->
+    <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js', v='20260402a') }}" onerror="this.onerror=null;this.src='https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js';"></script>
     <!-- 本地兜底：当完整版不可用时启用，保证 dropdown/modal/collapse 可用 -->
     <script src="{{ url_for('static', filename='js/bootstrap_lite.js', v='20260402a') }}"></script>
     <script>
@@ -1065,8 +1065,8 @@
                 return;
             }
 
-            const cssHref = 'https://cdn.bootcdn.net/ajax/libs/aos/2.3.4/aos.css';
-            const scriptSrc = 'https://cdn.bootcdn.net/ajax/libs/aos/2.3.4/aos.js';
+            const cssHref = "{{ url_for('static', filename='vendor/aos/aos.css', v='20260402a') }}";
+            const scriptSrc = "{{ url_for('static', filename='vendor/aos/aos.js', v='20260402a') }}";
 
             if (!document.querySelector(`link[data-lib="aos-css"]`)) {
                 const link = document.createElement('link');
@@ -1095,6 +1095,13 @@
             script.src = scriptSrc;
             script.async = true;
             script.onload = initAos;
+            script.onerror = function () {
+                const backup = document.createElement('script');
+                backup.src = 'https://cdn.bootcdn.net/ajax/libs/aos/2.3.4/aos.js';
+                backup.async = true;
+                backup.onload = initAos;
+                document.head.appendChild(backup);
+            };
             document.head.appendChild(script);
         });
     </script>
