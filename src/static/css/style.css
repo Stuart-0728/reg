@@ -2665,8 +2665,8 @@ body {
     box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important;
     transform: translateY(-1px) !important;
 }
-.btn-success { background-color: #10b981 !important; border-color: #10b981 !important; color: #fff !important; }
-.btn-success:hover { background-color: #059669 !important; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important; }
+.btn-success { background-color: #4f46e5 !important; border-color: #4f46e5 !important; color: #fff !important; }
+.btn-success:hover { background-color: #4338ca !important; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important; }
 .btn-danger { background-color: #ef4444 !important; border-color: #ef4444 !important; color: #fff !important; }
 .btn-danger:hover { background-color: #dc2626 !important; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important; }
 
@@ -3712,7 +3712,7 @@ body {
 /* Badge colors */
 .activity-badge.bg-danger { background-color: #fee2e2 !important; color: #ef4444 !important; }
 .activity-badge.bg-warning { background-color: #ffedd5 !important; color: #f97316 !important; } /* Orange */
-.activity-badge.bg-success { background-color: #dcfce7 !important; color: #22c55e !important; }
+.activity-badge.bg-success { background-color: #eef2ff !important; color: #4f46e5 !important; }
 
 /* Typgraphy specific to card */
 .activity-card .card-title {
