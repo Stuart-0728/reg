@@ -1,7 +1,12 @@
-(function () {
-    if (window.bootstrap) {
+ (function () {
+    if (window.bootstrap && window.bootstrap.Collapse && typeof window.bootstrap.Collapse.getOrCreateInstance === 'function') {
         return;
     }
+
+    const collapseInstances = new WeakMap();
+    const dropdownInstances = new WeakMap();
+    const modalInstances = new WeakMap();
+    const alertInstances = new WeakMap();
 
     function getTarget(selectorOrEl) {
         if (!selectorOrEl) return null;
@@ -18,6 +23,20 @@
     class Collapse {
         constructor(element) {
             this._element = getTarget(element);
+            if (this._element) {
+                collapseInstances.set(this._element, this);
+            }
+        }
+
+        static getInstance(element) {
+            const el = getTarget(element);
+            return el ? collapseInstances.get(el) || null : null;
+        }
+
+        static getOrCreateInstance(element) {
+            const el = getTarget(element);
+            if (!el) return null;
+            return Collapse.getInstance(el) || new Collapse(el);
         }
 
         show() {
@@ -40,20 +59,44 @@
         constructor(toggleElement) {
             this._toggle = getTarget(toggleElement);
             this._menu = this._toggle ? this._toggle.parentElement.querySelector('.dropdown-menu') : null;
+            if (this._toggle) {
+                dropdownInstances.set(this._toggle, this);
+            }
+        }
+
+        static getInstance(element) {
+            const el = getTarget(element);
+            return el ? dropdownInstances.get(el) || null : null;
+        }
+
+        static getOrCreateInstance(element) {
+            const el = getTarget(element);
+            if (!el) return null;
+            return Dropdown.getInstance(el) || new Dropdown(el);
+        }
+
+        _dispatch(name) {
+            if (!this._toggle) return true;
+            const evt = new CustomEvent(name, { bubbles: true, cancelable: true, detail: { relatedTarget: this._toggle } });
+            return this._toggle.dispatchEvent(evt);
         }
 
         show() {
             if (!this._toggle || !this._menu) return;
+            if (!this._dispatch('show.bs.dropdown')) return;
             this._toggle.setAttribute('aria-expanded', 'true');
             this._menu.classList.add('show');
             this._toggle.parentElement.classList.add('show');
+            this._dispatch('shown.bs.dropdown');
         }
 
         hide() {
             if (!this._toggle || !this._menu) return;
+            if (!this._dispatch('hide.bs.dropdown')) return;
             this._toggle.setAttribute('aria-expanded', 'false');
             this._menu.classList.remove('show');
             this._toggle.parentElement.classList.remove('show');
+            this._dispatch('hidden.bs.dropdown');
         }
 
         toggle() {
@@ -71,6 +114,26 @@
         constructor(element) {
             this._element = getTarget(element);
             this._backdrop = null;
+            if (this._element) {
+                modalInstances.set(this._element, this);
+            }
+        }
+
+        static getInstance(element) {
+            const el = getTarget(element);
+            return el ? modalInstances.get(el) || null : null;
+        }
+
+        static getOrCreateInstance(element) {
+            const el = getTarget(element);
+            if (!el) return null;
+            return Modal.getInstance(el) || new Modal(el);
+        }
+
+        _dispatch(name) {
+            if (!this._element) return true;
+            const evt = new CustomEvent(name, { bubbles: true, cancelable: true });
+            return this._element.dispatchEvent(evt);
         }
 
         _ensureBackdrop() {
@@ -84,15 +147,18 @@
 
         show() {
             if (!this._element) return;
+            if (!this._dispatch('show.bs.modal')) return;
             this._element.style.display = 'block';
             this._element.removeAttribute('aria-hidden');
             this._element.classList.add('show');
             document.body.classList.add('modal-open');
             this._ensureBackdrop();
+            this._dispatch('shown.bs.modal');
         }
 
         hide() {
             if (!this._element) return;
+            if (!this._dispatch('hide.bs.modal')) return;
             this._element.classList.remove('show');
             this._element.setAttribute('aria-hidden', 'true');
             this._element.style.display = 'none';
@@ -101,6 +167,7 @@
                 this._backdrop.parentNode.removeChild(this._backdrop);
             }
             this._backdrop = null;
+            this._dispatch('hidden.bs.modal');
         }
 
         toggle() {
@@ -116,6 +183,20 @@
     class Alert {
         constructor(element) {
             this._element = getTarget(element);
+            if (this._element) {
+                alertInstances.set(this._element, this);
+            }
+        }
+
+        static getInstance(element) {
+            const el = getTarget(element);
+            return el ? alertInstances.get(el) || null : null;
+        }
+
+        static getOrCreateInstance(element) {
+            const el = getTarget(element);
+            if (!el) return null;
+            return Alert.getInstance(el) || new Alert(el);
         }
 
         close() {

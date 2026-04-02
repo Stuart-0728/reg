@@ -8,8 +8,8 @@
     <title>{% block title %}智能社团+{% endblock %}</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Font Awesome（使用JS SVG版，避免webfont在受限网络下加载失败） -->
+    <script defer src="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/js/all.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js';"></script>
     <!-- 字体使用系统栈，避免外网字体在受限网络下触发阻塞/报错 -->
     <!-- AOS CSS（仅含 data-aos 元素的页面动态加载） -->
     <!-- Custom CSS -->
