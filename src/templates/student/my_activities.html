@@ -3,11 +3,13 @@
 {% block title %}我的活动 - 智能社团+{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex align-items-center justify-content-between mb-4">
+<div class="container mt-4 student-mobile-page">
+    <div class="d-flex align-items-center justify-content-between flex-wrap student-page-head mb-4">
         <h2 class="mb-0">我的活动</h2>
-        <a href="{{ url_for('student.dashboard') }}" class="btn btn-sm btn-outline-primary">
-            <i class="fas fa-tachometer-alt me-1"></i>返回面板
+        <a href="{{ url_for('student.dashboard') }}" class="btn btn-sm btn-outline-primary btn-mobile-adaptive" title="返回面板" aria-label="返回面板">
+            <i class="fas fa-tachometer-alt"></i>
+            <span class="btn-label-full">返回面板</span>
+            <span class="btn-label-short">面板</span>
         </a>
     </div>
     

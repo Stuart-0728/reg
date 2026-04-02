@@ -3784,7 +3784,7 @@ body {
     display: none;
 }
 
-@media (max-width: 576px) {
+@media (max-width: 991.98px) {
     .btn-mobile-adaptive {
         padding-left: 0.75rem !important;
         padding-right: 0.75rem !important;
@@ -3793,15 +3793,88 @@ body {
     }
 
     .btn-mobile-adaptive .btn-label-full {
-        display: none;
+        display: none !important;
     }
 
     .btn-mobile-adaptive .btn-label-short {
-        display: inline;
+        display: inline !important;
     }
 
     .btn-mobile-adaptive.btn-mobile-icon-only .btn-label-short {
-        display: none;
+        display: none !important;
+    }
+}
+
+/* ========================================================
+   STUDENT MOBILE COMPACT LAYOUT
+   ======================================================== */
+@media (max-width: 991.98px) {
+    .student-mobile-page {
+        padding-top: 0.85rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    .student-mobile-page .student-page-head {
+        gap: 0.65rem !important;
+        margin-bottom: 0.9rem !important;
+    }
+
+    .student-mobile-page .student-page-head h2,
+    .student-mobile-page .student-page-head .h2 {
+        font-size: 1.85rem !important;
+        line-height: 1.2 !important;
+    }
+
+    .student-mobile-page .card {
+        border-radius: 16px !important;
+        margin-bottom: 0.9rem !important;
+    }
+
+    .student-mobile-page .card-header {
+        padding: 0.65rem 0.8rem !important;
+    }
+
+    .student-mobile-page .card-body {
+        padding: 0.8rem !important;
+    }
+
+    .student-mobile-page .nav-tabs {
+        flex-wrap: wrap !important;
+        gap: 0.2rem;
+        padding: 0.45rem 0.45rem 0 !important;
+    }
+
+    .student-mobile-page .nav-tabs .nav-link {
+        white-space: nowrap;
+        padding: 0.45rem 0.72rem !important;
+        font-size: 0.93rem !important;
+    }
+
+    .student-mobile-page .list-group-item {
+        padding: 0.8rem 0.85rem !important;
+    }
+
+    .student-mobile-page .form-label {
+        font-size: 0.86rem;
+        margin-bottom: 0.25rem !important;
+    }
+
+    .student-mobile-page .btn {
+        padding: 0.45rem 0.75rem !important;
+        min-height: 40px;
+    }
+
+    .student-mobile-page .btn-sm {
+        padding: 0.4rem 0.65rem !important;
+    }
+
+    .student-mobile-page .table-responsive {
+        font-size: 0.92rem;
+    }
+
+    .student-mobile-page .table td,
+    .student-mobile-page .table th {
+        padding: 0.55rem 0.6rem !important;
     }
 }
 
