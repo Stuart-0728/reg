@@ -637,42 +637,50 @@ def logout():
 @limiter.exempt
 def session_state():
     """返回当前会话登录态，用于前端纠正被CDN缓存污染的头部显示。"""
+    def _safe_url(endpoint, fallback=''):
+        try:
+            return url_for(endpoint)
+        except Exception:
+            return fallback
+
     role_name = ''
     display_name = ''
-    dashboard_url = url_for('main.index')
+    dashboard_url = _safe_url('main.index', '/')
     is_super = False
     can_enter_student_mode = False
     admin_student_mode = False
     managed_society_id = None
     managed_society_name = ''
+    authenticated = bool(current_user.is_authenticated)
 
-    if current_user.is_authenticated:
-        try:
-            role_name = (current_user.role.name or '').strip().lower() if current_user.role else ''
-        except Exception:
-            role_name = ''
+    try:
+        if authenticated:
+            try:
+                role_name = (current_user.role.name or '').strip().lower() if current_user.role else ''
+            except Exception:
+                role_name = ''
 
-        if role_name == 'admin':
-            dashboard_url = url_for('admin.dashboard')
-            display_name = current_user.username or '管理员'
-            is_super = bool(getattr(current_user, 'is_super_admin', False))
-            can_enter_student_mode = not is_super
-            admin_student_mode = bool(session.get('admin_student_mode')) and can_enter_student_mode
-            managed_society_id = getattr(current_user, 'managed_society_id', None)
-            if managed_society_id:
-                society = db.session.get(Society, managed_society_id)
-                managed_society_name = society.name if society else ''
-        else:
-            dashboard_url = url_for('student.dashboard')
-            display_name = (
-                current_user.student_info.real_name
-                if getattr(current_user, 'student_info', None) and getattr(current_user.student_info, 'real_name', None)
-                else (current_user.username or '用户')
-            )
+            if role_name == 'admin':
+                dashboard_url = _safe_url('admin.dashboard', dashboard_url)
+                display_name = current_user.username or '管理员'
+                is_super = bool(getattr(current_user, 'is_super_admin', False))
+                can_enter_student_mode = not is_super
+                admin_student_mode = bool(session.get('admin_student_mode')) and can_enter_student_mode
+                managed_society_id = getattr(current_user, 'managed_society_id', None)
+                if managed_society_id:
+                    society = db.session.get(Society, managed_society_id)
+                    managed_society_name = society.name if society else ''
+            else:
+                dashboard_url = _safe_url('student.dashboard', dashboard_url)
+                student_info = getattr(current_user, 'student_info', None)
+                student_name = getattr(student_info, 'real_name', None) if student_info else None
+                display_name = student_name or (current_user.username or '用户')
+    except Exception as e:
+        logger.error(f"session_state 构建失败，返回降级结果: {e}", exc_info=True)
 
     response = jsonify({
         'success': True,
-        'authenticated': bool(current_user.is_authenticated),
+        'authenticated': authenticated,
         'role': role_name,
         'is_super_admin': is_super,
         'can_enter_student_mode': can_enter_student_mode,
@@ -681,18 +689,18 @@ def session_state():
         'managed_society_name': managed_society_name,
         'display_name': display_name,
         'urls': {
-            'login': url_for('auth.login'),
-            'register': url_for('auth.register'),
-            'logout': url_for('auth.logout'),
-            'change_password': url_for('auth.change_password'),
+            'login': _safe_url('auth.login'),
+            'register': _safe_url('auth.register'),
+            'logout': _safe_url('auth.logout'),
+            'change_password': _safe_url('auth.change_password'),
             'dashboard': dashboard_url,
-            'profile': url_for('student.profile') if role_name == 'student' else dashboard_url,
-            'messages': url_for('admin.messages') if role_name == 'admin' else '',
-            'societies': url_for('admin.manage_societies') if role_name == 'admin' and is_super else '',
-            'select_society': url_for('admin.select_admin_society') if role_name == 'admin' and not is_super else '',
-            'student_dashboard': url_for('student.dashboard') if role_name == 'admin' else '',
-            'enter_student_mode': url_for('student.enter_student_mode') if role_name == 'admin' and can_enter_student_mode else '',
-            'exit_student_mode': url_for('student.exit_student_mode') if role_name == 'admin' and can_enter_student_mode else '',
+            'profile': (_safe_url('student.profile', dashboard_url) if role_name == 'student' else dashboard_url),
+            'messages': (_safe_url('admin.messages') if role_name == 'admin' else ''),
+            'societies': (_safe_url('admin.manage_societies') if role_name == 'admin' and is_super else ''),
+            'select_society': (_safe_url('admin.select_admin_society') if role_name == 'admin' and not is_super else ''),
+            'student_dashboard': (_safe_url('student.dashboard') if role_name == 'admin' else ''),
+            'enter_student_mode': (_safe_url('student.enter_student_mode') if role_name == 'admin' and can_enter_student_mode else ''),
+            'exit_student_mode': (_safe_url('student.exit_student_mode') if role_name == 'admin' and can_enter_student_mode else ''),
         }
     })
 

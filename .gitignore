@@ -1,9 +1,26 @@
 # Python cache
 __pycache__/
 *.py[cod]
+*$py.class
+
+# Bytecode cache in nested directories
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
 
 # Virtual environment
 venv/
+.venv/
+env/
+
+# Build / tool cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Local secrets
 .env
@@ -14,3 +31,23 @@ my_keys.local.md
 test_out.txt
 result.json
 out.txt
+
+# Runtime data / logs
+*.log
+logs/
+src/logs/
+flask_session/
+
+# Local database files
+instance/*.db
+*.sqlite
+*.sqlite3
+
+# OS / editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Large local SDK/assets (do not track)
+spark digital human/
+

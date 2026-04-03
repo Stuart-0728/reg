@@ -1,4 +1,4 @@
-from flask import Blueprint, redirect, url_for, flash, request, jsonify, abort, Response, render_template, current_app, g
+from flask import Blueprint, redirect, url_for, flash, request, jsonify, abort, Response, render_template, current_app, g, send_from_directory
 from flask_login import login_required, current_user
 from functools import wraps
 import logging
@@ -6,15 +6,23 @@ import os
 import requests
 import uuid
 import json
+import re
 import random
 import string
+import hmac
+import hashlib
+import base64
 from datetime import datetime, timedelta
+from email.utils import formatdate
+from urllib.parse import urlparse, quote
+from pathlib import Path
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import HTTPException
 from flask_wtf.csrf import validate_csrf, generate_csrf
 from src.models import db, Activity, Tag, StudentInfo, SystemLog, Registration, AIChatHistory, AIChatSession, activity_tags, PointsHistory, User, Role, Message, Society
-from src.utils.time_helpers import get_beijing_time, ensure_timezone_aware
-from src import csrf, limiter # Import csrf
+from src.utils.time_helpers import get_beijing_time, ensure_timezone_aware, get_localized_now, safe_less_than, safe_greater_than, display_datetime
+from src import csrf, limiter, cache # Import csrf
 
 utils_bp = Blueprint('utils', __name__)
 logger = logging.getLogger(__name__)
@@ -38,6 +46,511 @@ def _prevent_ai_api_cache(response):
 
 def _debug_endpoints_enabled():
     return bool(current_app.debug and current_app.config.get('ENABLE_DEBUG_ENDPOINTS', False))
+
+
+def _digital_human_sdk_dir():
+    configured = (current_app.config.get('DIGITAL_HUMAN_SDK_ESM_DIR') or '').strip()
+    if configured:
+        return Path(configured)
+    return Path(current_app.root_path).parent / 'spark digital human' / '3.2.1.1016' / 'avatar-sdk-web_3.2.1.1016' / 'esm'
+
+
+def _build_avatar_signed_url(server_url, api_key, api_secret):
+    parsed = urlparse(server_url)
+    host = (parsed.netloc or '').strip()
+    path = parsed.path or '/'
+    date = formatdate(usegmt=True)
+    signature_origin = f"host: {host}\ndate: {date}\nGET {path} HTTP/1.1"
+    signature_sha = hmac.new(api_secret.encode('utf-8'), signature_origin.encode('utf-8'), digestmod=hashlib.sha256).digest()
+    signature = base64.b64encode(signature_sha).decode('utf-8')
+    authorization_origin = (
+        f'api_key="{api_key}", algorithm="hmac-sha256", '
+        f'headers="host date request-line", signature="{signature}"'
+    )
+    authorization = base64.b64encode(authorization_origin.encode('utf-8')).decode('utf-8')
+    return (
+        f"{server_url}?authorization={quote(authorization, safe='')}"
+        f"&date={quote(date, safe='')}&host={quote(host, safe='')}"
+    )
+
+
+def _require_super_admin_access():
+    if not current_user.is_authenticated:
+        return _deny_unauthorized('请先登录')
+    db_user = db.session.get(User, current_user.id)
+    role_name = (db_user.role.name.lower() if db_user and db_user.role and db_user.role.name else '')
+    if role_name != 'admin':
+        return _deny_forbidden('仅管理员可访问该测试功能', 'main.index')
+    if not is_super_admin(db_user):
+        return _deny_forbidden('仅总管理员可访问该测试功能', 'main.index')
+    return None
+
+
+@utils_bp.route('/digital-human/sdk/<path:filename>', methods=['GET'])
+@login_required
+def digital_human_sdk_file(filename):
+    denied = _require_super_admin_access()
+    if denied:
+        return denied
+    sdk_dir = _digital_human_sdk_dir()
+    if not sdk_dir.exists() or not sdk_dir.is_dir():
+        abort(404)
+    return send_from_directory(str(sdk_dir), filename)
+
+
+@utils_bp.route('/digital-human/config', methods=['GET'])
+@login_required
+def digital_human_config():
+    denied = _require_super_admin_access()
+    if denied:
+        return denied
+    app_id = (current_app.config.get('DIGITAL_HUMAN_APP_ID') or '').strip()
+    api_key = (current_app.config.get('DIGITAL_HUMAN_API_KEY') or '').strip()
+    api_secret = (current_app.config.get('DIGITAL_HUMAN_API_SECRET') or '').strip()
+    scene_id = (current_app.config.get('DIGITAL_HUMAN_SCENE_ID') or '').strip()
+    server_url = (current_app.config.get('DIGITAL_HUMAN_SERVER_URL') or 'wss://avatar.cn-huadong-1.xf-yun.com/v1/interact').strip()
+
+    missing = [
+        key for key, value in (
+            ('DIGITAL_HUMAN_APP_ID', app_id),
+            ('DIGITAL_HUMAN_API_KEY', api_key),
+            ('DIGITAL_HUMAN_API_SECRET', api_secret),
+            ('DIGITAL_HUMAN_SCENE_ID', scene_id),
+        ) if not value
+    ]
+    if missing:
+        return jsonify({
+            'success': False,
+            'message': '数字人配置缺失，请先设置环境变量。',
+            'missing': missing,
+        }), 400
+
+    try:
+        signed_url = _build_avatar_signed_url(server_url, api_key, api_secret)
+    except Exception as e:
+        logger.error(f"生成数字人签名URL失败: {e}", exc_info=True)
+        return jsonify({'success': False, 'message': '签名生成失败'}), 500
+
+    mask_region = [0, 0, 1080, 1920]
+    raw_mask_region = (current_app.config.get('DIGITAL_HUMAN_MASK_REGION') or '[0,0,1080,1920]').strip()
+    try:
+        parsed_mask = json.loads(raw_mask_region)
+        if isinstance(parsed_mask, list) and len(parsed_mask) == 4:
+            mask_region = [int(x) for x in parsed_mask]
+    except Exception:
+        logger.warning('DIGITAL_HUMAN_MASK_REGION 解析失败，使用默认值 [0,0,1080,1920]')
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'appId': app_id,
+            'sceneId': scene_id,
+            'serverUrl': server_url,
+            'signedUrl': signed_url,
+            'avatarId': (current_app.config.get('DIGITAL_HUMAN_AVATAR_ID') or '111165001').strip(),
+            'vcn': (current_app.config.get('DIGITAL_HUMAN_VCN') or 'x4_yezi').strip(),
+            'width': int(current_app.config.get('DIGITAL_HUMAN_WIDTH') or 1920),
+            'height': int(current_app.config.get('DIGITAL_HUMAN_HEIGHT') or 1280),
+            'bitrate': int(current_app.config.get('DIGITAL_HUMAN_BITRATE') or 1000000),
+            'fps': int(current_app.config.get('DIGITAL_HUMAN_FPS') or 25),
+            'protocol': (current_app.config.get('DIGITAL_HUMAN_PROTOCOL') or 'xrtc').strip().lower(),
+            'alpha': int(current_app.config.get('DIGITAL_HUMAN_ALPHA') or 1),
+            'audioFormat': int(current_app.config.get('DIGITAL_HUMAN_AUDIO_FORMAT') or 1),
+            'contentAnalysis': int(current_app.config.get('DIGITAL_HUMAN_CONTENT_ANALYSIS') or 0),
+            'interactiveMode': int(current_app.config.get('DIGITAL_HUMAN_INTERACTIVE_MODE') or 0),
+            'textInteractiveMode': int(current_app.config.get('DIGITAL_HUMAN_TEXT_INTERACTIVE_MODE') or 0),
+            'scale': float(current_app.config.get('DIGITAL_HUMAN_SCALE') or 1),
+            'moveH': int(current_app.config.get('DIGITAL_HUMAN_MOVE_H') or 0),
+            'moveV': int(current_app.config.get('DIGITAL_HUMAN_MOVE_V') or 0),
+            'maskRegion': mask_region,
+        }
+    })
+
+
+@utils_bp.route('/digital-human/test', methods=['GET'])
+@login_required
+def digital_human_test_page():
+    denied = _require_super_admin_access()
+    if denied:
+        return denied
+    sdk_dir = _digital_human_sdk_dir()
+    return render_template(
+        'utils/digital_human_test.html',
+        sdk_ready=sdk_dir.exists(),
+        sdk_dir=str(sdk_dir),
+    )
+
+
+@utils_bp.route('/digital-human/assistant', methods=['GET'])
+@login_required
+def digital_human_assistant_page():
+    denied = _require_super_admin_access()
+    if denied:
+        return denied
+    sdk_dir = _digital_human_sdk_dir()
+    return render_template(
+        'utils/digital_human_assistant.html',
+        sdk_ready=sdk_dir.exists(),
+        sdk_dir=str(sdk_dir),
+    )
+
+
+@utils_bp.route('/digital-human/avatar-image', methods=['GET'])
+@login_required
+def digital_human_avatar_image():
+    denied = _require_super_admin_access()
+    if denied:
+        return denied
+    image_dir = Path(current_app.root_path).parent / 'spark digital human'
+    image_name = (current_app.config.get('DIGITAL_HUMAN_AVATAR_IMAGE') or '团小慧.png').strip() or '团小慧.png'
+    image_path = image_dir / image_name
+    if not image_path.exists() or not image_path.is_file():
+        abort(404)
+    return send_from_directory(str(image_dir), image_name)
+
+
+def _is_student_user(user):
+    try:
+        return bool(user and user.is_authenticated and user.role and str(user.role.name).lower() == 'student')
+    except Exception:
+        return False
+
+
+def _looks_like_register_action_message(text):
+    text = (text or '').strip().lower()
+    if not text:
+        return False
+    if any(token in text for token in ('怎么报名', '如何报名', '报名流程', '可以报名吗', '能报名吗')):
+        return False
+    trigger_patterns = [
+        r'帮我报名',
+        r'替我报名',
+        r'我要报名',
+        r'给我报名',
+        r'报名活动',
+    ]
+    return any(re.search(pattern, text) for pattern in trigger_patterns)
+
+
+def _looks_like_register_followup_message(text):
+    """识别多轮上下文中的简短确认消息。"""
+    raw = (text or '').strip().lower()
+    if not raw:
+        return False
+    if raw in ('这个', '就这个', '报名这个', '可以', '好', '好的', '是的', '嗯', '行', '确认'):
+        return True
+    if _extract_choice_index_from_message(raw):
+        return True
+    if _extract_activity_id_from_message(raw):
+        return True
+    return False
+
+
+def _extract_activity_id_from_message(text):
+    text = text or ''
+    patterns = [
+        r'活动\s*#?\s*(\d{1,9})',
+        r'id\s*[:：=]\s*(\d{1,9})',
+        r'编号\s*[:：=]?\s*(\d{1,9})'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            try:
+                return int(match.group(1))
+            except Exception:
+                return None
+    return None
+
+
+def _extract_activity_title_hint(text):
+    text = text or ''
+    quoted = re.search(r'《([^》]{2,120})》', text)
+    if quoted:
+        return quoted.group(1).strip()
+    return ''
+
+
+def _find_active_activity_by_title_hint(title_hint):
+    hint = (title_hint or '').strip()
+    if not hint:
+        return None, 0
+
+    now = get_localized_now()
+    activities = db.session.execute(
+        db.select(Activity).filter(
+            Activity.status == 'active',
+            Activity.title.ilike(f"%{hint}%"),
+            Activity.end_time > now
+        ).order_by(Activity.start_time.asc()).limit(6)
+    ).scalars().all()
+    if len(activities) == 1:
+        return activities[0], 1
+    return None, len(activities)
+
+
+def _register_pending_cache_key(user_id, session_id):
+    safe_sid = (session_id or 'default').strip()[:120] or 'default'
+    return f'ai_register_pending:{user_id}:{safe_sid}'
+
+
+def _get_open_activities_for_ai(limit=5, keyword=''):
+    now = get_localized_now()
+    query = db.select(Activity).filter(
+        Activity.status == 'active',
+        Activity.end_time > now,
+    )
+
+    if keyword:
+        query = query.filter(Activity.title.ilike(f"%{keyword}%"))
+
+    query = query.filter(
+        db.or_(Activity.registration_start_time.is_(None), Activity.registration_start_time <= now),
+        db.or_(Activity.registration_deadline.is_(None), Activity.registration_deadline >= now)
+    ).order_by(
+        Activity.is_featured.desc(),
+        Activity.start_time.asc(),
+        Activity.id.asc()
+    ).limit(max(1, min(limit, 8)))
+
+    return db.session.execute(query).scalars().all()
+
+
+def _extract_register_keyword(text):
+    raw = (text or '').strip()
+    if not raw:
+        return ''
+
+    # 先提取《标题》优先作为关键词
+    hint = _extract_activity_title_hint(raw)
+    if hint:
+        return hint
+
+    cleaned = re.sub(r'帮我报名|替我报名|我要报名|给我报名|报名活动|报名|活动|请|一下|可以|吗|呀|啊', ' ', raw, flags=re.IGNORECASE)
+    cleaned = re.sub(r'[^\w\u4e00-\u9fff]+', ' ', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned[:40]
+
+
+def _set_pending_register_choices(session_id, activities):
+    rows = []
+    for act in (activities or []):
+        rows.append({
+            'id': int(act.id),
+            'title': (act.title or '').strip()[:128],
+        })
+    cache.set(_register_pending_cache_key(current_user.id, session_id), rows, timeout=15 * 60)
+
+
+def _get_pending_register_choices(session_id):
+    data = cache.get(_register_pending_cache_key(current_user.id, session_id))
+    return data if isinstance(data, list) else []
+
+
+def _clear_pending_register_choices(session_id):
+    cache.delete(_register_pending_cache_key(current_user.id, session_id))
+
+
+def _format_register_choice_reply(activities):
+    if not activities:
+        return '当前没有可报名活动。'
+    lines = ['我找到了这些可报名活动，请回复“序号/活动ID/活动名关键词”让我继续报名：']
+    for idx, act in enumerate(activities, start=1):
+        lines.append(f"{idx}. {act.title}（ID: {act.id}）")
+    lines.append('例如：回复“1”或“帮我报名活动 12”。')
+    return '\n'.join(lines)
+
+
+def _extract_choice_index_from_message(text):
+    t = (text or '').strip()
+    if not t:
+        return None
+
+    # 第一个 / 选2 / 2
+    match = re.search(r'第\s*([1-9])\s*个', t)
+    if match:
+        return int(match.group(1))
+    match = re.search(r'(?:选|要|就|报)?\s*([1-9])\s*$', t)
+    if match:
+        return int(match.group(1))
+
+    cn_map = {
+        '一': 1,
+        '二': 2,
+        '三': 3,
+        '四': 4,
+        '五': 5,
+    }
+    for k, v in cn_map.items():
+        if f'第{k}个' in t or t == k:
+            return v
+    return None
+
+
+def _pick_activity_id_from_pending(user_message, pending_rows):
+    if not pending_rows:
+        return None
+
+    direct_id = _extract_activity_id_from_message(user_message)
+    if direct_id and any(int(r.get('id', 0)) == int(direct_id) for r in pending_rows):
+        return int(direct_id)
+
+    idx = _extract_choice_index_from_message(user_message)
+    if idx and 1 <= idx <= len(pending_rows):
+        return int(pending_rows[idx - 1].get('id'))
+
+    text = (user_message or '').strip().lower()
+    if len(pending_rows) == 1 and text in ('这个', '就这个', '报名这个', '可以', '好', '好的', '是的', '嗯', '行', '确认'):
+        return int(pending_rows[0].get('id'))
+
+    # 用标题关键词做模糊匹配
+    matched = [r for r in pending_rows if (r.get('title') and (text in str(r.get('title')).lower() or str(r.get('title')).lower() in text))]
+    if len(matched) == 1:
+        return int(matched[0].get('id'))
+    return None
+
+
+def _decide_register_agent_action(user_message, pending_rows):
+    """最小智能体决策：识别是否由报名动作接管，并附带候选活动ID。"""
+    text = (user_message or '').strip()
+    has_pending = bool(pending_rows)
+
+    if not text:
+        return {
+            'handled': False,
+            'activity_id': None,
+            'intent': 'none',
+            'reason': 'empty_message',
+        }
+
+    if has_pending and text in ('取消', '不用了', '不报了'):
+        return {
+            'handled': True,
+            'activity_id': None,
+            'intent': 'cancel',
+            'reason': 'user_cancel',
+        }
+
+    if has_pending:
+        picked_id = _pick_activity_id_from_pending(text, pending_rows)
+        if picked_id:
+            return {
+                'handled': True,
+                'activity_id': int(picked_id),
+                'intent': 'register',
+                'reason': 'pending_confirmed',
+            }
+
+        if _looks_like_register_action_message(text):
+            return {
+                'handled': True,
+                'activity_id': _extract_activity_id_from_message(text),
+                'intent': 'register',
+                'reason': 'new_register_intent_overrides_pending',
+            }
+
+        if _looks_like_register_followup_message(text):
+            return {
+                'handled': True,
+                'activity_id': None,
+                'intent': 'clarify',
+                'reason': 'followup_but_ambiguous',
+            }
+
+        return {
+            'handled': False,
+            'activity_id': None,
+            'intent': 'none',
+            'reason': 'not_register_intent_with_pending',
+        }
+
+    explicit_intent = _looks_like_register_action_message(text)
+    direct_activity_id = _extract_activity_id_from_message(text)
+    has_title_hint = bool(_extract_activity_title_hint(text))
+
+    if explicit_intent or direct_activity_id or has_title_hint:
+        return {
+            'handled': True,
+            'activity_id': (int(direct_activity_id) if direct_activity_id else None),
+            'intent': 'register',
+            'reason': 'explicit_or_extractable',
+        }
+
+    return {
+        'handled': False,
+        'activity_id': None,
+        'intent': 'none',
+        'reason': 'no_register_signal',
+    }
+
+
+def _perform_student_registration_by_ai(activity_id):
+    activity = db.session.execute(
+        db.select(Activity).where(Activity.id == activity_id).with_for_update()
+    ).scalar_one_or_none()
+    if not activity:
+        return False, '活动不存在。', None
+
+    if activity.status != 'active':
+        return False, '该活动当前不在进行中，无法报名。', activity
+
+    now = get_localized_now()
+    if activity.registration_start_time and safe_greater_than(activity.registration_start_time, now):
+        return False, '该活动报名尚未开始。', activity
+    if activity.registration_deadline and safe_less_than(activity.registration_deadline, now):
+        return False, '该活动已过报名截止时间。', activity
+
+    is_team_mode = (getattr(activity, 'registration_mode', 'individual') or 'individual') == 'team'
+    if is_team_mode:
+        return False, '这是组队活动，请进入详情页创建队伍或输入队伍码加入。', activity
+
+    existing = db.session.execute(
+        db.select(Registration).filter_by(user_id=current_user.id, activity_id=activity_id)
+    ).scalar_one_or_none()
+
+    if existing and existing.status in ('registered', 'attended'):
+        return True, '你已报名过该活动，无需重复提交。', activity
+
+    if activity.max_participants and int(activity.max_participants or 0) > 0:
+        reg_count = db.session.execute(
+            db.select(func.count()).select_from(Registration).filter(
+                Registration.activity_id == activity_id,
+                Registration.status.in_(['registered', 'attended'])
+            )
+        ).scalar() or 0
+        if reg_count >= int(activity.max_participants):
+            return False, '该活动报名人数已满。', activity
+
+    if existing and existing.status == 'cancelled':
+        existing.status = 'registered'
+        existing.register_time = now
+    elif not existing:
+        db.session.add(Registration(
+            user_id=current_user.id,
+            activity_id=activity_id,
+            register_time=now,
+            status='registered'
+        ))
+
+    try:
+        # 尽量复用学生报名附加动作（自动入社/通知），若不可用则仅完成主流程。
+        from src.routes import student as student_routes
+        student_info = db.session.execute(db.select(StudentInfo).filter_by(user_id=current_user.id)).scalar_one_or_none()
+        ensure_society = getattr(student_routes, '_ensure_student_join_society', None)
+        notify_success = getattr(student_routes, '_create_registration_success_notification', None)
+        if callable(ensure_society) and student_info and activity.society_id:
+            ensure_society(student_info, activity.society_id)
+        if callable(notify_success):
+            notify_success(current_user.id, activity)
+    except Exception as side_effect_error:
+        logger.warning(f"AI报名附加动作执行失败（已忽略）: {side_effect_error}")
+
+    db.session.commit()
+    try:
+        cache.delete_memoized(get_recommended_activities, current_user.id)
+    except Exception as cache_error:
+        logger.warning(f"AI报名成功后清理推荐缓存失败（已忽略）: {cache_error}")
+    return True, '报名成功，已为你完成报名。', activity
 
 
 def _validate_api_csrf_token():
@@ -341,6 +854,13 @@ def build_activity_context(activities):
         return "当前暂无可推荐的活动。"
     return "\n".join([f"{a.title}：{a.description[:40]}..." for a in activities])
 
+
+def _format_beijing_datetime(dt, fmt='%m-%d %H:%M'):
+    """统一将活动时间按北京时间格式化，避免AI上下文出现UTC时间。"""
+    if not dt:
+        return '-'
+    return display_datetime(dt, 'Asia/Shanghai', fmt)
+
 def build_site_data_context(max_activities=20):
     """构建站内活动与社团、标签映射的高度压缩上下文，极小化Token消耗。"""
     try:
@@ -366,19 +886,131 @@ def build_site_data_context(max_activities=20):
             activity_lines = []
             for a in activities:
                 soc_name = a.society.name if getattr(a, 'society', None) else '无'
-                st = a.start_time.strftime('%m-%d %H:%M') if a.start_time else '-'
-                et = a.end_time.strftime('%m-%d %H:%M') if a.end_time else '-'
+                st = _format_beijing_datetime(a.start_time, '%m-%d %H:%M')
+                et = _format_beijing_datetime(a.end_time, '%m-%d %H:%M')
                 tag_names = ','.join([tag.name for tag in a.tags]) if getattr(a, 'tags', None) else '无'
                 activity_lines.append(f"[{a.id}]{a.title}|{soc_name}|{tag_names}|{a.status}|{st}至{et}")
 
         return (
             f"【社团库】{','.join(soc_lines)}\n"
             f"【热标】{','.join(pt_lines)}\n"
-            f"【最新活动表(ID|名称|社团|标签|状态|起止时间)】\n" + "\n".join(activity_lines)
+            f"【最新活动表(ID|名称|社团|标签|状态|起止时间，均为北京时间)】\n" + "\n".join(activity_lines)
         )
     except Exception as e:
         logger.error(f"构建站内数据上下文失败: {e}")
         return "数据暂不可用"
+
+
+@utils_bp.route('/ai_chat/action/register_activity', methods=['POST'])
+@login_required
+@limiter.limit('30/minute')
+def ai_chat_action_register_activity():
+    """AI动作接口：根据用户聊天内容为学生执行活动报名。"""
+    if not _is_same_origin_request():
+        return jsonify({'success': False, 'handled': True, 'action': 'register_activity', 'op_status': 'rejected', 'reply': '请求来源校验失败，请刷新页面重试。'}), 403
+
+    ok, message = _validate_api_csrf_token()
+    if not ok:
+        return jsonify({'success': False, 'handled': True, 'action': 'register_activity', 'op_status': 'rejected', 'reply': message}), 400
+
+    if not _is_student_user(current_user):
+        return jsonify({'success': False, 'handled': True, 'action': 'register_activity', 'op_status': 'rejected', 'reply': '当前账号不是学生角色，暂不支持AI代报名。'}), 403
+
+    payload = request.get_json(silent=True) or {}
+    user_message = (payload.get('message') or '').strip()
+    session_id = (payload.get('session_id') or '').strip()
+    pending_rows = _get_pending_register_choices(session_id)
+    decision = _decide_register_agent_action(user_message, pending_rows)
+
+    if not decision.get('handled'):
+        return jsonify({'success': True, 'handled': False, 'action': 'register_activity', 'op_status': 'skipped'})
+
+    if decision.get('intent') == 'cancel':
+        _clear_pending_register_choices(session_id)
+        return jsonify({'success': True, 'handled': True, 'action': 'register_activity', 'op_status': 'cancelled', 'reply': '已取消本次AI报名操作。'})
+
+    if decision.get('intent') == 'clarify':
+        return jsonify({'success': False, 'handled': True, 'action': 'register_activity', 'op_status': 'needs_clarification', 'reply': _format_register_choice_reply(pending_rows)})
+
+    activity_id = decision.get('activity_id') or payload.get('activity_id')
+
+    # 新意图覆盖旧候选，避免用户切换目标时被旧上下文干扰。
+    if pending_rows and decision.get('reason') == 'new_register_intent_overrides_pending':
+        _clear_pending_register_choices(session_id)
+        pending_rows = []
+
+    if not activity_id:
+        activity_id = _extract_activity_id_from_message(user_message)
+
+    activity = None
+    if not activity_id:
+        title_hint = _extract_activity_title_hint(user_message)
+        if title_hint:
+            activity, hit_count = _find_active_activity_by_title_hint(title_hint)
+            if hit_count > 1:
+                candidates = _get_open_activities_for_ai(limit=5, keyword=title_hint)
+                _set_pending_register_choices(session_id, candidates)
+                return jsonify({'success': False, 'handled': True, 'action': 'register_activity', 'op_status': 'needs_clarification', 'reply': _format_register_choice_reply(candidates)})
+            if not activity:
+                return jsonify({
+                    'success': False,
+                    'handled': True,
+                    'action': 'register_activity',
+                    'op_status': 'not_found',
+                    'reply': f"没有找到标题包含“{title_hint}”且可报名的活动，请确认活动名称或直接给我活动ID。"
+                })
+            activity_id = activity.id
+
+    if not activity_id:
+        keyword = _extract_register_keyword(user_message)
+        candidates = _get_open_activities_for_ai(limit=5, keyword=keyword)
+        if candidates:
+            _set_pending_register_choices(session_id, candidates)
+            return jsonify({'success': False, 'handled': True, 'action': 'register_activity', 'op_status': 'needs_clarification', 'reply': _format_register_choice_reply(candidates)})
+        return jsonify({
+            'success': False,
+            'handled': True,
+            'action': 'register_activity',
+            'op_status': 'not_found',
+            'reply': '我可以直接帮你报名，但暂未找到可匹配活动。你可以发送“帮我报名活动 123”，或“帮我报名《活动名称》”。'
+        })
+
+    try:
+        success, result_message, activity = _perform_student_registration_by_ai(int(activity_id))
+        _clear_pending_register_choices(session_id)
+        detail_link = url_for('student.activity_detail', id=activity.id) if activity else None
+        if success:
+            reply = f"{result_message}\n\n活动：{activity.title}\n详情页：{detail_link}"
+            return jsonify({
+                'success': True,
+                'handled': True,
+                'action': 'register_activity',
+                'op_status': 'committed',
+                'reply': reply,
+                'activity_id': activity.id,
+                'activity_title': activity.title,
+                'detail_url': detail_link
+            })
+
+        reply = result_message
+        if detail_link:
+            reply = f"{result_message}\n\n你可以在详情页继续操作：{detail_link}"
+        return jsonify({
+            'success': False,
+            'handled': True,
+            'action': 'register_activity',
+            'op_status': 'failed',
+            'reply': reply,
+            'activity_id': (activity.id if activity else None),
+            'detail_url': detail_link
+        })
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'success': True, 'handled': True, 'action': 'register_activity', 'op_status': 'already_committed', 'reply': '你已报名过该活动，无需重复提交。'})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"AI代报名执行失败: {e}", exc_info=True)
+        return jsonify({'success': False, 'handled': True, 'action': 'register_activity', 'op_status': 'failed', 'reply': '代报名执行失败，请稍后重试。'}), 500
 
 # 独立的AI聊天API路由 - 添加到utils_bp蓝图
 @utils_bp.route('/utils/ai_chat/api', methods=['GET'])
@@ -456,7 +1088,9 @@ def ai_chat():
 - 积分：{student_info.points or 0}分
 
 最近活动：
-{chr(10).join([f'- {a.title} ({a.start_time.strftime("%Y-%m-%d")})' for a in active_activities[:5]]) if active_activities else '- 暂无活动'}
+{chr(10).join([f'- {a.title} ({_format_beijing_datetime(a.start_time, "%Y-%m-%d %H:%M")})' for a in active_activities[:5]]) if active_activities else '- 暂无活动'}
+
+说明：以上活动时间均为北京时间（Asia/Shanghai）。
 
 站内数据：
 {site_data_context}
@@ -529,7 +1163,7 @@ def ai_chat():
     
     # 系统提示词
     if is_admin:
-        system_prompt = f"""您好，我是基于DeepSeek大语言模型的智能助手，为智能社团+平台的管理员提供服务。
+        system_prompt = f"""您好，我是团小智，为智能社团+平台的管理员提供服务。
 
 我使用的是DeepSeek-r1-distill-qwen-7b-250120模型，可以为您这位管理员提供以下帮助：
 1. 分析活动参与数据和学生参与情况
@@ -544,7 +1178,7 @@ def ai_chat():
 您可以询问我关于平台数据的分析、学生参与情况、活动与标签映射关系、活动建议等方面的问题。
 """
     else:
-        system_prompt = f"""您好，我是基于DeepSeek大语言模型的智能助手，为智能社团+平台提供服务。
+        system_prompt = f"""您好，我是团小智，为智能社团+平台提供服务。
 
 我使用的是DeepSeek-r1-distill-qwen-7b-250120模型，可以为您提供以下帮助：
 1. 回答关于活动的问题
@@ -750,7 +1384,7 @@ def ai_chat_legacy_post():
 
         return jsonify({
             'success': True,
-            'response': content or '抱歉，AI助手未返回有效内容。'
+            'response': content or '抱歉，团小智暂未返回有效内容。'
         })
     except Exception as e:
         logger.error(f"/api/ai/chat 处理失败: {e}", exc_info=True)

@@ -13,14 +13,14 @@ const AI_CHAT_CONFIG = {
     cookiePrefix: 'cqnu_ai_chat_',
     maxStoredMessages: 50,  // 最大存储消息数
     cookieExpireDays: 7,    // Cookie保存天数
-    initialBotMessage: '您好，欢迎来到智能社团+平台，我是基于DeepSeek大语言模型的智能助手，有什么可以帮助您的吗？',
-    notLoggedInMessage: '您好！AI助手功能需要登录后使用。请先<a href="/auth/login" class="ai-chat-link">登录</a>或<a href="/auth/register" class="ai-chat-link">注册</a>。'
+    initialBotMessage: '您好，欢迎来到智能社团+平台，我是团小智，很高兴为您服务。请问有什么可以帮您？',
+    notLoggedInMessage: '您好！团小智功能需要登录后使用。请先<a href="/auth/login" class="ai-chat-link">登录</a>或<a href="/auth/register" class="ai-chat-link">注册</a>。'
 };
 
 // 智能助手信息
 const ASSOCIATION_INFO = {
-    name: 'DeepSeek AI智能助手',
-    description: '基于DeepSeek大语言模型的智能聊天助手，为智能社团+平台提供智能服务',
+    name: '团小智',
+    description: '团小智是智能社团+平台的智能聊天助手，提供活动咨询、代报名与平台使用支持',
     model: 'deepseek-r1-distill-qwen-7b-250120',
     capabilities: [
         '回答关于活动的问题',
@@ -104,6 +104,70 @@ function loadMarkedLibrary() {
         window.marked = fallback;
         resolve(fallback);
     });
+}
+
+function sanitizeRenderedHtml(html) {
+    const template = document.createElement('template');
+    template.innerHTML = String(html || '');
+
+    const allowedTags = new Set([
+        'p', 'br', 'strong', 'b', 'em', 'i', 'code', 'pre', 'blockquote',
+        'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td'
+    ]);
+    const allowedAttrs = {
+        a: new Set(['href', 'title', 'target', 'rel'])
+    };
+
+    const walk = (node) => {
+        const children = Array.from(node.childNodes || []);
+        children.forEach((child) => {
+            if (child.nodeType === Node.ELEMENT_NODE) {
+                const tag = child.tagName.toLowerCase();
+                if (!allowedTags.has(tag)) {
+                    const textNode = document.createTextNode(child.textContent || '');
+                    child.replaceWith(textNode);
+                    return;
+                }
+
+                const attrs = Array.from(child.attributes || []);
+                attrs.forEach((attr) => {
+                    const name = attr.name.toLowerCase();
+                    const isAllowed = allowedAttrs[tag] && allowedAttrs[tag].has(name);
+                    if (!isAllowed) {
+                        child.removeAttribute(attr.name);
+                    }
+                });
+
+                if (tag === 'a') {
+                    const href = (child.getAttribute('href') || '').trim();
+                    if (!/^(https?:|mailto:|tel:|\/|#)/i.test(href)) {
+                        child.removeAttribute('href');
+                    }
+                    child.setAttribute('target', '_blank');
+                    child.setAttribute('rel', 'noopener noreferrer nofollow');
+                }
+
+                walk(child);
+                return;
+            }
+
+            if (child.nodeType === Node.COMMENT_NODE) {
+                child.remove();
+            }
+        });
+    };
+
+    walk(template.content);
+    return template.innerHTML;
+}
+
+function renderMarkdownSafely(text) {
+    const parser = (window.marked && typeof window.marked.parse === 'function')
+        ? window.marked
+        : buildFallbackMarked();
+    const rendered = parser.parse(String(text || ''));
+    return sanitizeRenderedHtml(rendered);
 }
 
 // 会话管理
@@ -582,7 +646,7 @@ class AIChatUI {
     }
     
     // 发送消息
-    sendMessage() {
+    async sendMessage() {
         if (!this.inputField) return;
         
         const message = this.inputField.value.trim();
@@ -599,9 +663,94 @@ class AIChatUI {
         
         // 禁用输入和按钮
         this.disableInput(true);
-        
+
+        const handledByAction = await this.tryHandleRegisterAction(message);
+        if (handledByAction) {
+            this.disableInput(false);
+            this.inputField.focus();
+            return;
+        }
+
         // 准备接收AI响应
         this.receiveAIResponse(message);
+    }
+
+    looksLikeRegisterAction(message) {
+        const text = String(message || '').trim().toLowerCase();
+        if (!text) {
+            return false;
+        }
+        if (text.includes('怎么报名') || text.includes('如何报名') || text.includes('报名流程')) {
+            return false;
+        }
+        return /帮我报名|替我报名|我要报名|给我报名|报名活动/.test(text);
+    }
+
+    isStudentRole() {
+        const role = (document.body.getAttribute('data-user-role') || '').toLowerCase();
+        return role === 'student';
+    }
+
+    async tryHandleRegisterAction(message) {
+        // 仅学生角色尝试报名动作；是否真正处理由后端按上下文决定。
+        if (!this.isStudentRole()) {
+            return false;
+        }
+
+        const csrfToken = this.session.getCsrfToken();
+        if (!csrfToken) {
+            return false;
+        }
+
+        try {
+            const response = await fetch('/utils/ai_chat/action/register_activity', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                    'X-CSRF-Token': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    message: message,
+                    session_id: this.session.sessionId,
+                    csrf_token: csrfToken
+                }),
+                credentials: 'same-origin'
+            });
+
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                console.warn('AI代报名响应非JSON，已回退普通对话:', parseError);
+                return false;
+            }
+
+            if (!data || !data.handled) {
+                return false;
+            }
+
+            const opStatus = String(data.op_status || '').toLowerCase();
+            const committed = Boolean(data.success) || opStatus === 'committed' || opStatus === 'already_committed';
+            const replyText = data.reply || data.message || (committed ? '报名操作已完成。' : '操作失败，请稍后重试。');
+            this.addMessageToUI(replyText, 'bot');
+            this.session.addMessage(replyText, 'assistant');
+            this.session.saveMessagesToCookie();
+
+            if (committed && typeof window.fetchUnreadNotifications === 'function') {
+                window.fetchUnreadNotifications(true);
+            }
+
+            if (!response.ok && committed) {
+                console.warn('AI代报名请求状态异常但操作已提交:', response.status, data);
+            }
+
+            return true;
+        } catch (error) {
+            console.error('AI代报名调用失败:', error);
+            return false;
+        }
     }
     
     // 接收AI响应
@@ -727,14 +876,14 @@ class AIChatUI {
                     
                     streamState.fullResponse += data.content;
                     
-                    // 使用Markdown渲染响应
+                    // 使用Markdown渲染响应（带安全清洗）
                     if (window.marked) {
-                        aiMessageDiv.innerHTML = window.marked.parse(streamState.fullResponse);
+                        aiMessageDiv.innerHTML = renderMarkdownSafely(streamState.fullResponse);
                     } else {
                         // 如果marked未加载，尝试加载
                         loadMarkedLibrary()
-                            .then(marked => {
-                                aiMessageDiv.innerHTML = marked.parse(streamState.fullResponse);
+                            .then(() => {
+                                aiMessageDiv.innerHTML = renderMarkdownSafely(streamState.fullResponse);
                             })
                             .catch(err => {
                                 console.error('Markdown渲染失败:', err);
@@ -832,12 +981,12 @@ class AIChatUI {
         if (type === 'bot') {
             // 使用marked库渲染Markdown（如果已加载）
             if (window.marked) {
-                messageDiv.innerHTML = window.marked.parse(text);
+                messageDiv.innerHTML = renderMarkdownSafely(text);
             } else {
                 // 尝试加载marked库
                 loadMarkedLibrary()
-                    .then(marked => {
-                        messageDiv.innerHTML = marked.parse(text);
+                    .then(() => {
+                        messageDiv.innerHTML = renderMarkdownSafely(text);
                     })
                     .catch(err => {
                         console.error('Markdown渲染失败:', err);

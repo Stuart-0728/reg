@@ -1,0 +1,800 @@
+{% extends 'base.html' %}
+
+{% block title %}数字人本地测试台{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.digital-human-page {
+    --dh-bg-1: #0f172a;
+    --dh-bg-2: #1e293b;
+    --dh-card: rgba(255, 255, 255, 0.92);
+    --dh-text: #0f172a;
+    --dh-soft: #64748b;
+    --dh-accent: #0ea5e9;
+    --dh-accent-2: #22c55e;
+    --dh-border: rgba(15, 23, 42, 0.12);
+}
+
+.digital-human-page .hero {
+    background: radial-gradient(1200px 420px at 10% 0%, rgba(14, 165, 233, 0.25), transparent 50%),
+                radial-gradient(900px 400px at 100% 10%, rgba(34, 197, 94, 0.2), transparent 50%),
+                linear-gradient(160deg, var(--dh-bg-1), var(--dh-bg-2));
+    border-radius: 18px;
+    color: #f8fafc;
+    padding: 1.2rem;
+    margin-bottom: 1rem;
+}
+
+.digital-human-page .shell {
+    border: 1px solid var(--dh-border);
+    border-radius: 18px;
+    background: var(--dh-card);
+    box-shadow: 0 18px 35px rgba(15, 23, 42, 0.12);
+}
+
+.digital-human-page .viewer {
+    width: 100%;
+    height: 420px;
+    border-radius: 14px;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 100%);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.digital-human-page .viewer video,
+.digital-human-page .viewer canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+}
+
+.digital-human-page .status {
+    font-size: 0.95rem;
+    color: var(--dh-soft);
+}
+
+.digital-human-page .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background: #94a3b8;
+}
+
+.digital-human-page .status-dot.ok { background: #22c55e; }
+.digital-human-page .status-dot.err { background: #ef4444; }
+
+.digital-human-page .log-box {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    background: #0b1220;
+    color: #dbeafe;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    min-height: 180px;
+    max-height: 280px;
+    overflow: auto;
+    padding: 10px;
+}
+
+.digital-human-page .muted-note {
+    color: #475569;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    .digital-human-page .viewer {
+        height: 320px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4 digital-human-page">
+    <div class="hero">
+        <h3 class="mb-1">Spark 数字人本地测试台</h3>
+        <div class="small opacity-75">形象默认 ID：138805001。页面只通过后端签名，不在前端暴露 APISecret。</div>
+    </div>
+
+    <div class="shell p-3 p-md-4">
+        {% if not sdk_ready %}
+        <div class="alert alert-danger" role="alert">
+            未找到 SDK 目录：{{ sdk_dir }}
+        </div>
+        {% endif %}
+
+        <div class="row g-3">
+            <div class="col-lg-8">
+                <div id="avatar-wrapper" class="viewer"></div>
+                <div class="mt-2 status" id="status-line">
+                    <span id="status-dot" class="status-dot"></span>
+                    <span id="status-text">等待初始化</span>
+                </div>
+                <div class="mt-3 d-flex flex-wrap gap-2">
+                    <button id="btn-init" class="btn btn-primary">1. 初始化</button>
+                    <button id="btn-start" class="btn btn-success">2. 启动数字人</button>
+                    <button id="btn-stop" class="btn btn-outline-danger">停止</button>
+                    <button id="btn-resume" class="btn btn-outline-secondary">恢复声音</button>
+                    <button id="btn-diagnose" class="btn btn-outline-dark">一键诊断</button>
+                </div>
+                <div class="mt-3 input-group">
+                    <input id="text-input" class="form-control" placeholder="输入问题，数字人会语音回答并返回文本" maxlength="400">
+                    <button id="btn-speak" class="btn btn-info text-white">文本问答</button>
+                </div>
+                <div class="mt-3 d-flex flex-wrap gap-2">
+                    <button id="btn-rec-start" class="btn btn-primary">开始语音对话</button>
+                    <button id="btn-rec-stop" class="btn btn-outline-secondary">结束语音对话</button>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">最近一次问答文本回复</label>
+                    <textarea id="answer-box" class="form-control" rows="4" readonly placeholder="这里显示 nlp 文本回复"></textarea>
+                </div>
+                <div class="mt-2 muted-note">如果启动后无声音，请先点击页面任意位置，再点“恢复声音”。</div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-transparent fw-semibold">参数</div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label">Avatar ID</label>
+                            <input id="avatar-id" class="form-control" value="138805001">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">VCN（发音人）</label>
+                            <input id="vcn" class="form-control" placeholder="例如 x4_lingxiaoqi_oral">
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label">宽度</label>
+                                <input id="width" type="number" class="form-control" value="1920" step="4">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">高度</label>
+                                <input id="height" type="number" class="form-control" value="1280" step="4">
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-6">
+                                <label class="form-label">码率</label>
+                                <input id="bitrate" type="number" class="form-control" value="1000000" step="10000">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">FPS</label>
+                                <input id="fps" type="number" class="form-control" value="25" min="1" max="60">
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-6">
+                                <label class="form-label">推流协议</label>
+                                <select id="protocol" class="form-select">
+                                    <option value="xrtc" selected>xrtc</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">透明通道</label>
+                                <select id="alpha" class="form-select">
+                                    <option value="1" selected>开启</option>
+                                    <option value="0">关闭</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">音频采样率</label>
+                                <select id="audio-format" class="form-select">
+                                    <option value="1" selected>16k</option>
+                                    <option value="2">24k</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-6">
+                                <label class="form-label">全局打断模式</label>
+                                <select id="interactive-mode" class="form-select">
+                                    <option value="1">打断模式</option>
+                                    <option value="0" selected>追加模式</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">文本打断模式</label>
+                                <select id="text-interactive-mode" class="form-select">
+                                    <option value="1">打断模式</option>
+                                    <option value="0" selected>追加模式</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-1">
+                            <div class="col-6">
+                                <label class="form-label">scale</label>
+                                <input id="scale" type="number" class="form-control" value="1" step="0.01">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label">move_h</label>
+                                <input id="move-h" type="number" class="form-control" value="0" step="1">
+                            </div>
+                            <div class="col-3">
+                                <label class="form-label">move_v</label>
+                                <input id="move-v" type="number" class="form-control" value="0" step="1">
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <label class="form-label">mask_region (JSON)</label>
+                            <input id="mask-region" class="form-control" value="[0,0,1080,1920]" placeholder="[0,0,1080,1920]">
+                            <div class="form-check mt-1">
+                                <input class="form-check-input" type="checkbox" id="enable-mask">
+                                <label class="form-check-label" for="enable-mask">启用 mask_region（默认关闭，避免画面被裁空）</label>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <label class="form-label">情感分析</label>
+                            <select id="content-analysis" class="form-select">
+                                <option value="0" selected>关闭</option>
+                                <option value="1">开启</option>
+                            </select>
+                        </div>
+                        <div class="small text-muted mt-2">注意：宽高必须是 4 的倍数。</div>
+                    </div>
+                </div>
+
+                <div class="mt-3 log-box" id="log-box"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script type="module">
+const sdkUrl = "{{ url_for('utils.digital_human_sdk_file', filename='index.js') }}";
+const configUrl = "{{ url_for('utils.digital_human_config') }}";
+
+let AvatarPlatform = null;
+let SDKEvents = null;
+let PlayerEvents = null;
+let avatar = null;
+let cfg = null;
+
+const statusDot = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+const logBox = document.getElementById('log-box');
+const wrapper = document.getElementById('avatar-wrapper');
+
+const avatarIdInput = document.getElementById('avatar-id');
+const vcnInput = document.getElementById('vcn');
+const widthInput = document.getElementById('width');
+const heightInput = document.getElementById('height');
+const bitrateInput = document.getElementById('bitrate');
+const fpsInput = document.getElementById('fps');
+const protocolInput = document.getElementById('protocol');
+const alphaInput = document.getElementById('alpha');
+const audioFormatInput = document.getElementById('audio-format');
+const interactiveModeInput = document.getElementById('interactive-mode');
+const textInteractiveModeInput = document.getElementById('text-interactive-mode');
+const scaleInput = document.getElementById('scale');
+const moveHInput = document.getElementById('move-h');
+const moveVInput = document.getElementById('move-v');
+const maskRegionInput = document.getElementById('mask-region');
+const enableMaskInput = document.getElementById('enable-mask');
+const contentAnalysisInput = document.getElementById('content-analysis');
+const textInput = document.getElementById('text-input');
+const answerBox = document.getElementById('answer-box');
+
+const btnInit = document.getElementById('btn-init');
+const btnStart = document.getElementById('btn-start');
+const btnStop = document.getElementById('btn-stop');
+const btnSpeak = document.getElementById('btn-speak');
+const btnResume = document.getElementById('btn-resume');
+const btnDiagnose = document.getElementById('btn-diagnose');
+const btnRecStart = document.getElementById('btn-rec-start');
+const btnRecStop = document.getElementById('btn-rec-stop');
+
+const uiState = {
+    initialized: false,
+    started: false,
+    recording: false,
+    busy: false,
+    gotFrame: false,
+    fallbackStage: 0,
+};
+
+const diagState = {
+    sdkLoaded: false,
+    configLoaded: false,
+    initialized: false,
+    connected: false,
+    startResolved: false,
+    playerPlay: false,
+    playerPlaying: false,
+    frameStart: false,
+    lastError: '',
+};
+
+function refreshButtons() {
+    btnInit.disabled = uiState.busy;
+    btnStart.disabled = uiState.busy || !uiState.initialized || uiState.started;
+    btnStop.disabled = uiState.busy || !uiState.started;
+    btnSpeak.disabled = uiState.busy || !uiState.started;
+    btnResume.disabled = uiState.busy || !uiState.started;
+    btnRecStart.disabled = uiState.busy || !uiState.started || uiState.recording;
+    btnRecStop.disabled = uiState.busy || !uiState.started || !uiState.recording;
+}
+
+function resetRuntimeState() {
+    uiState.started = false;
+    uiState.recording = false;
+    refreshButtons();
+}
+
+function log(line) {
+    const text = `[${new Date().toLocaleTimeString()}] ${line}`;
+    logBox.textContent += `${text}\n`;
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setStatus(text, kind = 'normal') {
+    statusText.textContent = text;
+    statusDot.className = 'status-dot';
+    if (kind === 'ok') {
+        statusDot.classList.add('ok');
+    }
+    if (kind === 'err') {
+        statusDot.classList.add('err');
+    }
+}
+
+async function loadSdk() {
+    if (AvatarPlatform) {
+        return;
+    }
+    const mod = await import(sdkUrl);
+    AvatarPlatform = mod.default;
+    SDKEvents = mod.SDKEvents;
+    PlayerEvents = mod.PlayerEvents;
+    diagState.sdkLoaded = true;
+    log(`SDK loaded, version=${AvatarPlatform.getVersion()}`);
+}
+
+async function fetchConfig() {
+    const resp = await fetch(configUrl, { credentials: 'same-origin' });
+    const payload = await resp.json();
+    if (!resp.ok || !payload.success) {
+        throw new Error(payload.message || '读取数字人配置失败');
+    }
+    cfg = payload.data;
+    avatarIdInput.value = cfg.avatarId || '138805001';
+    vcnInput.value = cfg.vcn || 'x4_yezi';
+    widthInput.value = cfg.width || 1920;
+    heightInput.value = cfg.height || 1280;
+    bitrateInput.value = cfg.bitrate || 1000000;
+    fpsInput.value = cfg.fps || 25;
+    protocolInput.value = String(cfg.protocol || 'xrtc').toLowerCase();
+    alphaInput.value = String(cfg.alpha ?? 1);
+    audioFormatInput.value = String(cfg.audioFormat ?? 1);
+    interactiveModeInput.value = String(cfg.interactiveMode ?? 2);
+    textInteractiveModeInput.value = String(cfg.textInteractiveMode ?? 2);
+    scaleInput.value = cfg.scale ?? 1;
+    moveHInput.value = cfg.moveH ?? 0;
+    moveVInput.value = cfg.moveV ?? 0;
+    maskRegionInput.value = JSON.stringify(cfg.maskRegion || [0, 0, 1080, 1920]);
+    enableMaskInput.checked = false;
+    contentAnalysisInput.value = String(cfg.contentAnalysis ?? 0);
+    diagState.configLoaded = true;
+    log('Config loaded from backend signer endpoint.');
+}
+
+function getRenderProbe() {
+    const video = wrapper.querySelector('video');
+    const canvas = wrapper.querySelector('canvas');
+    const videoStyle = video ? window.getComputedStyle(video) : null;
+    const canvasRect = canvas ? canvas.getBoundingClientRect() : null;
+    const videoRect = video ? video.getBoundingClientRect() : null;
+    return {
+        wrapperClient: `${wrapper.clientWidth}x${wrapper.clientHeight}`,
+        hasVideo: Boolean(video),
+        hasCanvas: Boolean(canvas),
+        videoRect: videoRect ? `${Math.round(videoRect.width)}x${Math.round(videoRect.height)}` : '-',
+        canvasRect: canvasRect ? `${Math.round(canvasRect.width)}x${Math.round(canvasRect.height)}` : '-',
+        videoReadyState: video ? video.readyState : -1,
+        videoPaused: video ? video.paused : null,
+        videoCurrentTime: video ? Number(video.currentTime || 0).toFixed(2) : '-',
+        videoDisplay: videoStyle ? videoStyle.display : '-',
+        videoVisibility: videoStyle ? videoStyle.visibility : '-',
+    };
+}
+
+function hasRenderableEvidence() {
+    const probe = getRenderProbe();
+    const [vw, vh] = String(probe.videoRect || '0x0').split('x').map((n) => Number(n || 0));
+    const [cw, ch] = String(probe.canvasRect || '0x0').split('x').map((n) => Number(n || 0));
+    const currentTime = Number(probe.videoCurrentTime || 0);
+    return (vw > 0 && vh > 0) || (cw > 0 && ch > 0) || currentTime > 0.2;
+}
+
+function runDiagnosis() {
+    const probe = getRenderProbe();
+    const items = [
+        ['SDK已加载', diagState.sdkLoaded],
+        ['配置已拉取', diagState.configLoaded],
+        ['实例已初始化', diagState.initialized],
+        ['WebSocket已连接', diagState.connected],
+        ['start已成功返回', diagState.startResolved],
+        ['播放器触发play', diagState.playerPlay],
+        ['播放器触发playing', diagState.playerPlaying],
+        ['SDK触发frame_start', diagState.frameStart],
+        ['容器存在video节点', probe.hasVideo],
+        ['容器存在canvas节点', probe.hasCanvas],
+    ];
+
+    log('========== DIAGNOSE BEGIN ==========');
+    items.forEach(([name, ok]) => {
+        log(`${ok ? 'OK' : 'FAIL'} | ${name}`);
+    });
+    log(`probe.wrapper=${probe.wrapperClient} videoRect=${probe.videoRect} canvasRect=${probe.canvasRect} readyState=${probe.videoReadyState} paused=${probe.videoPaused} t=${probe.videoCurrentTime} display=${probe.videoDisplay} visibility=${probe.videoVisibility}`);
+    if (diagState.lastError) {
+        log(`lastError=${diagState.lastError}`);
+    }
+    log('========== DIAGNOSE END ==========');
+}
+
+function buildGlobalParams(panel) {
+    const avatarParams = {
+        avatar_id: panel.avatarId,
+        width: panel.width,
+        height: panel.height,
+        audio_format: panel.audioFormat,
+        scale: panel.scale,
+        move_h: panel.moveH,
+        move_v: panel.moveV,
+    };
+    if (panel.maskRegion) {
+        avatarParams.mask_region = panel.maskRegion;
+    }
+
+    return {
+        avatar_dispatch: {
+            interactive_mode: panel.interactiveMode,
+            enable_action_status: 1,
+            content_analysis: panel.contentAnalysis,
+        },
+        avatar: avatarParams,
+        stream: {
+            protocol: panel.protocol,
+            bitrate: panel.bitrate,
+            fps: panel.fps,
+            alpha: panel.alpha,
+        },
+        tts: {
+            vcn: panel.vcn,
+            speed: 50,
+            pitch: 50,
+            volume: 100,
+            audio: { sample_rate: panel.audioFormat === 2 ? 24000 : 16000 },
+        },
+    };
+}
+
+function bindEvents(instance) {
+    instance.removeAllListeners();
+    instance
+        .on(SDKEvents.connected, (data) => {
+            diagState.connected = true;
+            log(`connected sid=${data?.sid || '-'}`);
+            setStatus('连接成功', 'ok');
+        })
+        .on(SDKEvents.disconnected, (e) => {
+            diagState.connected = false;
+            log(`disconnected ${e?.message || ''}`);
+            setStatus('连接已断开');
+            resetRuntimeState();
+        })
+        .on(SDKEvents.error, (err) => {
+            diagState.lastError = `${err?.code || '-'} ${err?.message || ''}`.trim();
+            log(`sdk error code=${err?.code || '-'} msg=${err?.message || ''}`);
+            setStatus('SDK 错误，请看日志', 'err');
+            resetRuntimeState();
+        })
+        .on(SDKEvents.frame_start, () => {
+            uiState.gotFrame = true;
+            diagState.frameStart = true;
+            log('frame_start');
+        })
+        .on(SDKEvents.frame_stop, () => log('frame_stop'))
+        .on(SDKEvents.asr, (d) => log(`asr ${JSON.stringify(d)}`))
+        .on(SDKEvents.nlp, (d) => {
+            log(`nlp ${JSON.stringify(d)}`);
+            const text = (d && (d.displayContent || d.content || (d.answer && d.answer.text))) ?
+                (d.displayContent || d.content || d.answer.text) : '';
+            if (text) {
+                answerBox.value = text;
+                log(`nlp_answer ${text}`);
+            }
+        });
+}
+
+function bindPlayerEvents(instance) {
+    const player = instance.player || instance.createPlayer();
+    player.removeAllListeners();
+    player
+        .on(PlayerEvents.play, () => {
+            diagState.playerPlay = true;
+            log('player play');
+        })
+        .on(PlayerEvents.playing, () => {
+            diagState.playerPlaying = true;
+            wrapper.style.visibility = 'visible';
+            wrapper.style.opacity = '1';
+            log('player playing');
+            try {
+                avatar?.player?.resize?.();
+            } catch (e) {
+                console.warn(e);
+            }
+            window.setTimeout(() => {
+                const p = getRenderProbe();
+                if (hasRenderableEvidence()) {
+                    uiState.gotFrame = true;
+                }
+                log(`playing_probe wrapper=${p.wrapperClient} videoRect=${p.videoRect} canvasRect=${p.canvasRect} readyState=${p.videoReadyState} paused=${p.videoPaused} t=${p.videoCurrentTime}`);
+            }, 400);
+        })
+        .on(PlayerEvents.waiting, () => log('player waiting'))
+        .on(PlayerEvents.playNotAllowed, () => {
+            log('player not-allowed: need user gesture then resume()');
+            setStatus('浏览器阻止自动播音，请点击恢复声音', 'err');
+        })
+        .on(PlayerEvents.error, (e) => {
+            diagState.lastError = `player ${e?.code || '-'} ${e?.message || ''}`.trim();
+            log(`player error ${e?.message || ''}`);
+            setStatus('播放器错误', 'err');
+            resetRuntimeState();
+        });
+}
+
+function readPanelParams() {
+    const width = Number(widthInput.value || 720);
+    const height = Number(heightInput.value || 1280);
+    const bitrate = Number(bitrateInput.value || 1000000);
+    const fps = Number(fpsInput.value || 25);
+    const protocol = String(protocolInput.value || 'xrtc').trim().toLowerCase();
+    const alpha = Number(alphaInput.value || 1);
+    const audioFormat = Number(audioFormatInput.value || 1);
+    const interactiveMode = Number(interactiveModeInput.value || 0);
+    const textInteractiveMode = Number(textInteractiveModeInput.value || 0);
+    const scale = Number(scaleInput.value || 1);
+    const moveH = Number(moveHInput.value || 0);
+    const moveV = Number(moveVInput.value || 0);
+    const contentAnalysis = Number(contentAnalysisInput.value || 0);
+    let maskRegion = null;
+    if (enableMaskInput.checked) {
+        try {
+            const parsedMaskRegion = JSON.parse(String(maskRegionInput.value || '[0,0,1080,1920]'));
+            if (!Array.isArray(parsedMaskRegion) || parsedMaskRegion.length !== 4) {
+                throw new Error('mask_region 必须是长度为4的数组');
+            }
+            maskRegion = parsedMaskRegion.map((n) => Number(n));
+        } catch (e) {
+            throw new Error('mask_region 格式错误，请输入如 [0,0,1080,1920]');
+        }
+    }
+
+    if (width % 4 !== 0 || height % 4 !== 0) {
+        throw new Error('宽高必须是 4 的倍数');
+    }
+    return {
+        avatarId: String(avatarIdInput.value || '').trim(),
+        vcn: String(vcnInput.value || '').trim(),
+        width,
+        height,
+        bitrate,
+        fps,
+        protocol,
+        alpha,
+        audioFormat,
+        interactiveMode,
+        textInteractiveMode,
+        scale,
+        moveH,
+        moveV,
+        maskRegion,
+        contentAnalysis,
+    };
+}
+
+async function initAvatar() {
+    setStatus('初始化中...');
+    await loadSdk();
+    await fetchConfig();
+
+    if (avatar) {
+        avatar.destroy();
+        avatar = null;
+    }
+    avatar = new AvatarPlatform({ useInlinePlayer: true });
+    bindEvents(avatar);
+    bindPlayerEvents(avatar);
+    wrapper.style.visibility = 'visible';
+    wrapper.style.opacity = '1';
+
+    const panel = readPanelParams();
+    avatar.setApiInfo({
+        appId: cfg.appId,
+        sceneId: cfg.sceneId,
+        serverUrl: cfg.serverUrl,
+        signedUrl: cfg.signedUrl,
+    });
+    avatar.setGlobalParams(buildGlobalParams(panel));
+
+    setStatus('初始化完成，可启动', 'ok');
+    log('Avatar instance initialized.');
+    diagState.initialized = true;
+    uiState.initialized = true;
+    resetRuntimeState();
+}
+
+async function startAvatar() {
+    if (!avatar) {
+        throw new Error('请先初始化');
+    }
+    const panel = readPanelParams();
+    if (!panel.vcn) {
+        throw new Error('请先填写 VCN 发音人');
+    }
+    uiState.gotFrame = false;
+    uiState.fallbackStage = 0;
+    setStatus('连接中...');
+    await avatar.start({ wrapper });
+    setStatus('已启动', 'ok');
+    log('Avatar started.');
+    diagState.startResolved = true;
+    uiState.started = true;
+    refreshButtons();
+
+    window.setTimeout(async () => {
+        if (!avatar || !uiState.started || uiState.fallbackStage !== 0) {
+            return;
+        }
+        if (uiState.gotFrame || hasRenderableEvidence()) {
+            uiState.gotFrame = true;
+            log('Skip fallback stage1: render evidence detected under transparent xrtc.');
+            return;
+        }
+        const panelAfterStart = readPanelParams();
+        if (panelAfterStart.protocol === 'xrtc' && panelAfterStart.alpha === 1) {
+            uiState.fallbackStage = 1;
+            log('No frame detected. Fallback stage1: xrtc alpha=0 retry.');
+            setStatus('透明流未出画面，切换普通流重试中...');
+            avatar.stop();
+            avatar.setGlobalParams(buildGlobalParams({ ...panelAfterStart, alpha: 0 }));
+            await avatar.start({ wrapper });
+            setStatus('已切换普通流重试', 'ok');
+        }
+    }, 7000);
+
+    window.setTimeout(() => {
+        if (!avatar || !uiState.started || uiState.gotFrame || hasRenderableEvidence()) {
+            uiState.gotFrame = true;
+            return;
+        }
+        log('No frame detected under xrtc (alpha=0). Keep xrtc as requested.');
+        setStatus('xrtc 已重试仍无画面，请检查该形象在 xrtc/透明通道能力与授权');
+        runDiagnosis();
+    }, 14000);
+}
+
+async function stopAvatar() {
+    if (!avatar) {
+        return;
+    }
+    avatar.stop();
+    setStatus('已停止');
+    log('Avatar stopped.');
+    resetRuntimeState();
+}
+
+async function speakText() {
+    if (!avatar) {
+        throw new Error('请先初始化并启动');
+    }
+    const panel = readPanelParams();
+    const text = String(textInput.value || '').trim();
+    if (!text) {
+        throw new Error('请输入要播报的文本');
+    }
+    const reqId = await avatar.writeText(text, {
+        nlp: true,
+        avatar_dispatch: {
+            interactive_mode: panel.textInteractiveMode,
+        }
+    });
+    log(`writeText request_id=${reqId}`);
+}
+
+async function startVoiceDialog() {
+    if (!avatar) {
+        throw new Error('请先初始化并启动');
+    }
+    const panel = readPanelParams();
+    if (!panel.vcn) {
+        throw new Error('请先填写 VCN 发音人');
+    }
+    const sampleRate = panel.audioFormat === 2 ? 24000 : 16000;
+    let recorder = avatar.recorder;
+    if (!recorder || recorder.sampleRate !== sampleRate) {
+        if (recorder) {
+            avatar.destroyRecorder();
+        }
+        recorder = avatar.createRecorder({ sampleRate });
+    }
+    await recorder.startRecord(0, null, {
+        nlp: true,
+        avatar_dispatch: { interactive_mode: panel.textInteractiveMode },
+    });
+    setStatus('语音对话中（全双工）', 'ok');
+    log('startRecord(0) started');
+    uiState.recording = true;
+    refreshButtons();
+}
+
+async function stopVoiceDialog() {
+    if (!avatar || !avatar.recorder) {
+        return;
+    }
+    avatar.recorder.stopRecord();
+    setStatus('语音对话已停止');
+    log('stopRecord() called');
+    uiState.recording = false;
+    refreshButtons();
+}
+
+async function resumeAudio() {
+    if (!avatar || !avatar.player) {
+        return;
+    }
+    avatar.player.resume();
+    setStatus('已尝试恢复声音');
+    log('player.resume() called');
+}
+
+async function wrapAction(action, fallback) {
+    uiState.busy = true;
+    refreshButtons();
+    try {
+        await action();
+    } catch (e) {
+        const msg = e && e.message ? e.message : fallback;
+        setStatus(msg, 'err');
+        log(`ERROR: ${msg}`);
+        console.error(e);
+    } finally {
+        uiState.busy = false;
+        refreshButtons();
+    }
+}
+
+btnInit.addEventListener('click', () => wrapAction(initAvatar, '初始化失败'));
+btnStart.addEventListener('click', () => wrapAction(startAvatar, '启动失败'));
+btnStop.addEventListener('click', () => wrapAction(stopAvatar, '停止失败'));
+btnSpeak.addEventListener('click', () => wrapAction(speakText, '文本驱动失败'));
+btnResume.addEventListener('click', () => wrapAction(resumeAudio, '恢复声音失败'));
+btnDiagnose.addEventListener('click', runDiagnosis);
+btnRecStart.addEventListener('click', () => wrapAction(startVoiceDialog, '开始语音失败'));
+btnRecStop.addEventListener('click', () => wrapAction(stopVoiceDialog, '停止语音失败'));
+
+refreshButtons();
+
+window.addEventListener('beforeunload', () => {
+    try {
+        avatar?.stop();
+        avatar?.destroy();
+    } catch (e) {
+        console.warn(e);
+    }
+});
+</script>
+{% endblock %}

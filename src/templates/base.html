@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="智能社团+ - 活动管理系统">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo.svg', v='20260403a') }}">
     <title>{% block title %}智能社团+{% endblock %}</title>
     <!-- Bootstrap CSS（本地优先，外链兜底） -->
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css', v='20260402a') }}" rel="stylesheet" onerror="this.onerror=null;this.href='https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css';">
@@ -51,8 +52,19 @@
         }
         
         .navbar-brand {
+            display: inline-flex;
+            align-items: center;
             font-weight: 700;
             letter-spacing: 0.5px;
+        }
+
+        .navbar-logo {
+            width: 26px;
+            height: 26px;
+            object-fit: contain;
+            margin-right: 0.5rem;
+            filter: brightness(0) saturate(100%);
+            flex: 0 0 auto;
         }
         
         .nav-link {
@@ -351,10 +363,21 @@
         }
 
         .footer-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
             font-weight: 700;
             margin-bottom: 0.85rem;
             color: #111827;
             letter-spacing: 0.02em;
+        }
+
+        .footer-logo {
+            width: 32px;
+            height: 32px;
+            display: inline-block;
+            object-fit: contain;
+            flex: 0 0 auto;
         }
 
         .footer-desc,
@@ -424,6 +447,7 @@
             right: 20px;
             width: 60px;
             height: 60px;
+            padding: 0;
             background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
             border-radius: 50%;
             display: flex;
@@ -431,6 +455,7 @@
             justify-content: center;
             color: white;
             font-size: 24px;
+            font-weight: 600;
             cursor: pointer;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
             border: none;
@@ -440,6 +465,36 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        .dh-avatar-fab {
+            position: fixed;
+            left: 32px;
+            bottom: 32px;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: none;
+            padding: 0;
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 12px 28px rgba(30, 64, 175, 0.25);
+            z-index: 1000;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            overflow: visible;
+        }
+
+        .dh-avatar-fab img {
+            width: 84px;
+            height: 84px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 8px 18px rgba(30, 64, 175, 0.25);
+        }
+
         @media (hover: hover) and (pointer: fine) {
             .ai-chat-button:hover {
             transform: scale(1.1) translateY(-5px) !important;
@@ -447,6 +502,320 @@
 
             transform: scale(1.1);
             box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+            }
+
+            .dh-avatar-fab:hover {
+                transform: translateY(-2px) scale(1.04);
+            }
+        }
+
+        .dh-inline-popup {
+            position: fixed;
+            left: 20px;
+            bottom: 96px;
+            width: min(1020px, calc(100vw - 32px));
+            height: min(660px, calc(100vh - 132px));
+            border-radius: 22px;
+            border: 4px solid rgba(96, 165, 250, 0.72);
+            background: linear-gradient(150deg, #dbeafe, #e2e8f0);
+            box-shadow: 0 28px 48px rgba(15, 23, 42, 0.24);
+            z-index: 1090;
+            display: none;
+            overflow: hidden;
+        }
+
+        .dh-inline-popup.open {
+            display: block;
+        }
+
+        .dh-inline-layout {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            padding: 20px;
+        }
+
+        .dh-inline-viewer {
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: radial-gradient(1200px 480px at 85% 0%, rgba(255, 255, 255, 0.45), transparent 60%);
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .dh-inline-viewer::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("{{ url_for('static', filename='img/logo.svg', v='20260403a') }}");
+            background-repeat: no-repeat;
+            background-size: min(42%, 360px);
+            background-position: 16% 58%;
+            opacity: 0.16;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .dh-inline-viewer video,
+        .dh-inline-viewer canvas {
+            width: 126%;
+            height: 100%;
+            object-fit: cover;
+            object-position: 18% center;
+            transform: translateX(-26%);
+            display: block;
+            position: relative;
+            z-index: 2;
+        }
+
+        .dh-inline-head {
+            position: absolute;
+            left: 34px;
+            right: 34px;
+            top: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0;
+            color: #1e293b;
+            font-weight: 700;
+            z-index: 2;
+        }
+
+        .dh-inline-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .dh-inline-icon-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(241, 245, 249, 0.92);
+            color: #334155;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dh-inline-body {
+            position: absolute;
+            right: 42px;
+            top: 102px;
+            bottom: 116px;
+            width: min(42%, 480px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 2;
+        }
+
+        .dh-inline-hints {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .dh-inline-suggestion {
+            border: 1px solid rgba(147, 197, 253, 0.95);
+            background: linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(219, 234, 254, 0.98));
+            color: #1e3a8a;
+            border-radius: 18px;
+            padding: 7px 12px;
+            font-size: 0.86rem;
+            line-height: 1.35;
+            text-align: left;
+        }
+
+        .dh-inline-bubble {
+            max-width: 88%;
+            border-radius: 16px;
+            padding: 10px 12px;
+            font-size: 0.92rem;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            box-shadow: 0 8px 18px rgba(30, 64, 175, 0.08);
+        }
+
+        .dh-inline-bubble p,
+        .dh-inline-bubble ul,
+        .dh-inline-bubble ol {
+            margin: 0;
+        }
+
+        .dh-inline-bubble ul,
+        .dh-inline-bubble ol {
+            padding-left: 1.1rem;
+        }
+
+        .dh-inline-bubble.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #2563eb, #0ea5e9);
+            color: #fff;
+            font-weight: 600;
+            border-radius: 22px 22px 4px 22px;
+        }
+
+        .dh-inline-bubble.user,
+        .dh-inline-bubble.user * {
+            color: #ffffff !important;
+        }
+
+        .dh-inline-bubble.bot {
+            align-self: flex-start;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid rgba(191, 219, 254, 0.9);
+            color: #0f172a;
+            border-radius: 22px 22px 22px 4px;
+        }
+
+        .dh-inline-foot {
+            position: absolute;
+            left: 28px;
+            right: 28px;
+            bottom: 24px;
+            border-top: none;
+            padding: 12px;
+            display: grid;
+            grid-template-columns: 36px 1fr 36px 36px;
+            gap: 8px;
+            align-items: center;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid rgba(191, 219, 254, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 2;
+        }
+
+        .dh-inline-input {
+            height: 38px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.5);
+            padding: 0 12px;
+            min-width: 0;
+        }
+
+        .dh-inline-send,
+        .dh-inline-end {
+            border: none;
+            width: 36px;
+            height: 36px;
+            font-size: 0.86rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dh-inline-send {
+            border-radius: 50%;
+            background: linear-gradient(135deg, #2563eb, #0ea5e9);
+            color: #fff;
+        }
+
+        .dh-inline-end {
+            border-radius: 50%;
+            background: #ffffff;
+            border: 1px solid rgba(191, 219, 254, 0.95);
+            box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
+            color: transparent;
+            position: relative;
+        }
+
+        .dh-inline-end i {
+            display: none;
+        }
+
+        .dh-inline-end::after {
+            content: '';
+            width: 11px;
+            height: 11px;
+            border-radius: 2px;
+            background: #ef4444;
+            display: block;
+        }
+
+        .dh-inline-status {
+            position: absolute;
+            left: 34px;
+            bottom: 90px;
+            font-size: 0.82rem;
+            color: #475569;
+            padding: 2px 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.7);
+            z-index: 2;
+        }
+
+        @media (max-width: 900px) {
+            .dh-inline-popup {
+                left: 8px;
+                width: calc(100vw - 16px);
+                height: min(700px, calc(100vh - 122px));
+            }
+
+            .dh-inline-viewer {
+                min-height: 100%;
+            }
+
+            .dh-inline-body {
+                top: 84px;
+                right: 14px;
+                width: min(60%, 400px);
+            }
+
+            .dh-inline-viewer video,
+            .dh-inline-viewer canvas {
+                width: 120%;
+                object-position: 22% center;
+                transform: translateX(-20%);
+            }
+
+            .dh-inline-viewer::before {
+                background-size: min(46%, 280px);
+                background-position: 12% 60%;
+            }
+
+            .dh-inline-foot {
+                grid-template-columns: 34px 1fr 34px 34px;
+                left: 14px;
+                right: 14px;
+            }
+
+            .dh-inline-status {
+                left: 16px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .dh-inline-body {
+                width: calc(100% - 28px);
+                left: 14px;
+                right: 14px;
+                top: auto;
+                bottom: 122px;
+                max-height: 44%;
+            }
+
+            .dh-inline-viewer video,
+            .dh-inline-viewer canvas {
+                width: 130%;
+                object-position: 18% center;
+                transform: translateX(-28%);
+            }
+
+            .dh-inline-viewer::before {
+                background-size: min(52%, 220px);
+                background-position: 10% 61%;
             }
         }
 
@@ -875,7 +1244,7 @@
     <nav class="navbar navbar-expand-xl glass-nav">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('main.index') }}">
-                <i class="fas fa-graduation-cap me-2"></i>智能社团+
+                <img class="navbar-logo" src="{{ url_for('static', filename='img/logo.svg', v='20260403a') }}" alt="智能社团+ logo">智能社团+
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="切换导航">
                 <span class="navbar-toggler-icon"></span>
@@ -1038,7 +1407,7 @@
         <div class="container">
             <div class="row g-4">
                 <div class="col-lg-5 col-md-12">
-                    <h5 class="footer-title">智能社团+</h5>
+                    <h5 class="footer-title"><img class="footer-logo" src="{{ url_for('static', filename='img/logo.svg', v='20260403a') }}" alt="智能社团+ logo">智能社团+</h5>
                     <p class="footer-desc">致力于提升社团运行效率，打造校园智能化实践交流平台。</p>
                 </div>
                 <div class="col-lg-3 col-md-6">
@@ -1189,7 +1558,7 @@
                         })
                         .catch(() => {
                             if (typeof window.showToast === 'function') {
-                                window.showToast('智能助手加载失败，请稍后重试', 'error');
+                                window.showToast('团小智加载失败，请稍后重试', 'error');
                             }
                         })
                         .finally(() => {
@@ -1569,13 +1938,50 @@
     </script>
     {% block scripts %}{% endblock %}
 
+    {% if current_user.is_authenticated and current_user.is_super_admin %}
+    <button id="dhFloatingTrigger" class="dh-avatar-fab" type="button" aria-label="打开团小慧数字人">
+        <img src="{{ url_for('utils.digital_human_avatar_image') }}" alt="团小慧头像">
+    </button>
+
+    <section id="dhInlinePopup" class="dh-inline-popup" aria-hidden="true">
+        <div class="dh-inline-layout">
+            <div id="dhInlineViewer" class="dh-inline-viewer"></div>
+            <div class="dh-inline-head">
+                <span>团小慧</span>
+                <div class="dh-inline-actions">
+                    <button id="dhMuteBtn" class="dh-inline-icon-btn" type="button" title="静音切换" aria-label="静音切换"><i id="dhMuteIcon" class="fas fa-volume-high"></i></button>
+                    <button id="dhCloseBtn" class="dh-inline-icon-btn" type="button" title="关闭弹窗" aria-label="关闭弹窗"><i class="fas fa-xmark"></i></button>
+                </div>
+            </div>
+
+            <div id="dhInlineBody" class="dh-inline-body">
+                <div class="dh-inline-hints" id="dhInlineHints">
+                    <button class="dh-inline-suggestion" type="button" data-question="平台的作用是什么？">平台的作用是什么？</button>
+                    <button class="dh-inline-suggestion" type="button" data-question="报名流程怎么走？">报名流程怎么走？</button>
+                    <button class="dh-inline-suggestion" type="button" data-question="如何查看我的报名记录？">如何查看我的报名记录？</button>
+                    <button class="dh-inline-suggestion" type="button" data-question="签到失败怎么办？">签到失败怎么办？</button>
+                </div>
+            </div>
+
+            <div class="dh-inline-foot">
+                <button id="dhMicBtn" class="dh-inline-icon-btn" type="button" title="语音对话" aria-label="语音对话"><i id="dhMicIcon" class="fas fa-microphone"></i></button>
+                <input id="dhTextInput" class="dh-inline-input" placeholder="请输入你的问题">
+                <button id="dhSendBtn" class="dh-inline-icon-btn dh-inline-send" type="button" title="发送" aria-label="发送"><i class="fas fa-paper-plane"></i></button>
+                <button id="dhEndBtn" class="dh-inline-end" type="button" title="结束对话" aria-label="结束对话"><i class="fas fa-stop"></i></button>
+            </div>
+
+            <div class="dh-inline-status" id="dhStatusText">未连接</div>
+        </div>
+    </section>
+    {% endif %}
+
     <button class="ai-chat-button" id="aiChatToggleBtn" type="button" data-no-loading="true" data-no-global-loading="true">
         <i class="fas fa-robot"></i>
     </button>
 
     <div class="ai-chat-container" id="aiChatContainer">
         <div class="ai-chat-header">
-            <h3>智能助手</h3>
+            <h3>团小智</h3>
             <button class="ai-chat-close" id="aiChatCloseBtn" type="button" data-no-loading="true" data-no-global-loading="true">&times;</button>
         </div>
         <div class="ai-chat-messages" id="aiChatMessages">
@@ -1587,7 +1993,7 @@
                 <span class="mx-1">|</span>
                 <a href="javascript:void(0);" onclick="window.aiChat.clearAllHistory()">清除所有历史</a>
             </span>
-            <a href="javascript:void(0);" onclick="toggleAIChatInfo()">关于智能助手</a>
+            <a href="javascript:void(0);" onclick="toggleAIChatInfo()">关于团小智</a>
         </div>
         <div class="ai-chat-input">
             <input type="text" id="aiChatInput" placeholder="请输入您的问题..." autocomplete="off">
@@ -1601,11 +2007,11 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="aiChatInfoModalLabel">关于智能助手</h5>
+                    <h5 class="modal-title" id="aiChatInfoModalLabel">关于团小智</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p>智能助手是一个基于人工智能的聊天工具，可以回答您关于平台活动、学分积分、报名流程等问题。</p>
+                    <p>团小智是平台的智能问答助手，可以回答您关于平台活动、学分积分、报名流程等问题。</p>
                     <p>您可以询问以下内容：</p>
                     <ul>
                         <li>活动报名和签到流程</li>
@@ -1613,7 +2019,7 @@
                         <li>平台介绍和加入方式</li>
                         <li>系统使用相关问题</li>
                     </ul>
-                    <p class="text-muted small">注意：智能助手可能无法回答所有问题，如有重要事项请联系平台管理员。</p>
+                    <p class="text-muted small">注意：团小智可能无法回答所有问题，如有重要事项请联系平台管理员。</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
@@ -1621,6 +2027,429 @@
             </div>
         </div>
     </div>
+
+    {% if current_user.is_authenticated and current_user.is_super_admin %}
+    <script type="module">
+        const sdkUrl = "{{ url_for('utils.digital_human_sdk_file', filename='index.js') }}";
+        const configUrl = "{{ url_for('utils.digital_human_config') }}";
+
+        let AvatarPlatform = null;
+        let SDKEvents = null;
+        let PlayerEvents = null;
+        let avatar = null;
+        let cfg = null;
+        let connected = false;
+        let recording = false;
+        let popupOpen = false;
+        let muted = false;
+        let responseTimer = null;
+        let lastBeat = 0;
+        let assistantBubble = null;
+
+        const trigger = document.getElementById('dhFloatingTrigger');
+        const popup = document.getElementById('dhInlinePopup');
+        const viewer = document.getElementById('dhInlineViewer');
+        const body = document.getElementById('dhInlineBody');
+        const hints = document.getElementById('dhInlineHints');
+        const statusText = document.getElementById('dhStatusText');
+        const textInput = document.getElementById('dhTextInput');
+        const micBtn = document.getElementById('dhMicBtn');
+        const micIcon = document.getElementById('dhMicIcon');
+        const muteBtn = document.getElementById('dhMuteBtn');
+        const muteIcon = document.getElementById('dhMuteIcon');
+
+        function setStatus(text) {
+            statusText.textContent = text;
+        }
+
+        function touchBeat() {
+            lastBeat = Date.now();
+        }
+
+        function clearResponseTimer() {
+            if (responseTimer) {
+                clearTimeout(responseTimer);
+                responseTimer = null;
+            }
+        }
+
+        function armResponseTimeout() {
+            clearResponseTimer();
+            responseTimer = setTimeout(async () => {
+                if (!popupOpen || !connected) return;
+                if (Date.now() - lastBeat < 10000) return;
+                await disconnectAvatar('10秒无响应，已断开');
+            }, 10000);
+        }
+
+        function hideHints() {
+            if (hints) {
+                hints.style.display = 'none';
+            }
+        }
+
+        function renderMarkdown(rawText) {
+            const escaped = String(rawText || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+
+            const lines = escaped.split('\n');
+            let html = '';
+            let inUl = false;
+            let inOl = false;
+
+            const closeLists = () => {
+                if (inUl) {
+                    html += '</ul>';
+                    inUl = false;
+                }
+                if (inOl) {
+                    html += '</ol>';
+                    inOl = false;
+                }
+            };
+
+            for (const line of lines) {
+                const ulMatch = line.match(/^\s*[-*]\s+(.+)$/);
+                const olMatch = line.match(/^\s*\d+\.\s+(.+)$/);
+
+                if (ulMatch) {
+                    if (inOl) {
+                        html += '</ol>';
+                        inOl = false;
+                    }
+                    if (!inUl) {
+                        html += '<ul>';
+                        inUl = true;
+                    }
+                    html += `<li>${ulMatch[1]}</li>`;
+                    continue;
+                }
+
+                if (olMatch) {
+                    if (inUl) {
+                        html += '</ul>';
+                        inUl = false;
+                    }
+                    if (!inOl) {
+                        html += '<ol>';
+                        inOl = true;
+                    }
+                    html += `<li>${olMatch[1]}</li>`;
+                    continue;
+                }
+
+                closeLists();
+                if (line.trim() === '') {
+                    html += '<br>';
+                } else {
+                    html += `<p>${line}</p>`;
+                }
+            }
+
+            closeLists();
+
+            return html
+                .replace(/`([^`]+?)`/g, '<code>$1</code>')
+                .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*([^*]+?)\*/g, '<em>$1</em>')
+                .replace(/\[([^\]]+?)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        }
+
+        function appendBubble(role, text) {
+            const bubble = document.createElement('div');
+            bubble.className = `dh-inline-bubble ${role}`;
+            bubble.innerHTML = renderMarkdown(text);
+            body.appendChild(bubble);
+            body.scrollTop = body.scrollHeight;
+            return bubble;
+        }
+
+        function applyAudioPolicy() {
+            if (!avatar || !avatar.player) return;
+            try {
+                avatar.player.muted = muted;
+                avatar.player.volume = muted ? 0 : 1;
+                if (!muted) {
+                    avatar.player.resume();
+                }
+            } catch (_) {}
+        }
+
+        async function loadSdkAndConfig() {
+            if (!AvatarPlatform) {
+                const mod = await import(sdkUrl);
+                AvatarPlatform = mod.default;
+                SDKEvents = mod.SDKEvents;
+                PlayerEvents = mod.PlayerEvents;
+            }
+
+            const resp = await fetch(configUrl, { credentials: 'same-origin' });
+            const payload = await resp.json();
+            if (!resp.ok || !payload.success) {
+                throw new Error(payload.message || '读取数字人配置失败');
+            }
+            cfg = payload.data;
+        }
+
+        function bindAvatarEvents() {
+            avatar.removeAllListeners();
+            avatar
+                .on(SDKEvents.connected, () => {
+                    connected = true;
+                    touchBeat();
+                    setStatus('已连接');
+                })
+                .on(SDKEvents.disconnected, () => {
+                    connected = false;
+                    clearResponseTimer();
+                    setStatus('未连接');
+                })
+                .on(SDKEvents.error, (err) => {
+                    touchBeat();
+                    setStatus(`错误: ${err?.message || '未知错误'}`);
+                    clearResponseTimer();
+                })
+                .on(SDKEvents.asr, (d) => {
+                    touchBeat();
+                    const text = (d && (d.displayContent || d.content)) || '';
+                    if (text) {
+                        appendBubble('user', text);
+                    }
+                })
+                .on(SDKEvents.nlp, (d) => {
+                    touchBeat();
+                    const text = d?.displayContent || d?.content || d?.answer?.text || '';
+                    if (text) {
+                        hideHints();
+                        if (!assistantBubble || Number(d?.status) === 0) {
+                            assistantBubble = appendBubble('bot', text);
+                        } else {
+                            assistantBubble.innerHTML = renderMarkdown(text);
+                        }
+                    }
+                    if (Number(d?.status) === 2) {
+                        assistantBubble = null;
+                        clearResponseTimer();
+                    }
+                });
+
+            const player = avatar.player || avatar.createPlayer();
+            player.removeAllListeners();
+            player
+                .on(PlayerEvents.playing, () => {
+                    touchBeat();
+                    setStatus('对话中');
+                    applyAudioPolicy();
+                })
+                .on(PlayerEvents.playNotAllowed, () => {
+                    if (!muted) {
+                        applyAudioPolicy();
+                    }
+                });
+        }
+
+        function buildParams() {
+            return {
+                avatar_dispatch: {
+                    interactive_mode: Number(cfg.interactiveMode ?? 0),
+                    enable_action_status: 1,
+                    content_analysis: Number(cfg.contentAnalysis ?? 0),
+                },
+                avatar: {
+                    avatar_id: String(cfg.avatarId || '111165001'),
+                    width: Number(cfg.width || 1920),
+                    height: Number(cfg.height || 1280),
+                    audio_format: Number(cfg.audioFormat || 1),
+                    scale: Number(cfg.scale || 1),
+                    move_h: Number(cfg.moveH || 0),
+                    move_v: Number(cfg.moveV || 0),
+                },
+                stream: {
+                    protocol: 'xrtc',
+                    bitrate: Number(cfg.bitrate || 1000000),
+                    fps: Number(cfg.fps || 25),
+                    alpha: 1,
+                },
+                tts: {
+                    vcn: String(cfg.vcn || 'x4_yezi'),
+                    speed: 50,
+                    pitch: 50,
+                    volume: 100,
+                    audio: { sample_rate: Number(cfg.audioFormat || 1) === 2 ? 24000 : 16000 },
+                },
+            };
+        }
+
+        async function connectAvatar() {
+            await loadSdkAndConfig();
+            if (avatar) {
+                await disconnectAvatar('重连中...');
+            }
+            avatar = new AvatarPlatform({ useInlinePlayer: true });
+            bindAvatarEvents();
+            avatar.setApiInfo({
+                appId: cfg.appId,
+                sceneId: cfg.sceneId,
+                serverUrl: cfg.serverUrl,
+                signedUrl: cfg.signedUrl,
+            });
+            avatar.setGlobalParams(buildParams());
+            await avatar.start({ wrapper: viewer });
+            connected = true;
+            touchBeat();
+            setStatus('已连接');
+            applyAudioPolicy();
+        }
+
+        async function disconnectAvatar(reason = '未连接') {
+            clearResponseTimer();
+            try {
+                if (avatar && recording && avatar.recorder) {
+                    avatar.recorder.stopRecord();
+                }
+            } catch (_) {}
+            recording = false;
+            if (micIcon) {
+                micIcon.className = 'fas fa-microphone';
+            }
+
+            try {
+                if (avatar) {
+                    avatar.stop();
+                    avatar.destroy();
+                }
+            } catch (_) {}
+            avatar = null;
+            connected = false;
+            setStatus(reason);
+        }
+
+        async function ensureConnected() {
+            if (!connected || !avatar) {
+                await connectAvatar();
+            }
+        }
+
+        async function sendText() {
+            const text = String(textInput.value || '').trim();
+            if (!text) return;
+            textInput.value = '';
+            appendBubble('user', text);
+            hideHints();
+            touchBeat();
+            await ensureConnected();
+            await avatar.writeText(text, {
+                nlp: true,
+                avatar_dispatch: {
+                    interactive_mode: Number(cfg.textInteractiveMode ?? 0),
+                },
+            });
+        }
+
+        async function toggleVoice() {
+            await ensureConnected();
+            if (!recording) {
+                const sampleRate = Number(cfg.audioFormat || 1) === 2 ? 24000 : 16000;
+                let recorder = avatar.recorder;
+                if (!recorder || recorder.sampleRate !== sampleRate) {
+                    if (recorder) avatar.destroyRecorder();
+                    recorder = avatar.createRecorder({ sampleRate });
+                }
+                await recorder.startRecord(0, null, {
+                    nlp: true,
+                    avatar_dispatch: { interactive_mode: Number(cfg.textInteractiveMode ?? 0) },
+                });
+                recording = true;
+                if (micIcon) {
+                    micIcon.className = 'fas fa-stop';
+                }
+                setStatus('语音对话中');
+                touchBeat();
+                armResponseTimeout();
+                return;
+            }
+
+            if (avatar.recorder) {
+                avatar.recorder.stopRecord();
+            }
+            recording = false;
+            if (micIcon) {
+                micIcon.className = 'fas fa-microphone';
+            }
+            clearResponseTimer();
+            setStatus('已连接');
+        }
+
+        async function openPopup() {
+            popupOpen = true;
+            popup.classList.add('open');
+            popup.setAttribute('aria-hidden', 'false');
+            await connectAvatar();
+        }
+
+        async function closePopup() {
+            popupOpen = false;
+            popup.classList.remove('open');
+            popup.setAttribute('aria-hidden', 'true');
+            await disconnectAvatar('未连接');
+        }
+
+        async function safeAction(fn) {
+            try {
+                await fn();
+            } catch (e) {
+                setStatus(e?.message || '操作失败');
+                console.error(e);
+            }
+        }
+
+        trigger.addEventListener('click', () => safeAction(async () => {
+            if (popupOpen) {
+                await closePopup();
+            } else {
+                await openPopup();
+            }
+        }));
+
+        document.getElementById('dhCloseBtn').addEventListener('click', () => safeAction(closePopup));
+        document.getElementById('dhSendBtn').addEventListener('click', () => safeAction(sendText));
+        document.getElementById('dhMicBtn').addEventListener('click', () => safeAction(toggleVoice));
+        document.getElementById('dhEndBtn').addEventListener('click', () => safeAction(() => disconnectAvatar('对话已结束')));
+        if (hints) {
+            hints.addEventListener('click', (event) => {
+                const btn = event.target.closest('.dh-inline-suggestion');
+                if (!btn) return;
+                const q = String(btn.getAttribute('data-question') || '').trim();
+                if (!q) return;
+                textInput.value = q;
+                safeAction(sendText);
+            });
+        }
+        textInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                safeAction(sendText);
+            }
+        });
+
+        muteBtn.addEventListener('click', () => {
+            muted = !muted;
+            muteIcon.className = muted ? 'fas fa-volume-xmark' : 'fas fa-volume-high';
+            applyAudioPolicy();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            try {
+                avatar?.stop();
+                avatar?.destroy();
+            } catch (_) {}
+        });
+    </script>
+    {% endif %}
 
     <script>
         function toggleAIChatInfo() {

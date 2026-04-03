@@ -3,11 +3,27 @@
 {% block title %}登录 - 智能社团+{% endblock %}
 
 {% block content %}
+<style>
+.login-brand-logo {
+    width: 72px;
+    height: 72px;
+    display: inline-block;
+    background: #2563eb;
+    -webkit-mask-image: url("{{ url_for('static', filename='img/logo.svg', v='20260403a') }}");
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    -webkit-mask-position: center;
+    mask-image: url("{{ url_for('static', filename='img/logo.svg', v='20260403a') }}");
+    mask-repeat: no-repeat;
+    mask-size: contain;
+    mask-position: center;
+}
+</style>
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-md-6 col-lg-5">
             <div class="text-center mb-4">
-                <i class="fas fa-graduation-cap fa-3x text-primary mb-3"></i>
+                <span class="login-brand-logo mb-3" aria-hidden="true"></span>
                 <h2 class="fw-bold">智能社团+</h2>
                 <p class="text-muted">登录您的账号以访问更多功能</p>
             </div>

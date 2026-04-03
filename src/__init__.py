@@ -167,7 +167,7 @@ def create_app(config_name=None):
             response.headers.setdefault('X-Content-Type-Options', 'nosniff')
             response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
             response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
-            response.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=(self)')
+            response.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(self), camera=(self)')
 
             # 静态资源按类型分层缓存，优先让EdgeOne命中
             if path.startswith('/static/'):

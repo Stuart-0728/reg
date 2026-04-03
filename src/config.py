@@ -218,6 +218,36 @@ class Config:
     RATELIMIT_STORAGE_URL = RATELIMIT_STORAGE_URI
     RATELIMIT_DEFAULT = "200 per day, 50 per hour"
     RATELIMIT_STRATEGY = 'fixed-window'
+
+    # 讯飞数字人 Web SDK 配置（建议通过环境变量注入）
+    DIGITAL_HUMAN_SERVER_URL = os.environ.get(
+        'DIGITAL_HUMAN_SERVER_URL',
+        'wss://avatar.cn-huadong-1.xf-yun.com/v1/interact'
+    ).strip()
+    DIGITAL_HUMAN_APP_ID = os.environ.get('DIGITAL_HUMAN_APP_ID', '').strip()
+    DIGITAL_HUMAN_API_KEY = os.environ.get('DIGITAL_HUMAN_API_KEY', '').strip()
+    DIGITAL_HUMAN_API_SECRET = os.environ.get('DIGITAL_HUMAN_API_SECRET', '').strip()
+    DIGITAL_HUMAN_SCENE_ID = os.environ.get('DIGITAL_HUMAN_SCENE_ID', '').strip()
+    DIGITAL_HUMAN_AVATAR_ID = os.environ.get('DIGITAL_HUMAN_AVATAR_ID', '111165001').strip()
+    DIGITAL_HUMAN_VCN = os.environ.get('DIGITAL_HUMAN_VCN', 'x4_yezi').strip()
+    DIGITAL_HUMAN_WIDTH = int(os.environ.get('DIGITAL_HUMAN_WIDTH', '1920'))
+    DIGITAL_HUMAN_HEIGHT = int(os.environ.get('DIGITAL_HUMAN_HEIGHT', '1280'))
+    DIGITAL_HUMAN_BITRATE = int(os.environ.get('DIGITAL_HUMAN_BITRATE', '1000000'))
+    DIGITAL_HUMAN_FPS = int(os.environ.get('DIGITAL_HUMAN_FPS', '25'))
+    DIGITAL_HUMAN_PROTOCOL = os.environ.get('DIGITAL_HUMAN_PROTOCOL', 'xrtc').strip().lower()
+    DIGITAL_HUMAN_ALPHA = int(os.environ.get('DIGITAL_HUMAN_ALPHA', '1'))
+    DIGITAL_HUMAN_AUDIO_FORMAT = int(os.environ.get('DIGITAL_HUMAN_AUDIO_FORMAT', '1'))
+    DIGITAL_HUMAN_CONTENT_ANALYSIS = int(os.environ.get('DIGITAL_HUMAN_CONTENT_ANALYSIS', '0'))
+    DIGITAL_HUMAN_INTERACTIVE_MODE = int(os.environ.get('DIGITAL_HUMAN_INTERACTIVE_MODE', '2'))
+    DIGITAL_HUMAN_TEXT_INTERACTIVE_MODE = int(os.environ.get('DIGITAL_HUMAN_TEXT_INTERACTIVE_MODE', '2'))
+    DIGITAL_HUMAN_SCALE = float(os.environ.get('DIGITAL_HUMAN_SCALE', '1'))
+    DIGITAL_HUMAN_MOVE_H = int(os.environ.get('DIGITAL_HUMAN_MOVE_H', '0'))
+    DIGITAL_HUMAN_MOVE_V = int(os.environ.get('DIGITAL_HUMAN_MOVE_V', '0'))
+    DIGITAL_HUMAN_MASK_REGION = os.environ.get('DIGITAL_HUMAN_MASK_REGION', '[0,0,1080,1920]').strip()
+    DIGITAL_HUMAN_SDK_ESM_DIR = os.environ.get(
+        'DIGITAL_HUMAN_SDK_ESM_DIR',
+        os.path.join(BASE_DIR, 'spark digital human', '3.2.1.1016', 'avatar-sdk-web_3.2.1.1016', 'esm')
+    )
     
     # 系统设置
     APP_NAME = os.environ.get('APP_NAME', '智能社团+')

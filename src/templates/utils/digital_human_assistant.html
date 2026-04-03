@@ -1,0 +1,694 @@
+{% extends 'base.html' %}
+
+{% block title %}团小慧数字人客服{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.dh-floating {
+    --dh-blue: #3b82f6;
+    --dh-cyan: #22d3ee;
+    --dh-border: rgba(59, 130, 246, 0.45);
+    --dh-shadow: rgba(15, 23, 42, 0.2);
+    --dh-bg: #f3f6fb;
+}
+
+.dh-floating .launcher {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 1090;
+    min-width: 100px;
+    height: 46px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(59, 130, 246, 0.45);
+    background: linear-gradient(135deg, #ffffff, #dbeafe);
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.24);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1d4ed8;
+}
+
+.dh-floating .popup {
+    position: fixed;
+    right: 20px;
+    bottom: 76px;
+    width: min(980px, calc(100vw - 32px));
+    height: min(620px, calc(100vh - 140px));
+    border-radius: 22px;
+    border: 6px solid rgba(59, 130, 246, 0.65);
+    background: linear-gradient(160deg, #dbeafe 0%, #eff6ff 45%, #e2e8f0 100%);
+    box-shadow: 0 28px 46px var(--dh-shadow);
+    z-index: 1091;
+    overflow: hidden;
+    display: none;
+}
+
+.dh-floating .popup.open {
+    display: block;
+}
+
+.dh-floating .popup-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    padding: 18px 18px 14px;
+}
+
+.dh-floating .viewer {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    right: 16px;
+    bottom: 86px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: radial-gradient(1000px 460px at 90% 0%, rgba(255, 255, 255, 0.55), transparent 55%),
+                linear-gradient(160deg, #c6dbf5, #b9d0ec);
+}
+
+.dh-floating .viewer video,
+.dh-floating .viewer canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+}
+
+.dh-floating .hint-card {
+    position: absolute;
+    right: 24px;
+    top: 86px;
+    max-width: min(360px, 44%);
+    background: rgba(255, 255, 255, 0.86);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 14px;
+    padding: 12px 14px;
+    color: #0f172a;
+    backdrop-filter: blur(6px);
+}
+
+.dh-floating .hint-card h6 {
+    font-size: 0.95rem;
+    margin-bottom: 8px;
+}
+
+.dh-floating .hint-card ul {
+    margin: 0;
+    padding-left: 1rem;
+    color: #2563eb;
+    font-size: 0.9rem;
+}
+
+.dh-floating .btn-circle {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(241, 245, 249, 0.95);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.12);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dh-floating .btn-circle i {
+    font-size: 14px;
+    color: #334155;
+}
+
+.dh-floating .panel-right {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dh-floating .panel-left {
+    position: absolute;
+    top: 50%;
+    left: 24px;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dh-floating .composer {
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    bottom: 18px;
+    display: grid;
+    grid-template-columns: 40px 1fr 42px 42px 42px;
+    gap: 8px;
+    align-items: center;
+}
+
+.dh-floating .composer input {
+    height: 44px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    padding: 0 14px;
+    background: rgba(255, 255, 255, 0.88);
+}
+
+.dh-floating .send-btn {
+    background: linear-gradient(135deg, #3b82f6, #0ea5e9);
+    color: #fff;
+}
+
+.dh-floating .status-line {
+    position: absolute;
+    left: 24px;
+    bottom: 64px;
+    color: #475569;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.75);
+    border-radius: 999px;
+    padding: 4px 10px;
+}
+
+.dh-floating .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 7px;
+    background: #94a3b8;
+}
+
+.dh-floating .status-dot.ok { background: #22c55e; }
+.dh-floating .status-dot.err { background: #ef4444; }
+
+.dh-floating .log-box {
+    position: absolute;
+    right: 18px;
+    bottom: 72px;
+    width: 340px;
+    max-height: 160px;
+    overflow: auto;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(15, 23, 42, 0.72);
+    color: #dbeafe;
+    padding: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
+    font-size: 11px;
+    display: none;
+}
+
+.dh-floating .log-box.show {
+    display: block;
+}
+
+@media (max-width: 960px) {
+    .dh-floating .hint-card {
+        right: 16px;
+        top: 70px;
+        max-width: min(300px, calc(100% - 32px));
+    }
+
+    .dh-floating .log-box {
+        width: min(300px, calc(100% - 36px));
+    }
+
+    .dh-floating .composer {
+        grid-template-columns: 1fr 42px 42px;
+    }
+
+    .dh-floating .composer .btn-voice,
+    .dh-floating .composer .btn-send {
+        display: inline-flex;
+    }
+
+    .dh-floating .composer .btn-mic {
+        display: none;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dh-floating" id="dh-root">
+    <button id="dh-launcher" class="launcher" title="打开数字人客服">
+        团小慧
+    </button>
+
+    <section id="dh-popup" class="popup" aria-hidden="true">
+        <div class="popup-inner">
+            {% if not sdk_ready %}
+            <div class="alert alert-danger m-2" role="alert">
+                未找到 SDK 目录：{{ sdk_dir }}
+            </div>
+            {% endif %}
+
+            <div id="avatar-wrapper" class="viewer"></div>
+
+            <div class="hint-card" id="hint-card">
+                <h6>你可以这样问我：</h6>
+                <ul>
+                    <li>平台的作用是什么？</li>
+                    <li>报名流程怎么走？</li>
+                    <li>如何查看我的报名记录？</li>
+                    <li>签到失败怎么办？</li>
+                </ul>
+            </div>
+
+            <div class="panel-left">
+                <button id="btn-reconnect" class="btn-circle" title="重连" aria-label="重连"><i class="fas fa-rotate-right"></i></button>
+                <button id="btn-log" class="btn-circle" title="日志" aria-label="日志"><i class="fas fa-list"></i></button>
+            </div>
+
+            <div class="panel-right">
+                <button id="btn-close" class="btn-circle" title="关闭" aria-label="关闭"><i class="fas fa-xmark"></i></button>
+                <button id="btn-mute" class="btn-circle" title="静音切换" aria-label="静音切换"><i id="btn-mute-icon" class="fas fa-volume-high"></i></button>
+            </div>
+
+            <div class="status-line">
+                <span id="status-dot" class="status-dot"></span>
+                <span id="status-text">未连接</span>
+            </div>
+
+            <div id="log-box" class="log-box"></div>
+
+            <div class="composer">
+                <button id="btn-mic" class="btn-circle btn-mic" title="语音对话" aria-label="语音对话"><i class="fas fa-microphone"></i></button>
+                <input id="text-input" placeholder="请输入你的问题">
+                <button id="btn-send" class="btn-circle send-btn btn-send" title="发送" aria-label="发送"><i class="fas fa-paper-plane"></i></button>
+                <button id="btn-voice" class="btn-circle btn-voice" title="开始/结束语音" aria-label="开始或结束语音"><i id="btn-voice-icon" class="fas fa-wave-square"></i></button>
+                <button id="btn-resume" class="btn-circle" title="恢复声音" aria-label="恢复声音"><i class="fas fa-volume-low"></i></button>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script type="module">
+const sdkUrl = "{{ url_for('utils.digital_human_sdk_file', filename='index.js') }}";
+const configUrl = "{{ url_for('utils.digital_human_config') }}";
+
+let AvatarPlatform = null;
+let SDKEvents = null;
+let PlayerEvents = null;
+let avatar = null;
+let cfg = null;
+let connected = false;
+let recording = false;
+let popupOpen = false;
+let gotRenderable = false;
+let isMuted = false;
+let responseTimer = null;
+let heartbeatTs = 0;
+
+const launcher = document.getElementById('dh-launcher');
+const popup = document.getElementById('dh-popup');
+const wrapper = document.getElementById('avatar-wrapper');
+const statusDot = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+const hintCard = document.getElementById('hint-card');
+const textInput = document.getElementById('text-input');
+const logBox = document.getElementById('log-box');
+const btnSend = document.getElementById('btn-send');
+const btnVoice = document.getElementById('btn-voice');
+const btnMute = document.getElementById('btn-mute');
+const btnVoiceIcon = document.getElementById('btn-voice-icon');
+const btnMuteIcon = document.getElementById('btn-mute-icon');
+
+function log(line) {
+    const t = `[${new Date().toLocaleTimeString()}] ${line}`;
+    logBox.textContent += `${t}\n`;
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setStatus(text, kind = 'normal') {
+    statusText.textContent = text;
+    statusDot.className = 'status-dot';
+    if (kind === 'ok') statusDot.classList.add('ok');
+    if (kind === 'err') statusDot.classList.add('err');
+}
+
+function hasRenderableEvidence() {
+    const video = wrapper.querySelector('video');
+    const canvas = wrapper.querySelector('canvas');
+    const vr = video ? video.getBoundingClientRect() : null;
+    const cr = canvas ? canvas.getBoundingClientRect() : null;
+    const ct = video ? Number(video.currentTime || 0) : 0;
+    return (vr && vr.width > 0 && vr.height > 0) || (cr && cr.width > 0 && cr.height > 0) || ct > 0.2;
+}
+
+function touchHeartbeat() {
+    heartbeatTs = Date.now();
+}
+
+function clearResponseTimer() {
+    if (responseTimer) {
+        clearTimeout(responseTimer);
+        responseTimer = null;
+    }
+}
+
+async function disconnectAvatar(reason = '已断开') {
+    clearResponseTimer();
+    try {
+        if (avatar) {
+            avatar.stop();
+            avatar.destroy();
+        }
+    } catch (e) {
+        console.warn(e);
+    }
+    avatar = null;
+    connected = false;
+    recording = false;
+    gotRenderable = false;
+    setStatus(reason);
+    if (btnVoiceIcon) {
+        btnVoiceIcon.className = 'fas fa-wave-square';
+    }
+}
+
+function buildGlobalParams(useAlpha) {
+    return {
+        avatar_dispatch: {
+            interactive_mode: Number(cfg.interactiveMode ?? 0),
+            enable_action_status: 1,
+            content_analysis: Number(cfg.contentAnalysis ?? 0),
+        },
+        avatar: {
+            avatar_id: String(cfg.avatarId || '111165001'),
+            width: Number(cfg.width || 1920),
+            height: Number(cfg.height || 1280),
+            audio_format: Number(cfg.audioFormat || 1),
+            scale: Number(cfg.scale || 1),
+            move_h: Number(cfg.moveH || 0),
+            move_v: Number(cfg.moveV || 0),
+        },
+        stream: {
+            protocol: 'xrtc',
+            bitrate: Number(cfg.bitrate || 1000000),
+            fps: Number(cfg.fps || 25),
+            alpha: useAlpha ? 1 : 0,
+        },
+        tts: {
+            vcn: String(cfg.vcn || 'x4_yezi'),
+            speed: 50,
+            pitch: 50,
+            volume: 100,
+            audio: { sample_rate: Number(cfg.audioFormat || 1) === 2 ? 24000 : 16000 },
+        },
+    };
+}
+
+function applyAudioPolicy() {
+    if (!avatar?.player) return;
+    try {
+        avatar.player.muted = isMuted;
+        avatar.player.volume = isMuted ? 0 : 1;
+        if (!isMuted) {
+            avatar.player.resume();
+        }
+    } catch (e) {
+        console.warn(e);
+    }
+}
+
+function armResponseTimeout() {
+    clearResponseTimer();
+    responseTimer = setTimeout(async () => {
+        if (!popupOpen || !connected) return;
+        const idleMs = Date.now() - heartbeatTs;
+        if (idleMs >= 10000) {
+            setStatus('10秒无响应，已自动断开', 'err');
+            log('timeout: no response in 10s, disconnecting');
+            await disconnectAvatar('10秒无响应，已断开');
+        }
+    }, 10000);
+}
+
+function bindEvents() {
+    avatar.removeAllListeners();
+    avatar
+        .on(SDKEvents.connected, () => {
+            connected = true;
+            touchHeartbeat();
+            setStatus('连接成功', 'ok');
+            log('connected');
+        })
+        .on(SDKEvents.disconnected, () => {
+            connected = false;
+            clearResponseTimer();
+            setStatus('连接已断开');
+            log('disconnected');
+        })
+        .on(SDKEvents.error, (err) => {
+            touchHeartbeat();
+            setStatus(`错误: ${err?.message || 'unknown'}`, 'err');
+            log(`sdk error ${err?.code || '-'} ${err?.message || ''}`);
+            clearResponseTimer();
+        })
+        .on(SDKEvents.frame_start, () => {
+            gotRenderable = true;
+            touchHeartbeat();
+            clearResponseTimer();
+        })
+        .on(SDKEvents.asr, () => {
+            touchHeartbeat();
+        })
+        .on(SDKEvents.nlp, (d) => {
+            touchHeartbeat();
+            const text = d?.displayContent || d?.content || d?.answer?.text || '';
+            if (text && hintCard) {
+                hintCard.style.display = 'none';
+            }
+            if (Number(d?.status) === 2) {
+                clearResponseTimer();
+            }
+        });
+
+    const player = avatar.player || avatar.createPlayer();
+    player.removeAllListeners();
+    player
+        .on(PlayerEvents.playing, () => {
+            touchHeartbeat();
+            try {
+                avatar?.player?.resize?.();
+            } catch (e) {
+                console.warn(e);
+            }
+            setTimeout(() => {
+                if (hasRenderableEvidence()) {
+                    gotRenderable = true;
+                }
+            }, 350);
+            applyAudioPolicy();
+            log('player playing');
+        })
+        .on(PlayerEvents.playNotAllowed, () => {
+            if (!isMuted) {
+                applyAudioPolicy();
+                setTimeout(() => applyAudioPolicy(), 120);
+            }
+            log('playNotAllowed: resume attempted');
+        })
+        .on(PlayerEvents.waiting, () => log('player waiting'));
+}
+
+async function loadSdkAndConfig() {
+    if (!AvatarPlatform) {
+        const mod = await import(sdkUrl);
+        AvatarPlatform = mod.default;
+        SDKEvents = mod.SDKEvents;
+        PlayerEvents = mod.PlayerEvents;
+        log(`sdk loaded ${AvatarPlatform.getVersion()}`);
+    }
+
+    const resp = await fetch(configUrl, { credentials: 'same-origin' });
+    const payload = await resp.json();
+    if (!resp.ok || !payload.success) {
+        throw new Error(payload.message || '读取配置失败');
+    }
+    cfg = payload.data;
+}
+
+async function connectAvatar() {
+    if (!popupOpen) {
+        return;
+    }
+    setStatus('连接中...');
+    gotRenderable = false;
+    touchHeartbeat();
+
+    await loadSdkAndConfig();
+    if (avatar) {
+        await disconnectAvatar('正在重连...');
+    }
+
+    avatar = new AvatarPlatform({ useInlinePlayer: true });
+    bindEvents();
+    avatar.setApiInfo({
+        appId: cfg.appId,
+        sceneId: cfg.sceneId,
+        serverUrl: cfg.serverUrl,
+        signedUrl: cfg.signedUrl,
+    });
+
+    avatar.setGlobalParams(buildGlobalParams(true));
+    await avatar.start({ wrapper });
+    setStatus('已启动（透明流）', 'ok');
+    applyAudioPolicy();
+
+    setTimeout(async () => {
+        if (!popupOpen || !avatar || gotRenderable || hasRenderableEvidence()) {
+            gotRenderable = true;
+            return;
+        }
+        setStatus('透明流未出画面，重试普通流...', 'err');
+        avatar.stop();
+        avatar.setGlobalParams(buildGlobalParams(false));
+        await avatar.start({ wrapper });
+        applyAudioPolicy();
+        if (hasRenderableEvidence()) {
+            gotRenderable = true;
+            setStatus('已启动（普通流）', 'ok');
+        }
+    }, 7000);
+}
+
+async function sendText() {
+    if (!avatar || !connected) {
+        throw new Error('数字人未连接');
+    }
+    const text = String(textInput.value || '').trim();
+    if (!text) return;
+    textInput.value = '';
+    touchHeartbeat();
+    armResponseTimeout();
+    await avatar.writeText(text, {
+        nlp: true,
+        avatar_dispatch: {
+            interactive_mode: Number(cfg.textInteractiveMode ?? 0),
+        },
+    });
+}
+
+async function toggleVoice() {
+    if (!avatar || !connected) {
+        throw new Error('数字人未连接');
+    }
+
+    if (!recording) {
+        const sampleRate = Number(cfg.audioFormat || 1) === 2 ? 24000 : 16000;
+        let recorder = avatar.recorder;
+        if (!recorder || recorder.sampleRate !== sampleRate) {
+            if (recorder) avatar.destroyRecorder();
+            recorder = avatar.createRecorder({ sampleRate });
+        }
+        touchHeartbeat();
+        armResponseTimeout();
+        await recorder.startRecord(0, null, {
+            nlp: true,
+            avatar_dispatch: { interactive_mode: Number(cfg.textInteractiveMode ?? 0) },
+        });
+        recording = true;
+        if (btnVoiceIcon) {
+            btnVoiceIcon.className = 'fas fa-stop';
+        }
+        setStatus('语音对话中...', 'ok');
+        return;
+    }
+
+    if (avatar.recorder) {
+        avatar.recorder.stopRecord();
+    }
+    recording = false;
+    if (btnVoiceIcon) {
+        btnVoiceIcon.className = 'fas fa-wave-square';
+    }
+    setStatus('语音对话已停止');
+    clearResponseTimer();
+}
+
+async function openPopup() {
+    popupOpen = true;
+    popup.classList.add('open');
+    popup.setAttribute('aria-hidden', 'false');
+    await connectAvatar();
+}
+
+async function closePopup() {
+    popupOpen = false;
+    popup.classList.remove('open');
+    popup.setAttribute('aria-hidden', 'true');
+    await disconnectAvatar('未连接');
+}
+
+async function wrapAction(action) {
+    try {
+        await action();
+    } catch (e) {
+        const msg = e?.message || '执行失败';
+        setStatus(msg, 'err');
+        log(msg);
+        console.error(e);
+    }
+}
+
+launcher.addEventListener('click', () => wrapAction(async () => {
+    if (popupOpen) {
+        await closePopup();
+    } else {
+        await openPopup();
+    }
+}));
+
+document.getElementById('btn-close').addEventListener('click', () => wrapAction(closePopup));
+document.getElementById('btn-reconnect').addEventListener('click', () => wrapAction(connectAvatar));
+document.getElementById('btn-resume').addEventListener('click', () => wrapAction(async () => {
+    isMuted = false;
+    if (btnMuteIcon) {
+        btnMuteIcon.className = 'fas fa-volume-high';
+    }
+    applyAudioPolicy();
+}));
+document.getElementById('btn-log').addEventListener('click', () => {
+    logBox.classList.toggle('show');
+});
+document.getElementById('btn-mic').addEventListener('click', () => wrapAction(toggleVoice));
+btnVoice.addEventListener('click', () => wrapAction(toggleVoice));
+btnSend.addEventListener('click', () => wrapAction(sendText));
+btnMute.addEventListener('click', () => {
+    isMuted = !isMuted;
+    if (btnMuteIcon) {
+        btnMuteIcon.className = isMuted ? 'fas fa-volume-xmark' : 'fas fa-volume-high';
+    }
+    applyAudioPolicy();
+});
+textInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        wrapAction(sendText);
+    }
+});
+
+window.addEventListener('beforeunload', () => {
+    try {
+        avatar?.stop();
+        avatar?.destroy();
+    } catch (e) {
+        console.warn(e);
+    }
+});
+</script>
+{% endblock %}

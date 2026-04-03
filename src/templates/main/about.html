@@ -135,7 +135,31 @@ body {
 /* ==== 第一屏：首屏内容 ==== */
 .hero {
     text-align: center;
-    max-width: 800px;
+    max-width: 980px;
+}
+
+.hero-brand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin: 0 auto 1.45rem;
+}
+
+.about-white-logo {
+    width: clamp(54px, 6vw, 76px);
+    height: clamp(54px, 6vw, 76px);
+    display: inline-block;
+    flex: 0 0 auto;
+    background: #fff;
+    -webkit-mask-image: url("{{ url_for('static', filename='img/logo.svg', v='20260403a') }}");
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    -webkit-mask-position: center;
+    mask-image: url("{{ url_for('static', filename='img/logo.svg', v='20260403a') }}");
+    mask-repeat: no-repeat;
+    mask-size: contain;
+    mask-position: center;
 }
 
 .hero h1 {
@@ -143,7 +167,7 @@ body {
     font-weight: 800;
     letter-spacing: -0.04em;
     line-height: 1.2;
-    margin-bottom: 1.5rem;
+    margin: 0;
     background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.7) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -157,14 +181,31 @@ body {
 }
 
 .domain-tag {
-    display: inline-block;
+    display: block;
+    width: fit-content;
     padding: 0.5rem 1.5rem;
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.15);
     border-radius: 50px;
     font-size: 0.95rem;
-    margin-bottom: 1.5rem;
+    margin: 0 auto 1.15rem;
     backdrop-filter: blur(4px);
+}
+
+@media (max-width: 768px) {
+    .hero-brand {
+        gap: 0.65rem;
+        margin-bottom: 1.1rem;
+    }
+
+    .hero h1 {
+        font-size: clamp(2.25rem, 11vw, 3.4rem);
+    }
+
+    .hero p {
+        font-size: 1.02rem;
+        line-height: 1.75;
+    }
 }
 
 .scroll-indicator {
@@ -536,7 +577,10 @@ body {
 <section class="snap-section" id="section-hero">
     <div class="hero">
         <div class="domain-tag gs-from-top">创造高校社团新生态</div>
-        <h1 class="gs-from-bottom" style="transition-delay: 0.1s;">智能社团+</h1>
+        <div class="hero-brand gs-from-bottom" style="transition-delay: 0.1s;">
+            <span class="about-white-logo" aria-hidden="true"></span>
+            <h1>智能社团+</h1>
+        </div>
         <p class="gs-from-bottom" style="transition-delay: 0.2s;">
             不仅是一个活动系统，更是连接校园生活与热爱的全链路中枢。深度融合大模型语言助手，将招新筛选、兴趣匹配与社团协同治理化繁为简，带来前所未有的「一站式」流畅体验。
         </p>
