@@ -51,3 +51,9 @@ Thumbs.db
 # Large local SDK/assets (do not track)
 spark digital human/
 
+project.private.config.json
+src/static/uploads/
+static/uploads/
+node_modules/
+miniprogram/miniprogram_npm/
+npm-debug.log

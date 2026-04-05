@@ -1,0 +1,74 @@
+<view class="container">
+  <view class="profile-header" bindtap="checkLoginStatus">
+    <view class="avatar-wrap">
+      <image src="/assets/icons/user.png" class="avatar-img"></image>
+    </view>
+    <view class="user-meta">
+      <text class="user-name font-heavy">{{userInfo ? userInfo.real_name : '未登录'}}</text>
+      <text class="user-id">{{userInfo ? '学号 ' + userInfo.student_id : '点击登录，绑定账号'}}</text>
+    </view>
+  </view>
+
+  <view class="stats-row border-outline rounded-xl shadow-subtle">
+    <view class="stat-block">
+      <text class="stat-val font-heavy">{{userInfo.points != null ? userInfo.points : '--'}}</text>
+      <text class="stat-lbl">积分</text>
+    </view>
+    <view class="stat-line"></view>
+    <view class="stat-block">
+      <text class="stat-val font-heavy">{{stats.attended != null ? stats.attended : '--'}}</text>
+      <text class="stat-lbl">参与(次)</text>
+    </view>
+  </view>
+
+  <view class="menu-group">
+    <text class="group-title font-bold">我的活动</text>
+    <view class="menu-card border-outline rounded-xl shadow-subtle">
+
+      <view class="menu-item" hover-class="menu-hover" bindtap="goToNotifications">
+        <view class="menu-icon-wrap"><image src="/assets/icons/notifications.png" class="menu-icon" style="width: 48rpx; height: 48rpx;"></image></view>
+        <text class="menu-text font-medium">消息通知</text>
+      </view>
+      <view class="menu-divider"></view>
+
+      <view class="menu-item" hover-class="menu-hover" bindtap="goToMyActivities">
+        <view class="menu-icon-wrap"><image src="/assets/icons/assignment.png" class="menu-icon"></image></view>
+        <text class="menu-text font-medium">我的报名</text>
+        <image src="/assets/icons/clock.png" class="arrow-icon" style="opacity: 0.2; width: 32rpx; height: 32rpx;"></image>
+      </view>
+      <view class="menu-divider"></view>
+      <view class="menu-item" hover-class="menu-hover" bindtap="handleCheckin">
+        <view class="menu-icon-wrap"><image src="/assets/icons/check_circle.png" class="menu-icon"></image></view>
+        <text class="menu-text font-medium">现场签到</text>
+        <image src="/assets/icons/clock.png" class="arrow-icon" style="opacity: 0.2; width: 32rpx; height: 32rpx;"></image>
+      </view>
+    </view>
+  </view>
+
+  <view class="menu-group">
+    <text class="group-title font-bold">更多</text>
+    <view class="menu-card border-outline rounded-xl shadow-subtle">
+
+      <view class="menu-item" hover-class="menu-hover" bindtap="goToAIChat">
+        <view class="menu-icon-wrap"><image src="/assets/icons/robot.png" class="menu-icon" style="width: 48rpx; height: 48rpx;"></image></view>
+        <text class="menu-text font-medium">AI 助手</text>
+      </view>
+      <view class="menu-divider"></view>
+      <view class="menu-item" hover-class="menu-hover" bindtap="goToProfile">
+        <view class="menu-icon-wrap"><image src="/assets/icons/settings.png" class="menu-icon"></image></view>
+        <text class="menu-text font-medium">个人档案</text>
+      </view>
+      <view class="menu-divider"></view>
+      <view class="menu-item" hover-class="menu-hover" bindtap="handleSubscribe">
+        <view class="menu-icon-wrap"><image src="/assets/icons/notifications.png" class="menu-icon" style="width: 48rpx; height: 48rpx;"></image></view>
+        <text class="menu-text font-medium">订阅各类提醒</text>
+      </view>
+      <view wx:if="{{userInfo}}">
+        <view class="menu-divider"></view>
+        <view class="menu-item" hover-class="menu-hover" bindtap="handleLogout">
+          <text class="menu-text font-medium" style="color: #ef4444; margin-left: 20rpx;">退出登录</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

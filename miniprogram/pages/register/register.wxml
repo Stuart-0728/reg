@@ -1,0 +1,69 @@
+<view class="container">
+  <view class="header-section">
+    <text class="title font-heavy">创建账号</text>
+    <text class="subtitle">完成简单几步，加入我们的活动平台</text>
+  </view>
+
+  <view class="form-wrapper">
+    <!-- 账号安全 -->
+    <view class="section-title">账号与安全 (必填)</view>
+    <view class="input-group">
+      <input class="styled-input" placeholder="设置用户名 (至少4位)" placeholder-class="ph-color" value="{{form.username}}" bindinput="onInput" data-field="username" />
+    </view>
+    <view class="input-group">
+      <input class="styled-input" type="password" password="{{true}}" placeholder="设置密码 (至少6位)" placeholder-class="ph-color" value="{{form.password}}" bindinput="onInput" data-field="password" />
+    </view>
+    <view class="input-group">
+      <input class="styled-input" type="text" placeholder="常用电子邮箱" placeholder-class="ph-color" value="{{form.email}}" bindinput="onInput" data-field="email" />
+    </view>
+
+    <!-- 个人档案 -->
+    <view class="section-title">基本档案 (必填)</view>
+    <view class="input-group">
+      <input class="styled-input" placeholder="真实姓名" placeholder-class="ph-color" value="{{form.real_name}}" bindinput="onInput" data-field="real_name" />
+    </view>
+    <view class="input-group">
+      <input class="styled-input" type="text" placeholder="学号/工号" placeholder-class="ph-color" value="{{form.student_id}}" bindinput="onInput" data-field="student_id" />
+    </view>
+
+    <!-- 可选档案 -->
+    <view class="section-title">教育与联系档案 (选填)</view>
+    <view class="row-group">
+      <input class="styled-input flex-1" placeholder="年级(如2024级)" placeholder-class="ph-color" value="{{form.grade}}" bindinput="onInput" data-field="grade" />
+      <view class="space"></view>
+      <input class="styled-input flex-1" placeholder="所在学院" placeholder-class="ph-color" value="{{form.college}}" bindinput="onInput" data-field="college" />
+    </view>
+
+    <view class="input-group">
+      <input class="styled-input" placeholder="所学专业" placeholder-class="ph-color" value="{{form.major}}" bindinput="onInput" data-field="major" />
+    </view>
+
+    <view class="row-group">
+      <input class="styled-input flex-1" type="number" placeholder="手机号" placeholder-class="ph-color" value="{{form.phone}}" bindinput="onInput" data-field="phone" />
+      <view class="space"></view>
+      <input class="styled-input flex-1" type="number" placeholder="QQ号" placeholder-class="ph-color" value="{{form.qq}}" bindinput="onInput" data-field="qq" />
+    </view>
+
+    <!-- 标签和社团 -->
+    <view class="section-title" wx:if="{{tags.length > 0}}">兴趣标签 (多选)</view>
+    <checkbox-group class="multi-select-group" bindchange="onTagsChange" wx:if="{{tags.length > 0}}">
+      <label class="select-chip {{item.checked ? 'chip-active' : ''}}" wx:for="{{tags}}" wx:key="id">
+        <checkbox value="{{item.id}}" checked="{{item.checked}}" hidden="true" />
+        <text>{{item.name}}</text>
+      </label>
+    </checkbox-group>
+
+    <view class="section-title" wx:if="{{societies.length > 0}}">加入的社团 (多选)</view>
+    <checkbox-group class="multi-select-group" bindchange="onSocietiesChange" wx:if="{{societies.length > 0}}">
+      <label class="select-chip {{item.checked ? 'chip-active' : ''}}" wx:for="{{societies}}" wx:key="id">
+        <checkbox value="{{item.id}}" checked="{{item.checked}}" hidden="true" />
+        <text>{{item.name}}</text>
+      </label>
+    </checkbox-group>
+
+    <button class="login-btn font-bold" bindtap="handleSubmit" loading="{{isSubmitting}}" 
+      disabled="{{isSubmitting || !form.username || !form.password || !form.email || !form.real_name || !form.student_id}}">
+      确认注册
+    </button>
+  </view>
+</view>

@@ -1,0 +1,13 @@
+{
+  "compileType": "miniprogram",
+  "projectArchitecture": "multiPlatform",
+  "setting": {
+    "condition": true,
+    "enhance": true,
+    "es6": true,
+    "minified": true
+  },
+  "simulatorPluginLibVersion": {
+    "wxext14566970e7e9f62": "2.27.3"
+  }
+}

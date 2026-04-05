@@ -1,0 +1,22 @@
+page {
+  background-color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --primary: #000000;
+  --accent: #0D9488;
+  --text-main: #111827;
+  --text-sub: #6b7280;
+  --text-muted: #9ca3af;
+  --border: #f3f4f6;
+  --surface: #f9fafb;
+}
+
+/* Minimalist Utils */
+.border-outline { border: 1rpx solid var(--border); }
+.rounded-xl { border-radius: 32rpx; }
+.rounded-lg { border-radius: 24rpx; }
+.shadow-subtle { box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.03); }
+
+/* Global Typography */
+.font-heavy { font-weight: 800; letter-spacing: -0.5px; }
+.font-bold { font-weight: 600; letter-spacing: -0.3px; }
+.font-medium { font-weight: 500; }

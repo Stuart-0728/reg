@@ -1,0 +1,22 @@
+<view class="container">
+  <view class="header">
+    <text class="title font-heavy">消息通知</text>
+  </view>
+
+  <view class="loading-state" wx:if="{{loading}}">正在加载...</view>
+  
+  <view class="empty-state" wx:elif="{{notifications.length === 0}}">
+    <text>暂无新消息</text>
+  </view>
+
+  <view class="list" wx:else>
+    <view class="notification-card {{item.is_read ? 'read' : ''}}" wx:for="{{notifications}}" wx:key="id" bindtap="openDetail" data-id="{{item.id}}" data-index="{{index}}" data-content="{{item.content}}" data-title="{{item.title}}" data-time="{{item.time}}">
+      <view class="card-header">
+        <view class="badge" wx:if="{{!item.is_read}}"></view>
+        <text class="card-title font-bold">{{item.title}}</text>
+        <text class="card-time">{{item.time}}</text>
+      </view>
+      <text class="card-desc">{{item.summary || item.content}}</text>
+    </view>
+  </view>
+</view>

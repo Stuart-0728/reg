@@ -14,10 +14,10 @@ DB_USER="reg_user"
 DB_PASSWORD="${DB_PASSWORD:-}"
 GEMINI_API_KEY="${GEMINI_API_KEY:-}"
 GOOGLE_API_KEY="${GOOGLE_API_KEY:-${GEMINI_API_KEY}}"
-DIGITAL_HUMAN_APP_ID="${DIGITAL_HUMAN_APP_ID:-a9ef6b21}"
-DIGITAL_HUMAN_API_KEY="${DIGITAL_HUMAN_API_KEY:-fc992cb7d37d74ba0dd2284f02e671c2}"
-DIGITAL_HUMAN_API_SECRET="${DIGITAL_HUMAN_API_SECRET:-Y2E0NTA2NWRkMTI4MWZkZTQ4OGE5ZTY4}"
-DIGITAL_HUMAN_SCENE_ID="${DIGITAL_HUMAN_SCENE_ID:-298285519761182720}"
+DIGITAL_HUMAN_APP_ID="${DIGITAL_HUMAN_APP_ID:-}"
+DIGITAL_HUMAN_API_KEY="${DIGITAL_HUMAN_API_KEY:-}"
+DIGITAL_HUMAN_API_SECRET="${DIGITAL_HUMAN_API_SECRET:-}"
+DIGITAL_HUMAN_SCENE_ID="${DIGITAL_HUMAN_SCENE_ID:-}"
 DIGITAL_HUMAN_AVATAR_ID="${DIGITAL_HUMAN_AVATAR_ID:-111165001}"
 DIGITAL_HUMAN_VCN="${DIGITAL_HUMAN_VCN:-x4_yezi}"
 DIGITAL_HUMAN_WIDTH="${DIGITAL_HUMAN_WIDTH:-1920}"
@@ -220,7 +220,7 @@ sudo systemctl daemon-reload && sudo systemctl enable ${SERVICE_NAME}.service
 fi
 sudo systemctl restart ${SERVICE_NAME}.service"
 
-echo "[7/8] 检查并配置 Nginx 站点"
+echo "[7/8] 检查并配置 Nginx 站点与自动任务"
 ssh ${SERVER_USER}@${SERVER_IP} "if [ ! -f /etc/nginx/sites-available/reg ]; then sudo tee /etc/nginx/sites-available/reg > /dev/null << 'EOF'
 server {
     listen 80;
@@ -240,7 +240,11 @@ server {
 EOF
 sudo ln -sf /etc/nginx/sites-available/reg /etc/nginx/sites-enabled/reg
 fi
-sudo nginx -t && sudo systemctl reload nginx"
+sudo nginx -t && sudo systemctl reload nginx
+
+# 检查并部署定时任务
+(crontab -l 2>/dev/null | grep -v 'send_reminders.py' || true) | crontab -
+(crontab -l 2>/dev/null; echo \"0 12 * * * /var/www/reg/current/venv/bin/python /var/www/reg/current/scripts/send_reminders.py >> /var/www/reg/current/logs/cron.log 2>&1\") | crontab -"
 
 echo "[8/8] 申请免费 SSL（DNS 生效后）"
 A_RECORDS="$(dig +short ${DOMAIN} A | tr '\n' ' ' | xargs)"

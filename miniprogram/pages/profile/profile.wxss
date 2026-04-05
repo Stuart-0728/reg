@@ -1,0 +1,22 @@
+.container { padding: 40rpx 48rpx 100rpx; background: #fff; box-sizing: border-box; min-height: 100vh; }
+.header-section { margin-bottom: 40rpx; }
+.title { font-size: 56rpx; color: var(--text-main); display: block; margin-bottom: 16rpx; line-height: 1.2; }
+.subtitle { font-size: 30rpx; color: var(--text-sub); }
+
+.section-title { font-size: 30rpx; font-weight: bold; color: var(--primary); margin: 60rpx 0 20rpx; border-bottom: 2rpx solid var(--border); padding-bottom: 16rpx; }
+.form-wrapper { width: 100%; }
+.input-label { display: block; font-size: 26rpx; color: var(--text-sub); margin-bottom: 8rpx; }
+.input-group { margin-bottom: 30rpx; }
+.row-group { display: flex; align-items: flex-end; margin-bottom: 30rpx; width: 100%; box-sizing: border-box;}
+.flex-1 { flex: 1; }
+.space { width: 24rpx; }
+
+.styled-input { width: 100%; height: 90rpx; background: var(--surface); border: 2rpx solid var(--border); border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; color: var(--text-main); box-sizing: border-box; transition: all 0.2s; }
+.styled-input.disabled { background: #f3f4f6; color: #6b7280; border-color: #e5e7eb; }
+.picker-text { display: flex; align-items: center; }
+.styled-input:focus:not(.disabled) { border-color: var(--text-main); background: #fff; }
+
+.login-btn { width: 100% !important; height: 104rpx; background: var(--text-main) !important; color: #fff !important; border-radius: 52rpx; display: flex; align-items: center; justify-content: center; font-size: 32rpx; margin-top: 80rpx; }
+.login-btn[disabled] { opacity: 0.5; background: var(--text-main) !important; color: #fff !important;}
+.login-btn:active { opacity: 0.8; }
+.loading-state { text-align: center; color: var(--text-sub); margin-top: 100rpx; font-size: 28rpx;}

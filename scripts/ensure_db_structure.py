@@ -83,6 +83,8 @@ def ensure_db_structure(app, db):
     alter_plans = [
         ('users', 'managed_society_id', 'INTEGER'),
         ('users', 'is_super_admin', 'BOOLEAN DEFAULT FALSE'),
+        ('users', 'wx_openid', 'VARCHAR(100) UNIQUE'),
+        ('users', 'register_source', "VARCHAR(32) DEFAULT 'website'"),
         ('student_info', 'society_id', 'INTEGER'),
         ('activities', 'society_id', 'INTEGER'),
         ('points_history', 'society_id', 'INTEGER'),

@@ -1,0 +1,20 @@
+<view class="chat-container">
+  <scroll-view scroll-y class="chat-list" scroll-into-view="{{scrollTo}}" scroll-with-animation>
+    <view wx:for="{{messages}}" wx:key="index" id="msg-{{index}}" class="chat-msg {{item.role}}">
+      <image class="avatar" src="{{item.role === 'assistant' ? '/assets/icons/robot.png' : (userInfo.avatarUrl || '/assets/icons/user.png')}}"></image>
+      <view class="bubble font-medium">
+        <text user-select>{{item.content}}</text>
+      </view>
+    </view>
+    <view class="chat-msg assistant" wx:if="{{loading}}">
+      <image class="avatar" src="/assets/icons/robot.png"></image>
+      <view class="bubble typing">
+        <text class="dot"></text><text class="dot"></text><text class="dot"></text>
+      </view>
+    </view>
+  </scroll-view>
+  <view class="input-bar border-outline shadow-subtle">
+    <input class="styled-input" model:value="{{inputVal}}" placeholder="发消息给小智..." bindconfirm="send" confirm-type="send"/>
+    <button class="send-btn main-btn font-bold {{loading || !inputVal ? 'disabled' : ''}}" bindtap="send">发送</button>
+  </view>
+</view>

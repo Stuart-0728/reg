@@ -1,0 +1,32 @@
+<view class="container">
+  <view class="header-section">
+    <image class="logo-placeholder" src="/IMG_logo.jpg" mode="aspectFill"></image>
+    <text class="title font-heavy">{{needBind ? '绑定学号' : '欢迎登录'}}</text>
+    <text class="subtitle">{{needBind ? '请绑定您的学号以同步实时数据' : '与网站平台互通，一键快速登录'}}</text>
+  </view>
+
+  <view class="form-wrapper">
+    <block wx:if="{{!needBind}}">
+      <button class="login-btn font-bold" bindtap="handleWxLogin" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">微信一键登录</button>
+      <view class="toggle-text" bindtap="toggleBindMode">已有学号密码？直接登录 ></view>
+    </block>
+
+    <block wx:else>
+      <view class="input-group">
+        <text class="input-label font-bold">账号</text>
+        <input class="styled-input" placeholder="学号/邮箱/手机号/用户名" placeholder-class="ph-color" model:value="{{student_id}}" />
+      </view>
+      <view class="input-group" style="margin-top: 40rpx;">
+        <text class="input-label font-bold">密码</text>
+        <input class="styled-input" password="{{true}}" placeholder="请输入系统密码" placeholder-class="ph-color" model:value="{{password}}" />
+      </view>
+
+      <button class="login-btn font-bold" bindtap="handleBindAccount" loading="{{isSubmitting}}" disabled="{{isSubmitting || !student_id || !password}}">
+        {{openid ? '确认绑定并登录' : '安全登录'}}
+      </button>
+      
+      <view class="toggle-text" bindtap="toggleBindMode" wx:if="{{!openid}}">返回微信一键登录</view>
+      <view class="toggle-text" bindtap="goToRegister">还没有账号？直接注册 {{openid ? '(微信快速注册免验证)' : ''}} ></view>
+    </block>
+  </view>
+</view>

@@ -109,7 +109,12 @@ ensure_directories()
 
 logger = logging.getLogger(__name__)
 
-class Config:
+class Config(object):
+
+    # 微信小程序配置
+    WX_APPID = os.environ.get('WX_APPID', os.environ.get('WX_APP_ID', 'wxeb079f165c1be134'))
+    WX_APPSECRET = os.environ.get('WX_APPSECRET', os.environ.get('WX_APP_SECRET', '8622a074a806550c30f9af8c1c006d85'))
+
     """应用配置类"""
     # 基础配置
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-cqnu-association'
@@ -255,6 +260,19 @@ class Config:
     
     # 活动类型
     ACTIVITY_TYPES = ['cultural', 'sports', 'academic', 'volunteer', 'competition', 'other']
+    
+    # 微信小程序配置
+    WX_MINI_APP_ID = os.environ.get('WX_MINI_APP_ID', 'wx39c27f1ca93c8893')
+    WX_MINI_APP_SECRET = os.environ.get('WX_MINI_APP_SECRET', '')
+    
+    # CORS配置 - 支持微信小程序跨域请求
+    CORS_ORIGINS = [
+        'http://localhost:*',
+        'https://localhost:*',
+        'http://127.0.0.1:*',
+        'https://127.0.0.1:*',
+        '*'  # 小程序生产环境可能需要通配符
+    ]
     
     # AI API配置
     VOLCANO_API_KEY = os.environ.get('VOLCANO_API_KEY', os.environ.get('ARK_API_KEY', ''))

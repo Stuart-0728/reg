@@ -1,0 +1,53 @@
+<view class="container">
+  <view class="header">
+    <text class="title font-heavy">我的活动</text>
+    <text class="subtitle font-medium">查看你的报名与参与记录</text>
+  </view>
+
+  <view class="filter-tabs">
+    <view class="filter-tab {{filterStatus === 'all' ? 'active' : ''}}" bindtap="setFilter" data-status="all">全部</view>
+    <view class="filter-tab {{filterStatus === 'registered' ? 'active' : ''}}" bindtap="setFilter" data-status="registered">待签到</view>
+    <view class="filter-tab {{filterStatus === 'attended' ? 'active' : ''}}" bindtap="setFilter" data-status="attended">已参加</view>
+    <view class="filter-tab {{filterStatus === 'cancelled' ? 'active' : ''}}" bindtap="setFilter" data-status="cancelled">已取消</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading-wrapper">
+    <view class="skeleton-box" wx:for="{{[1,2]}}" wx:key="*this"></view>
+  </view>
+
+  <view wx:else class="feed">
+    <view class="card shadow-subtle border-outline rounded-xl" wx:for="{{filteredActivities}}" wx:key="activity_id">
+      <view class="card-cover">
+        <image src="{{item.poster_url || '/assets/default_poster.png'}}" mode="aspectFill" class="cover-image"></image>
+        <view class="badge backdrop-blur">
+          <text class="badge-text" wx:if="{{item.status=='registered'}}">待签到</text>
+          <text class="badge-text" wx:elif="{{item.status=='attended'}}" style="color: #059669;">已参加</text>
+          <text class="badge-text" wx:else>已取消</text>
+        </view>
+      </view>
+
+      <view class="card-body">
+        <text class="card-title font-bold line-clamp-1">{{item.title}}</text>
+        
+        <view class="card-meta">
+          <view class="meta-item">
+            <image src="/assets/icons/clock.png" class="meta-icon"></image>
+            <text class="meta-text">{{item.start_time}}  |  {{item.points}} 积分</text>
+          </view>
+          
+          <view class="action-buttons">
+            <text class="action-btn meta-cancel" wx:if="{{item.status=='registered'}}" bindtap="handleCancel" data-id="{{item.activity_id}}">取消报名</text>
+            <text class="action-btn meta-register" wx:if="{{item.status=='cancelled' && item.activity_status=='active'}}" bindtap="handleRegister" data-id="{{item.activity_id}}">重新报名</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Empty State -->
+    <view class="empty-state" wx:if="{{filteredActivities.length === 0}}">
+      <image src="/assets/icons/assignment.png" class="empty-icon"></image>
+      <text class="empty-text">暂时还没有任何报名记录哦</text>
+      <button class="ghost-btn" bindtap="goHome">去大厅逛逛</button>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,63 @@
+<view class="container" wx:if="{{!loading}}">
+  <view class="cover-wrapper">
+    <image class="cover-image" src="{{activity.poster_url || '/assets/default_poster.png'}}" mode="aspectFill" bindtap="previewPoster"></image>
+  </view>
+
+  <view class="content">
+    <view class="header-section">
+      <view class="tag-row">
+        <text class="type-tag">{{activity.organizer}}</text>
+        <text class="points-tag">{{activity.points}} 积分</text>
+      </view>
+      <text class="title font-heavy">{{activity.title}}</text>
+    </view>
+
+    <view class="divider"></view>
+
+    <view class="info-list">
+      <view class="info-row">
+        <view class="icon-box"><image src="/assets/icons/clock.png" class="icon-img"></image></view>
+        <view class="info-text">
+          <text class="info-label">时间</text>
+          <text class="info-value font-medium">{{activity.start_time}} - {{activity.end_time}}</text>
+        </view>
+      </view>
+      
+      <view class="info-row">
+        <view class="icon-box"><image src="/assets/icons/location.png" class="icon-img"></image></view>
+        <view class="info-text">
+          <text class="info-label">地点</text>
+          <text class="info-value font-medium">{{activity.location}}</text>
+        </view>
+      </view>
+
+      <view class="info-row">
+        <view class="icon-box"><image src="/assets/icons/group.png" class="icon-img"></image></view>
+        <view class="info-text">
+          <text class="info-label">报名人数</text>
+          <text class="info-value font-medium">{{activity.current_participants}} / {{activity.max_participants > 0 ? activity.max_participants : '不限'}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <view class="detail-section">
+      <view style="display: flex; justify-content: space-between; align-items: center;">
+        <text class="section-title font-bold">关于活动</text>
+        <view class="copy-link-btn font-medium" bindtap="copyWebLink">网页链接复制</view>
+      </view>
+      <text class="desc-text">{{activity.description}}</text>
+    </view>
+  </view>
+
+  <view class="action-bar border-outline">
+    <button class="icon-btn" open-type="share">
+      <image src="/assets/icons/share.png" class="action-icon"></image>
+      <text class="action-label">分享</text>
+    </button>
+    <view class="btn-wrap">
+      <button class="main-btn font-bold" bindtap="handleRegister">报名参加</button>
+    </view>
+  </view>
+</view>

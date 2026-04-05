@@ -1,0 +1,5 @@
+.container { padding: 40rpx; }
+.header { margin-bottom: 40rpx; border-bottom: 1px solid #eee; padding-bottom: 20rpx; }
+.title { font-size: 36rpx; display: block; margin-bottom: 10rpx; color: #333; }
+.time { font-size: 24rpx; color: #999; }
+.content { font-size: 28rpx; color: #444; line-height: 1.6; }

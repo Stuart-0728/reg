@@ -1,0 +1,42 @@
+<view class="container">
+  <view class="header">
+    <text class="title font-heavy">发现</text>
+    <text class="subtitle font-medium">寻找有趣的活动</text>
+  </view>
+
+  <view wx:if="{{loading}}" class="loading-wrapper">
+    <view class="skeleton-box" wx:for="{{[1,2,3]}}" wx:key="*this"></view>
+  </view>
+
+  <view wx:else class="feed">
+    <view class="card shadow-subtle border-outline rounded-xl" wx:for="{{activities}}" wx:key="id" bindtap="goToDetail" data-id="{{item.id}}">
+      <view class="card-cover">
+        <image src="{{item.poster_url || '/assets/default_poster.png'}}" mode="aspectFill" class="cover-image"></image>
+        <view class="badge backdrop-blur">
+          <text class="badge-text">{{item.organizer}}</text>
+        </view>
+      </view>
+
+      <view class="card-body">
+        <text class="card-title font-bold line-clamp-1">{{item.title}}</text>
+        <text class="card-desc line-clamp-2">{{item.description}}</text>
+        
+        <view class="card-meta">
+          <view class="meta-item">
+            <image src="/assets/icons/clock.png" class="meta-icon"></image>
+            <text class="meta-text">{{item.start_time}}</text>
+          </view>
+          <view class="meta-item meta-accent">
+            <image src="/assets/icons/star.png" class="meta-icon-accent"></image>
+            <text class="meta-text-accent">{{item.points}} 积分</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Empty State -->
+    <view class="empty-state" wx:if="{{activities.length === 0}}">
+      <text class="empty-text">暂无正在进行的活动</text>
+    </view>
+  </view>
+</view>

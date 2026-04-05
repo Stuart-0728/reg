@@ -11,6 +11,7 @@ from flask_session import Session
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_caching import Cache
+from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime, timedelta
 from src.config import config, Config
@@ -23,6 +24,7 @@ csrf = CSRFProtect()
 sess = Session()
 limiter = Limiter(key_func=get_remote_address)
 cache = Cache()
+cors = CORS()
 
 def create_app(config_name=None):
     """创建Flask应用"""
@@ -80,6 +82,24 @@ def create_app(config_name=None):
     migrate.init_app(app, db)
     login_manager.init_app(app)
     csrf.init_app(app)
+    
+    # 初始化CORS - 支持微信小程序跨域请求
+    cors_config = {
+        'origins': app.config.get('CORS_ORIGINS', ['*']),
+        'methods': ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+        'allow_headers': [
+            'Content-Type', 
+            'Authorization', 
+            'X-Requested-With',
+            'X-Session-Token',
+            'X-CSRF-Token'
+        ],
+        'expose_headers': ['X-Total-Count', 'X-Page-Count'],
+        'max_age': 3600,
+        'supports_credentials': True
+    }
+    cors.init_app(app, resources={r"/api/*": cors_config, r"/auth/*": cors_config})
+    app.logger.info("CORS配置完成，支持微信小程序跨域请求")
     
     # 使用Flask原生会话而不是Flask-Session，避免云环境文件系统问题
     app.logger.info("使用Flask原生会话系统")
@@ -140,8 +160,14 @@ def create_app(config_name=None):
     
     # 添加特定API路由的CSRF豁免 - 必须在蓝图注册之后
     with app.app_context():
+        
         # 使用官方推荐的 exempt 方法豁免指定路由
         csrf.exempt('education.gemini_api')
+        
+        # 豁免小程序的所有 API 路由
+        from .routes.api_miniprogram import api_mp_bp
+        csrf.exempt(api_mp_bp)
+
         app.logger.info('已为education.gemini_api路由添加CSRF豁免')
     
     # 注册时区处理中间件
@@ -361,6 +387,7 @@ def register_blueprints(app):
     from .routes.tag import tag_bp
     from .routes.checkin import checkin_bp
     from .routes.education import education_bp
+    from .routes.api_miniprogram import api_mp_bp
     
     # 创建API蓝图 - 用于处理/api请求
     from flask import Blueprint
@@ -382,6 +409,7 @@ def register_blueprints(app):
     app.register_blueprint(checkin_bp, url_prefix='/checkin')
     app.register_blueprint(education_bp, url_prefix='/education')
     app.register_blueprint(api_bp)  # 注册API蓝图
+    app.register_blueprint(api_mp_bp) # 注册微信小程序API蓝图
     
     # 注册错误处理蓝图
     from .routes.errors import errors_bp

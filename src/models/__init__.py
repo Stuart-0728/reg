@@ -72,6 +72,8 @@ class User(db.Model, UserMixin):
     active = Column(Boolean, default=True)  # 用户是否激活
     managed_society_id = Column(Integer, ForeignKey('societies.id'), nullable=True)
     is_super_admin = Column(Boolean, default=False)
+    wx_openid = Column(String(128), unique=True, index=True, nullable=True)
+    register_source = Column(String(32), default='website')
     
     # 时间戳
     created_at = Column(DateTime, default=func.now())

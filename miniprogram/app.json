@@ -1,0 +1,50 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/chat/chat",
+    "pages/activity/activity",
+    "pages/user/user",
+    "pages/login/login",
+    "pages/my_activities/my_activities",
+    "pages/register/register",
+    "pages/profile/profile",
+    "pages/notifications/notifications",
+    "pages/notification_detail/notification_detail"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTitleText": "掌上活动平台",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#ffffff",
+    "enablePullDownRefresh": true
+  },
+  "tabBar": {
+    "color": "#9ca3af",
+    "selectedColor": "#111827",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "大厅",
+        "iconPath": "assets/icons/home.png",
+        "selectedIconPath": "assets/icons/home-active.png"
+      },
+      {
+        "pagePath": "pages/user/user",
+        "text": "我的",
+        "iconPath": "assets/icons/user.png",
+        "selectedIconPath": "assets/icons/user-active.png"
+      }
+    ],
+    "borderStyle": "white"
+  },
+  "networkTimeout": {
+    "request": 60000,
+    "downloadFile": 60000
+  },
+  "lazyCodeLoading": "requiredComponents",
+  "debug": true,
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

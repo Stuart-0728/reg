@@ -7071,6 +7071,33 @@ def delete_announcement(id):
         flash('删除公告时出错', 'danger')
         return redirect(url_for('admin.announcements'))
 
+@admin_bp.route('/activity/<int:id>/notify_subs', methods=['POST'])
+@admin_required
+def notify_new_activity_subs(id):
+    if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return redirect(url_for('admin.activity_view', id=id))
+        
+    try:
+        import subprocess, sys, os
+        from threading import Thread
+        
+        # 权限校验
+        activity = db.get_or_404(Activity, id)
+        if not _scope_guard_activity(activity):
+            return jsonify({'success': False, 'msg': '无权限操作该社团的活动'})
+            
+        script_path = os.path.abspath(os.path.join(current_app.root_path, '..', 'scripts', 'publish_activity_notice.py'))
+        
+        # 异步调用之前写的提醒脚本
+        def run_script():
+            subprocess.Popen([sys.executable, script_path, str(id)])
+            
+        Thread(target=run_script).start()
+        
+        return jsonify({'success': True, 'msg': '已加入后台群发队列'})
+    except Exception as e:
+        return jsonify({'success': False, 'msg': str(e)})
+
 @admin_bp.route('/activity/<int:id>/view')
 @admin_required
 def activity_view(id):

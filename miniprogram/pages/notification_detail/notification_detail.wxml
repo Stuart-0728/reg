@@ -1,0 +1,9 @@
+<view class="container">
+  <view class="header">
+    <text class="title font-heavy">{{notification.title}}</text>
+    <text class="time">{{notification.time}}</text>
+  </view>
+  <view class="content">
+    <text user-select>{{notification.content}}</text>
+  </view>
+</view>

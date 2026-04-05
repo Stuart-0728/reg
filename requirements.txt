@@ -5,6 +5,7 @@ Flask-WTF
 Flask-Migrate
 Flask-Caching
 Flask-Limiter
+Flask-CORS
 redis
 Werkzeug
 SQLAlchemy
@@ -20,3 +21,4 @@ pandas
 openpyxl
 psycopg2-binary
 email-validator
+PyJWT

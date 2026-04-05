@@ -1009,3 +1009,203 @@ def select_tags():
         selected_society_ids.append(student_info.society_id)
     
     return render_template('auth/select_tags.html', tags=tags, selected_tag_ids=selected_tag_ids, societies=societies, selected_society_ids=selected_society_ids)
+
+
+# ==================== 微信小程序登录接口 ====================
+
+@auth_bp.route('/wx-login', methods=['POST'])
+@limiter.limit('20 per minute')
+def wechat_login():
+    """
+    微信小程序登录接口
+    
+    Request:
+    {
+        "code": "微信授权码"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "user_id": 123,
+        "username": "用户名",
+        "email": "邮箱",
+        "student_id": "学号",
+        "session_token": "Bearer token",
+        "is_new_user": false
+    }
+    """
+    import requests
+    import json
+    from itsdangerous import TimedJSONWebSignatureSerializer
+    
+    try:
+        data = request.get_json()
+        code = data.get('code') if data else None
+        
+        if not code:
+            return jsonify({'success': False, 'msg': '缺少微信授权码'}), 400
+        
+        # 调用微信API获取session_key和openid
+        wx_app_id = current_app.config.get('WX_MINI_APP_ID', '')
+        wx_app_secret = current_app.config.get('WX_MINI_APP_SECRET', '')
+        
+        if not wx_app_id or not wx_app_secret:
+            logger.error("微信小程序配置不完整")
+            return jsonify({'success': False, 'msg': '服务配置错误'}), 500
+        
+        # 请求微信 API
+        wx_api_url = 'https://api.weixin.qq.com/sns/jscode2session'
+        wx_params = {
+            'appid': wx_app_id,
+            'secret': wx_app_secret,
+            'js_code': code,
+            'grant_type': 'authorization_code'
+        }
+        
+        wx_response = requests.get(wx_api_url, params=wx_params, timeout=5)
+        wx_data = wx_response.json()
+        
+        if wx_response.status_code != 200 or 'errcode' in wx_data:
+            error_msg = wx_data.get('errmsg', '微信登录失败')
+            logger.error(f"微信API错误: {error_msg}")
+            return jsonify({'success': False, 'msg': error_msg}), 400
+        
+        openid = wx_data.get('openid')
+        session_key = wx_data.get('session_key')
+        
+        if not openid:
+            return jsonify({'success': False, 'msg': '获取openid失败'}), 400
+        
+        # 查找或创建用户
+        user = db.session.execute(
+            db.select(User).filter_by(username=f"wx_{openid}")
+        ).scalar_one_or_none()
+        
+        if not user:
+            # 创建新用户
+            user = User(
+                username=f"wx_{openid}",
+                email=f"{openid}@weixin.local",
+                password_hash=generate_password_hash(''),  # 微信用户无密码
+                active=True,  # 微信登录自动激活
+                is_super_admin=False
+            )
+            
+            # 关联学生角色
+            student_role = db.session.execute(
+                db.select(Role).filter_by(name='Student')
+            ).scalar_one_or_none()
+            
+            if student_role:
+                user.role_id = student_role.id
+            
+            db.session.add(user)
+            db.session.commit()
+            
+            # 创建学生信息记录
+            student_info = StudentInfo(
+                user_id=user.id,
+                has_selected_tags=False
+            )
+            db.session.add(student_info)
+            db.session.commit()
+            
+            logger.info(f"新建微信用户: openid={openid}, user_id={user.id}")
+            is_new_user = True
+        else:
+            is_new_user = False
+            logger.info(f"微信用户登录: openid={openid}, user_id={user.id}")
+        
+        # 生成会话token（用于小程序API认证）
+        serializer = TimedJSONWebSignatureSerializer(
+            current_app.config['SECRET_KEY'],
+            expires_in=7 * 24 * 3600  # 7天有效期
+        )
+        session_token = serializer.dumps({'user_id': user.id, 'openid': openid})
+        
+        # 记录登录日志
+        log = SystemLog(
+            user_id=user.id,
+            action="微信登录",
+            details=f"openid={openid}",
+            ip_address=request.remote_addr
+        )
+        db.session.add(log)
+        try:
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"记录登录日志失败: {e}")
+            db.session.rollback()
+        
+        return jsonify({
+            'success': True,
+            'user_id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'student_id': user.student_info.student_id if user.student_info else None,
+            'session_token': session_token,
+            'is_new_user': is_new_user
+        }), 200
+        
+    except requests.RequestException as e:
+        logger.error(f"调用微信API失败: {e}")
+        return jsonify({'success': False, 'msg': '网络连接失败'}), 500
+    except Exception as e:
+        logger.error(f"微信登录处理异常: {e}", exc_info=True)
+        return jsonify({'success': False, 'msg': '登录失败，请重试'}), 500
+
+
+@auth_bp.route('/session-token-validate', methods=['POST'])
+@limiter.limit('60 per minute')
+def validate_session_token():
+    """
+    验证小程序session token有效性
+    
+    Request Header:
+    Authorization: Bearer {session_token}
+    
+    Response:
+    {
+        "valid": true,
+        "user_id": 123,
+        "username": "用户名"
+    }
+    """
+    from itsdangerous import BadSignature, SignatureExpired, TimedJSONWebSignatureSerializer
+    
+    try:
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return jsonify({'valid': False, 'msg': '无效的授权头'}), 401
+        
+        token = auth_header[7:]  # 移除 'Bearer ' 前缀
+        
+        serializer = TimedJSONWebSignatureSerializer(
+            current_app.config['SECRET_KEY'],
+            expires_in=7 * 24 * 3600
+        )
+        
+        try:
+            data = serializer.loads(token)
+            user_id = data.get('user_id')
+            user = db.session.get(User, user_id)
+            
+            if user and user.active:
+                return jsonify({
+                    'valid': True,
+                    'user_id': user.id,
+                    'username': user.username
+                }), 200
+            else:
+                return jsonify({'valid': False, 'msg': '用户不存在或已禁用'}), 401
+        
+        except SignatureExpired:
+            return jsonify({'valid': False, 'msg': 'token已过期'}), 401
+        except BadSignature:
+            return jsonify({'valid': False, 'msg': '无效的token'}), 401
+    
+    except Exception as e:
+        logger.error(f"验证token异常: {e}")
+        return jsonify({'valid': False, 'msg': '验证失败'}), 500
+
