@@ -81,9 +81,9 @@ Page({
   },
 
   handleSubmit() {
-    const { username, password, email, real_name, student_id } = this.data.form;
-    if (!username || !password || !email || !real_name || !student_id) {
-      wx.showToast({ title: '请填写所有必填档案', icon: 'none' });
+    const { username, password, email, real_name, student_id, phone, qq, college, major, grade } = this.data.form;
+    if (!username || !password || !email || !real_name || !student_id || !phone || !qq || !college || !major || !grade) {
+      wx.showToast({ title: '请填写所有必填档案(包括联系资料)', icon: 'none' });
       return;
     }
     

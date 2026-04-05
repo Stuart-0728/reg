@@ -35,3 +35,7 @@
 
 .empty-state { text-align: center; padding: 100rpx 0; }
 .empty-text { font-size: 28rpx; color: var(--text-muted); }
+.filter-scroll { width: 100%; white-space: nowrap; margin-bottom: 30rpx; }
+.filter-container { display: flex; padding: 0 4rpx; }
+.filter-tag { display: inline-block; padding: 12rpx 32rpx; background: var(--surface); color: var(--text-sub); border-radius: 40rpx; font-size: 26rpx; margin-right: 16rpx; transition: all 0.2s ease; border: 1rpx solid transparent; }
+.filter-tag.active { background: #111827; color: #fff; font-weight: bold; border-color: #111827; }

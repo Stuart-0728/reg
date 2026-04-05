@@ -71,7 +71,12 @@ def mp_login():
 @api_mp_bp.route('/activities', methods=['GET'])
 def get_activities():
     try:
-        activities = Activity.query.filter_by(status='active').order_by(Activity.start_time.desc()).all()
+        query = Activity.query.filter_by(status='active')
+        society_id = request.args.get('society_id', type=int)
+        if society_id:
+            query = query.filter_by(society_id=society_id)
+            
+        activities = query.order_by(Activity.start_time.desc()).all()
         data = []
         for a in activities:
             poster_full_url = a.poster_url
@@ -101,12 +106,27 @@ def get_activity_detail(id):
         if poster_full_url and not poster_full_url.startswith('http'):
             poster_full_url = f"{request.host_url.rstrip('/')}{poster_full_url}"
             
+        user_status = 'not_registered'
+        token = request.headers.get('Authorization')
+        if token and token.startswith('token_'):
+            user_id = token.replace('token_', '')
+            user = User.query.get(user_id)
+            if user:
+                from src.models import Registration
+                reg = Registration.query.filter_by(user_id=user.id, activity_id=a.id).order_by(Registration.created_at.desc()).first()
+                if reg:
+                    user_status = reg.status
+
         data = {
             'id': a.id,
             'title': a.title,
             'description': a.description,
             'start_time': display_datetime(a.start_time, '%Y-%m-%d %H:%M') if a.start_time else '待定',
             'end_time': display_datetime(a.end_time, '%Y-%m-%d %H:%M') if a.end_time else '待定',
+            'registration_start_time': display_datetime(getattr(a, 'registration_start_time', None), '%Y-%m-%d %H:%M') if getattr(a, 'registration_start_time', None) else '待定',
+            'registration_end_time': display_datetime(getattr(a, 'registration_end_time', None), '%Y-%m-%d %H:%M') if getattr(a, 'registration_end_time', None) else '待定',
+            'checkin_enabled': getattr(a, 'checkin_enabled', False),
+            'user_status': user_status,
             'location': a.location or '待定',
             'poster_url': poster_full_url,
             'type': a.type,
@@ -392,10 +412,10 @@ def mp_register():
     data = request.json or {}
     
     # 必填检验
-    required_fields = ['username', 'email', 'password', 'real_name', 'student_id']
+    required_fields = ['username', 'email', 'password', 'real_name', 'student_id', 'phone', 'qq', 'college', 'major', 'grade']
     for field in required_fields:
         if not data.get(field):
-            return jsonify({'success': False, 'msg': f'请填写必填信息: {field}'})
+            return jsonify({'success': False, 'msg': f'请填写完整信息: {field}'})
 
     student_id = data.get('student_id')
     username = data.get('username')

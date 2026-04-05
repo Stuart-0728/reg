@@ -4,6 +4,16 @@
     <text class="subtitle font-medium">寻找有趣的活动</text>
   </view>
 
+  <scroll-view scroll-x="true" class="filter-scroll" show-scrollbar="false">
+    <view class="filter-container">
+      <view wx:for="{{societies}}" wx:key="id" 
+            class="filter-tag {{selectedSocietyId === item.id ? 'active' : ''}}" 
+            bindtap="onSocietyChange" data-id="{{item.id}}">
+        {{item.name}}
+      </view>
+    </view>
+  </scroll-view>
+
   <view wx:if="{{loading}}" class="loading-wrapper">
     <view class="skeleton-box" wx:for="{{[1,2,3]}}" wx:key="*this"></view>
   </view>

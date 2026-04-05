@@ -16,7 +16,7 @@
   </view>
 
   <view wx:else class="feed">
-    <view class="card shadow-subtle border-outline rounded-xl" wx:for="{{filteredActivities}}" wx:key="activity_id">
+    <view class="card shadow-subtle border-outline rounded-xl" wx:for="{{filteredActivities}}" wx:key="activity_id" bindtap="goToDetail" data-id="{{item.activity_id}}">
       <view class="card-cover">
         <image src="{{item.poster_url || '/assets/default_poster.png'}}" mode="aspectFill" class="cover-image"></image>
         <view class="badge backdrop-blur">

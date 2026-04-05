@@ -34,13 +34,11 @@
       <view class="menu-item" hover-class="menu-hover" bindtap="goToMyActivities">
         <view class="menu-icon-wrap"><image src="/assets/icons/assignment.png" class="menu-icon"></image></view>
         <text class="menu-text font-medium">我的报名</text>
-        <image src="/assets/icons/clock.png" class="arrow-icon" style="opacity: 0.2; width: 32rpx; height: 32rpx;"></image>
       </view>
       <view class="menu-divider"></view>
       <view class="menu-item" hover-class="menu-hover" bindtap="handleCheckin">
         <view class="menu-icon-wrap"><image src="/assets/icons/check_circle.png" class="menu-icon"></image></view>
         <text class="menu-text font-medium">现场签到</text>
-        <image src="/assets/icons/clock.png" class="arrow-icon" style="opacity: 0.2; width: 32rpx; height: 32rpx;"></image>
       </view>
     </view>
   </view>

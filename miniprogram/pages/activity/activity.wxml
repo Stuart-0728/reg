@@ -24,6 +24,14 @@
       </view>
       
       <view class="info-row">
+        <view class="icon-box"><image src="/assets/icons/clock.png" class="icon-img"></image></view>
+        <view class="info-text">
+          <text class="info-label">报名时间</text>
+          <text class="info-value font-medium">{{activity.registration_start_time}} - {{activity.registration_end_time}}</text>
+        </view>
+      </view>
+
+      <view class="info-row">
         <view class="icon-box"><image src="/assets/icons/location.png" class="icon-img"></image></view>
         <view class="info-text">
           <text class="info-label">地点</text>
@@ -57,7 +65,7 @@
       <text class="action-label">分享</text>
     </button>
     <view class="btn-wrap">
-      <button class="main-btn font-bold" bindtap="handleRegister">报名参加</button>
+      <button class="main-btn font-bold {{buttonState.extraClass}}" bindtap="handleAction" disabled="{{buttonState.disabled}}">{{buttonState.text}}</button>
     </view>
   </view>
 </view>

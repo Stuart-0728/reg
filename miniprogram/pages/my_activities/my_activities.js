@@ -55,6 +55,12 @@ Page({
     }
     this.setData({ filteredActivities: filtered });
   },
+  goToDetail(e) {
+    const id = e.currentTarget.dataset.id;
+    wx.navigateTo({
+      url: '/pages/activity/activity?id=' + id
+    });
+  },
   handleCancel(e) {
     const activityId = e.currentTarget.dataset.id;
     wx.showModal({
