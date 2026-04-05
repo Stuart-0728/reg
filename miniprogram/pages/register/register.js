@@ -99,8 +99,12 @@ Page({
       data: this.data.form,
       success: (res) => {
         if (res.data.success) {
-          wx.showToast({ title: '注册成功', icon: 'success' });
-          setTimeout(() => { wx.navigateBack(); }, 1500);
+          if (this.data.form.wx_openid) {
+            wx.showToast({ title: '注册并绑定成功', icon: 'success' });
+            setTimeout(() => { wx.navigateBack(); }, 1500);
+          } else {
+            wx.redirectTo({ url: '/pages/verify_email/verify_email' });
+          }
         } else {
           wx.showToast({ title: res.data.msg || '注册失败', icon: 'none' });
         }

@@ -1,0 +1,13 @@
+<view class="container">
+  <view class="icon-wrapper">
+    <icon type="success" size="80" color="#3b82f6"></icon>
+  </view>
+  
+  <text class="title">由于安全策略，需验证邮箱</text>
+  
+  <view class="desc-box">
+    <text class="desc">系统已向您的邮箱发送了一封验证邮件。\n请登录邮箱并点击验证链接，激活账号后即可继续登录。</text>
+  </view>
+  
+  <button class="primary-btn font-bold" bindtap="handleGoLogin">我已验证，继续登录</button>
+</view>

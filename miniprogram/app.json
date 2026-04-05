@@ -7,6 +7,7 @@
     "pages/login/login",
     "pages/my_activities/my_activities",
     "pages/register/register",
+    "pages/verify_email/verify_email",
     "pages/profile/profile",
     "pages/notifications/notifications",
     "pages/notification_detail/notification_detail"
