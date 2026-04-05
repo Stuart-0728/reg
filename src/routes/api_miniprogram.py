@@ -32,6 +32,10 @@ def mp_login():
     if not user.verify_password(password):
         return jsonify({'success': False, 'msg': '账号或密码错误'})
         
+    # 3. 检查激活状态 (邮箱验证)
+    if not user.active:
+        return jsonify({'success': False, 'msg': '账号尚未通过邮箱验证，请先前往邮箱验证'})
+
     student = user.student_info
     if not student:
         return jsonify({'success': False, 'msg': '账号未绑定学生档案'})
@@ -332,7 +336,7 @@ def wx_login():
             'success': True, 
             'need_bind': True, 
             'openid': openid,
-            'msg': '首次登录需要绑定学号'
+            'msg': '首次登录需要绑定/注册账号'
         })
 
 

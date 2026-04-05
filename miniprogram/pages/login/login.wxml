@@ -1,7 +1,7 @@
 <view class="container">
   <view class="header-section">
     <image class="logo-placeholder" src="/IMG_logo.jpg" mode="aspectFill"></image>
-    <text class="title font-heavy">{{needBind ? '绑定学号' : '欢迎登录'}}</text>
+    <text class="title font-heavy">{{needBind ? '绑定账号' : '欢迎登录'}}</text>
     <text class="subtitle">{{needBind ? '请绑定您的学号以同步实时数据' : '与网站平台互通，一键快速登录'}}</text>
   </view>
 

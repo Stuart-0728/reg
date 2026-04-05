@@ -45,7 +45,7 @@
     <view class="detail-section">
       <view style="display: flex; justify-content: space-between; align-items: center;">
         <text class="section-title font-bold">关于活动</text>
-        <view class="copy-link-btn font-medium" bindtap="copyWebLink">网页链接复制</view>
+        <view class="copy-link-btn font-medium" bindtap="copyWebLink">点击复制链接查看更多详情</view>
       </view>
       <text class="desc-text">{{activity.description}}</text>
     </view>

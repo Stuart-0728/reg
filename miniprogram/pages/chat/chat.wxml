@@ -14,7 +14,7 @@
     </view>
   </scroll-view>
   <view class="input-bar border-outline shadow-subtle">
-    <input class="styled-input" model:value="{{inputVal}}" placeholder="发消息给小智..." bindconfirm="send" confirm-type="send"/>
+    <input class="styled-input" model:value="{{inputVal}}" placeholder="发消息给团小智..." bindconfirm="send" confirm-type="send"/>
     <button class="send-btn main-btn font-bold {{loading || !inputVal ? 'disabled' : ''}}" bindtap="send">发送</button>
   </view>
 </view>

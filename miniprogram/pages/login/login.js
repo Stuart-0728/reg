@@ -28,7 +28,7 @@ Page({
                 if (res.data.need_bind) {
                   // 用户未绑定，需要跳转到绑定页面
                   wx.hideLoading();
-                  wx.showToast({ title: '首次登录请绑定学号', icon: 'none' });
+                  wx.showToast({ title: '首次登录请绑定账号', icon: 'none' });
                   this.setData({ needBind: true, openid: res.data.openid });
                 } else {
                   // 登录成功
