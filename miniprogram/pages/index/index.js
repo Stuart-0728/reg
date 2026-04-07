@@ -7,6 +7,7 @@ Page({
     selectedSocietyId: '',
     loading: true
   },
+  _navigatingToDetail: false,
   onLoad() {
     this.fetchSocieties();
     this.fetchActivities();
@@ -48,6 +49,17 @@ Page({
   },
   goToDetail(e) {
     const id = e.currentTarget.dataset.id;
+    if (!id) {
+      wx.showToast({ title: '活动ID无效', icon: 'none' });
+      return;
+    }
+    if (this._navigatingToDetail) {
+      return;
+    }
+    this._navigatingToDetail = true;
     wx.navigateTo({ url: `/pages/activity/activity?id=${id}` });
+    setTimeout(() => {
+      this._navigatingToDetail = false;
+    }, 800);
   }
 });

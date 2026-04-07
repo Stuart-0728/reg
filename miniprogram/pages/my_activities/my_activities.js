@@ -57,8 +57,13 @@ Page({
   },
   goToDetail(e) {
     const id = e.currentTarget.dataset.id;
+    const normalizedId = Number(id);
+    if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+      wx.showToast({ title: '活动ID无效', icon: 'none' });
+      return;
+    }
     wx.navigateTo({
-      url: '/pages/activity/activity?id=' + id
+      url: '/pages/activity/activity?id=' + normalizedId
     });
   },
   handleCancel(e) {

@@ -798,6 +798,18 @@ def activity_detail(id):
             activity.checkin_enabled
         )
 
+        def _to_unix_ms(dt):
+            if not dt:
+                return None
+            if dt.tzinfo is None:
+                dt = pytz.utc.localize(dt)
+            else:
+                dt = dt.astimezone(pytz.utc)
+            return int(dt.timestamp() * 1000)
+
+        registration_start_ts = _to_unix_ms(activity.registration_start_time)
+        registration_deadline_ts = _to_unix_ms(activity.registration_deadline)
+
         current_user_review = db.session.execute(db.select(ActivityReview).filter_by(activity_id=id, user_id=current_user.id)).scalar_one_or_none()
         review_count = db.session.execute(
             db.select(func.count()).select_from(ActivityReview).filter_by(activity_id=id)
@@ -913,7 +925,9 @@ def activity_detail(id):
                               team_max_members=max(1, int(getattr(activity, 'team_max_members', 1) or 1)),
                               can_join_team=can_join_team,
                               team_join_token=(request.args.get('join_team', '') or '').strip(),
-                              document_category_labels=DOCUMENT_CATEGORY_LABELS)
+                              document_category_labels=DOCUMENT_CATEGORY_LABELS,
+                              registration_start_ts=registration_start_ts,
+                              registration_deadline_ts=registration_deadline_ts)
 
     except Exception as e:
         logger.error(f"加载活动详情出错: {str(e)}", exc_info=True)

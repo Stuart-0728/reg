@@ -100,7 +100,10 @@
 {% endblock %}
 
 {% block content %}
-<div class="container py-4" data-activity-id="{{ activity.id }}">
+<div class="container py-4"
+    data-activity-id="{{ activity.id }}"
+    data-registration-start-ts="{{ registration_start_ts or '' }}"
+    data-registration-deadline-ts="{{ registration_deadline_ts or '' }}">
     <div class="row">
         <div class="col-12 col-xl-8 activity-detail-main">
             <div class="card border-0 shadow-sm mb-4">
@@ -1202,6 +1205,51 @@ document.addEventListener('DOMContentLoaded', function() {
     const actionButtons = document.getElementById('action-buttons');
     const csrfToken = "{{ csrf_token() }}";
     const isTeamMode = {{ 'true' if is_team_mode else 'false' }};
+    const activityContainer = document.querySelector('[data-activity-id]');
+
+    function scheduleRegistrationBoundaryRefresh() {
+        if (!activityContainer) {
+            return;
+        }
+
+        const regStartTs = Number(activityContainer.dataset.registrationStartTs || 0);
+        const regDeadlineTs = Number(activityContainer.dataset.registrationDeadlineTs || 0);
+        const pageLoadTs = Date.now();
+
+        const waitingForStart = regStartTs > pageLoadTs;
+        const waitingForDeadline = regDeadlineTs > pageLoadTs;
+        if (!waitingForStart && !waitingForDeadline) {
+            return;
+        }
+
+        const boundaryTs = Math.min(
+            waitingForStart ? regStartTs : Number.MAX_SAFE_INTEGER,
+            waitingForDeadline ? regDeadlineTs : Number.MAX_SAFE_INTEGER
+        );
+
+        // 精准触发：目标边界时刻后立即刷新，避免最多15秒的可见延迟。
+        const preciseDelay = Math.max(300, boundaryTs - pageLoadTs + 300);
+        const preciseTimer = window.setTimeout(() => {
+            window.location.reload();
+        }, preciseDelay);
+
+        // 兜底轮询：临近边界（2分钟内）每1秒检查，平时每5秒检查。
+        const timerId = window.setInterval(() => {
+            const now = Date.now();
+            if ((waitingForStart && now >= regStartTs) || (waitingForDeadline && now >= regDeadlineTs)) {
+                window.clearTimeout(preciseTimer);
+                window.clearInterval(timerId);
+                window.location.reload();
+            }
+        }, Math.max(1000, boundaryTs - pageLoadTs <= 120000 ? 1000 : 5000));
+
+        window.addEventListener('beforeunload', () => {
+            window.clearTimeout(preciseTimer);
+            window.clearInterval(timerId);
+        });
+    }
+
+    scheduleRegistrationBoundaryRefresh();
 
     function updateRegistrationCount(delta) {
         const countElements = document.querySelectorAll('.registration-count');

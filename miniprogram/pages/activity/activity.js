@@ -2,27 +2,156 @@ const app = getApp();
 
 Page({
   data: {
-    activity: null,
-    loading: true
+    activity: {
+      title: '活动详情',
+      description: '暂无活动描述',
+      start_time: '-',
+      end_time: '-',
+      registration_start_time: '-',
+      registration_end_time: '-',
+      location: '-',
+      current_participants: 0,
+      max_participants: 0,
+      points: 0,
+      organizer: '智能社团+'
+    },
+    buttonState: { text: '加载中...', extraClass: 'btn-disabled', disabled: true, action: 'none' },
+    loading: true,
+    loadError: false,
+    loadErrorMsg: ''
+  },
+  normalizeActivityId(rawId) {
+    const n = Number(rawId);
+    return Number.isInteger(n) && n > 0 ? String(n) : '';
   },
   onLoad(options) {
-    if(options.id){
-      this.fetchDetail(options.id);
+    const rawId = (options && (options.id || options.activity_id || options.activityId)) || '';
+    const normalizedId = this.normalizeActivityId(rawId);
+    if (normalizedId) {
+      this.activityId = normalizedId;
+      this.fetchDetail(normalizedId);
+    } else {
+      this.setData({
+        loading: false,
+        loadError: true,
+        loadErrorMsg: '活动参数缺失，请返回列表重试'
+      });
     }
   },
+  onShow() {
+    if (this.normalizeActivityId(this.activityId)) {
+      this.fetchDetail(this.activityId);
+    }
+  },
+  onHide() {
+    this.clearStateTimers();
+  },
+  onUnload() {
+    this.clearStateTimers();
+  },
+  clearStateTimers() {
+    if (this._boundaryTimer) {
+      clearTimeout(this._boundaryTimer);
+      this._boundaryTimer = null;
+    }
+    if (this._pollTimer) {
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
+    }
+  },
+  scheduleStateRefresh(activity) {
+    this.clearStateTimers();
+
+    const now = Date.now();
+    const toTs = (val) => {
+      const n = Number(val);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const startTs = toTs(activity.registration_start_ts);
+    const deadlineTs = toTs(activity.registration_deadline_ts);
+    const candidates = [];
+    if (startTs && startTs > now) {
+      candidates.push(startTs);
+    }
+    if (deadlineTs && deadlineTs > now) {
+      candidates.push(deadlineTs + 1000);
+    }
+
+    if (candidates.length) {
+      const nextBoundary = Math.min(...candidates);
+      const delay = Math.min(Math.max(nextBoundary - now, 1000), 2147483000);
+      this._boundaryTimer = setTimeout(() => {
+        if (this.data.activity) {
+          this.computeButtonState(this.data.activity);
+          this.scheduleStateRefresh(this.data.activity);
+        }
+      }, delay);
+    }
+
+    const intervalMs = candidates.length && (Math.min(...candidates) - now <= 120000) ? 2000 : 15000;
+    this._pollTimer = setInterval(() => {
+      if (this.data.activity) {
+        this.computeButtonState(this.data.activity);
+      }
+    }, intervalMs);
+  },
   fetchDetail(id) {
+    const normalizedId = this.normalizeActivityId(id);
+    if (!normalizedId) {
+      this.setData({
+        loading: false,
+        loadError: true,
+        loadErrorMsg: '活动参数无效，请返回列表重试',
+        buttonState: { text: '参数错误', extraClass: 'btn-disabled', disabled: true, action: 'none' }
+      });
+      return;
+    }
+
+    this.setData({ loadError: false, loadErrorMsg: '' });
     const headers = {};
     if (app.globalData.token) {
       headers['Authorization'] = app.globalData.token;
     }
     wx.request({
-      url: app.globalData.baseUrl + '/api/mp/activities/' + id,
+      url: app.globalData.baseUrl + '/api/mp/activities/' + normalizedId,
       header: headers,
       success: (res) => {
-        if(res.data.success){
-          this.setData({ activity: res.data.data });
-          this.computeButtonState(res.data.data);
+        if(res.data && res.data.success && res.data.data){
+          const detail = Object.assign({
+            title: '活动详情',
+            description: '暂无活动描述',
+            start_time: '-',
+            end_time: '-',
+            registration_start_time: '-',
+            registration_end_time: '-',
+            location: '-',
+            current_participants: 0,
+            max_participants: 0,
+            points: 0,
+            organizer: '智能社团+'
+          }, res.data.data);
+          if (!detail.registration_end_time && detail.registration_deadline) {
+            detail.registration_end_time = detail.registration_deadline;
+          }
+          this.setData({ activity: detail });
+          this.computeButtonState(detail);
+          this.scheduleStateRefresh(detail);
+        } else {
+          this.setData({
+            loadError: true,
+            loadErrorMsg: (res.data && res.data.msg) ? res.data.msg : '加载活动失败',
+            buttonState: { text: '加载失败', extraClass: 'btn-disabled', disabled: true, action: 'none' }
+          });
+          wx.showToast({ title: (res.data && res.data.msg) ? res.data.msg : '加载活动失败', icon: 'none' });
         }
+      },
+      fail: () => {
+        this.setData({
+          loadError: true,
+          loadErrorMsg: '网络异常，请稍后重试',
+          buttonState: { text: '网络异常', extraClass: 'btn-disabled', disabled: true, action: 'none' }
+        });
+        wx.showToast({ title: '网络异常，请稍后重试', icon: 'none' });
       },
       complete: () => {
         this.setData({ loading: false });
@@ -33,20 +162,39 @@ Page({
   computeButtonState(activity) {
     if (!activity) return;
     const now = new Date().getTime();
+    const toTs = (val) => {
+      const n = Number(val);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
     
-    // Safely parse times
+    // Prefer backend unix timestamps to avoid client timezone parsing issues.
+    const regStartTs = toTs(activity.registration_start_ts);
+    const regDeadlineTs = toTs(activity.registration_deadline_ts);
+
+    // Fallback to parse display strings for backward compatibility.
     const regStartStr = activity.registration_start_time || '待定';
-    const regEndStr = activity.registration_end_time || '待定';
+    const regEndStr = activity.registration_end_time || activity.registration_deadline || '待定';
     
     const parseTime = (timeStr) => {
-        if (timeStr === '待定') return 0;
-        let str = timeStr.replace(/-/g, '/');
-        if (str.split(':').length === 2) str += ':00'; // 兼容 iOS 避免 NaN
-        return new Date(str).getTime();
+      if (timeStr === '待定') return null;
+      let str = String(timeStr).trim().replace(/-/g, '/');
+      if (/^\d{4}\/\d{1,2}\/\d{1,2}\s\d{1,2}:\d{1,2}$/.test(str)) {
+        str += ':00';
+      }
+      // Explicit +08:00 ensures consistent Beijing time parsing across iOS/Android.
+      if (/^\d{4}\/\d{1,2}\/\d{1,2}\s\d{1,2}:\d{1,2}:\d{1,2}$/.test(str)) {
+        const isoLike = str.replace(/\//g, '-').replace(' ', 'T') + '+08:00';
+        const ts = new Date(isoLike).getTime();
+        return Number.isNaN(ts) ? null : ts;
+      }
+      const ts = new Date(str).getTime();
+      return Number.isNaN(ts) ? null : ts;
     };
 
-    const regStart = regStartStr !== '待定' ? parseTime(regStartStr) : 0;
-    const regEnd = regEndStr !== '待定' ? (parseTime(regEndStr) || Infinity) : Infinity;
+    const parsedStart = regStartStr !== '待定' ? parseTime(regStartStr) : null;
+    const parsedEnd = regEndStr !== '待定' ? parseTime(regEndStr) : null;
+    const regStart = regStartTs !== null ? regStartTs : (parsedStart || 0);
+    const regEnd = regDeadlineTs !== null ? regDeadlineTs : (parsedEnd || Infinity);
 
     let state = { text: '立即报名', extraClass: '', disabled: false, action: 'register' };
 
@@ -86,7 +234,11 @@ Page({
   },
   
   handleAction() {
-    const action = this.data.buttonState.action;
+    if (!this.data.activity || !this.data.activity.id) {
+      wx.showToast({ title: '活动信息未加载完成', icon: 'none' });
+      return;
+    }
+    const action = (this.data.buttonState && this.data.buttonState.action) || 'none';
     if (action === 'none') return;
     
     if (action === 'register') {
@@ -180,9 +332,10 @@ Page({
   },
 
   onShareAppMessage() {
+    const activityId = this.normalizeActivityId(this.data.activity && this.data.activity.id) || this.normalizeActivityId(this.activityId);
     return {
       title: this.data.activity?.title || '活动详情',
-      path: '/pages/activity/activity?id=' + this.data.activity?.id
+      path: activityId ? ('/pages/activity/activity?id=' + activityId) : '/pages/index/index'
     }
   },
 
@@ -208,5 +361,14 @@ Page({
         });
       }
     });
+  },
+
+  retryLoad() {
+    if (!this.activityId) {
+      wx.navigateBack({ delta: 1 });
+      return;
+    }
+    this.setData({ loading: true, loadError: false, loadErrorMsg: '' });
+    this.fetchDetail(this.activityId);
   }
 });

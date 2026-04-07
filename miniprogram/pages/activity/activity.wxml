@@ -1,4 +1,11 @@
 <view class="container" wx:if="{{!loading}}">
+  <view wx:if="{{loadError}}" class="content" style="padding-top: 120rpx; text-align:center;">
+    <text class="title font-heavy">加载失败</text>
+    <text class="desc-text" style="display:block; margin-top: 20rpx;">{{loadErrorMsg || '活动详情加载失败，请稍后重试'}}</text>
+    <button class="main-btn font-bold" style="margin-top: 40rpx;" bindtap="retryLoad">重试</button>
+  </view>
+
+  <block wx:else>
   <view class="cover-wrapper">
     <image class="cover-image" src="{{activity.poster_url || '/assets/default_poster.png'}}" mode="aspectFill" bindtap="previewPoster"></image>
   </view>
@@ -18,16 +25,8 @@
       <view class="info-row">
         <view class="icon-box"><image src="/assets/icons/clock.png" class="icon-img"></image></view>
         <view class="info-text">
-          <text class="info-label">时间</text>
+          <text class="info-label">活动时间</text>
           <text class="info-value font-medium">{{activity.start_time}} - {{activity.end_time}}</text>
-        </view>
-      </view>
-      
-      <view class="info-row">
-        <view class="icon-box"><image src="/assets/icons/clock.png" class="icon-img"></image></view>
-        <view class="info-text">
-          <text class="info-label">报名时间</text>
-          <text class="info-value font-medium">{{activity.registration_start_time}} - {{activity.registration_end_time}}</text>
         </view>
       </view>
 
@@ -48,7 +47,17 @@
       </view>
     </view>
 
+      <view class="info-row">
+        <view class="icon-box"><image src="/assets/icons/clock.png" class="icon-img"></image></view>
+        <view class="info-text">
+          <text class="info-label">报名时间</text>
+          <text class="info-value font-medium">{{activity.registration_start_time}} - {{activity.registration_end_time}}</text>
+        </view>
+      </view>
+
+
     <view class="divider"></view>
+
 
     <view class="detail-section">
       <view style="display: flex; justify-content: space-between; align-items: center;">
@@ -68,4 +77,5 @@
       <button class="main-btn font-bold {{buttonState.extraClass}}" bindtap="handleAction" disabled="{{buttonState.disabled}}">{{buttonState.text}}</button>
     </view>
   </view>
+  </block>
 </view>

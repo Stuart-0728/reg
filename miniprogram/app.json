@@ -1,7 +1,6 @@
 {
   "pages": [
     "pages/index/index",
-    "pages/chat/chat",
     "pages/activity/activity",
     "pages/user/user",
     "pages/login/login",

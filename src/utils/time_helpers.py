@@ -199,9 +199,8 @@ def safe_compare(dt1, dt2):
     :param dt2: 第二个datetime对象
     :return: 比较结果 (True/False)
     """
-    # 确保两个时间都是timezone aware的
-    dt1_aware = ensure_timezone_aware(dt1) if dt1 else None
-    dt2_aware = ensure_timezone_aware(dt2) if dt2 else None
+    dt1_aware = _to_utc_aware_for_compare(dt1)
+    dt2_aware = _to_utc_aware_for_compare(dt2)
     
     # 如果任一为None，则无法比较
     if dt1_aware is None or dt2_aware is None:
@@ -216,9 +215,8 @@ def safe_greater_than(dt1, dt2):
     :param dt2: 第二个datetime对象
     :return: 比较结果 (True/False)
     """
-    # 确保两个时间都是timezone aware的
-    dt1_aware = ensure_timezone_aware(dt1) if dt1 else None
-    dt2_aware = ensure_timezone_aware(dt2) if dt2 else None
+    dt1_aware = _to_utc_aware_for_compare(dt1)
+    dt2_aware = _to_utc_aware_for_compare(dt2)
     
     # 如果任一为None，则无法比较
     if dt1_aware is None or dt2_aware is None:
@@ -233,9 +231,8 @@ def safe_less_than(dt1, dt2):
     :param dt2: 第二个datetime对象
     :return: 比较结果 (True/False)
     """
-    # 确保两个时间都是timezone aware的
-    dt1_aware = ensure_timezone_aware(dt1) if dt1 else None
-    dt2_aware = ensure_timezone_aware(dt2) if dt2 else None
+    dt1_aware = _to_utc_aware_for_compare(dt1)
+    dt2_aware = _to_utc_aware_for_compare(dt2)
     
     # 如果任一为None，则无法比较
     if dt1_aware is None or dt2_aware is None:
@@ -250,9 +247,8 @@ def safe_greater_than_equal(dt1, dt2):
     :param dt2: 第二个datetime对象
     :return: 比较结果 (True/False)
     """
-    # 确保两个时间都是timezone aware的
-    dt1_aware = ensure_timezone_aware(dt1) if dt1 else None
-    dt2_aware = ensure_timezone_aware(dt2) if dt2 else None
+    dt1_aware = _to_utc_aware_for_compare(dt1)
+    dt2_aware = _to_utc_aware_for_compare(dt2)
     
     # 如果任一为None，则无法比较
     if dt1_aware is None or dt2_aware is None:
@@ -267,16 +263,23 @@ def safe_less_than_equal(dt1, dt2):
     :param dt2: 第二个datetime对象
     :return: 比较结果 (True/False)
     """
-    if dt1 is None or dt2 is None:
+    dt1_aware = _to_utc_aware_for_compare(dt1)
+    dt2_aware = _to_utc_aware_for_compare(dt2)
+    if dt1_aware is None or dt2_aware is None:
         return False
-    
-    # 确保两个时间都是naive datetime
-    if dt1.tzinfo is not None:
-        dt1 = dt1.replace(tzinfo=None)
-    if dt2.tzinfo is not None:
-        dt2 = dt2.replace(tzinfo=None)
-    
-    return dt1 <= dt2
+    return dt1_aware <= dt2_aware
+
+
+def _to_utc_aware_for_compare(dt):
+    """Normalize datetime for comparisons.
+
+    Rule: database naive datetimes are treated as UTC; aware datetimes are converted to UTC.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return pytz.utc.localize(dt)
+    return dt.astimezone(pytz.utc)
 
 def get_activity_status(activity, current_time=None):
     """

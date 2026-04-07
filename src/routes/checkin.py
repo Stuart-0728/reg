@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from src.models import db, Activity, ActivityCheckin, Registration, StudentInfo, PointsHistory, User
 from datetime import datetime, timezone, timedelta
 import logging
-from src.utils.time_helpers import get_localized_now, localize_time, ensure_timezone_aware, normalize_datetime_for_db
+from src.utils.time_helpers import get_localized_now
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from src.routes.utils import admin_required, student_required
@@ -82,9 +82,9 @@ def scan_checkin(activity_id, checkin_key):
             # 导入安全比较函数
             from src.utils.time_helpers import safe_less_than, safe_greater_than
             
-            # 确保活动时间有时区信息，并且都转换为北京时间进行比较
-            start_time = ensure_timezone_aware(activity.start_time) if activity.start_time else now
-            end_time = ensure_timezone_aware(activity.end_time) if activity.end_time else now + timedelta(hours=2)
+            # 数据库存储为 UTC-naive，直接按统一比较工具进行判断
+            start_time = activity.start_time if activity.start_time else now
+            end_time = activity.end_time if activity.end_time else now + timedelta(hours=2)
                 
             # 添加灵活度：允许活动开始前30分钟和结束后30分钟的签到
             if start_time:
@@ -281,9 +281,10 @@ def unregister_activity(activity_id):
         # 获取活动信息
         activity = db.get_or_404(Activity, activity_id)
         
-        # 检查活动是否已开始
-        now = datetime.now(timezone.utc)
-        if now > activity.start_time:
+        # 检查活动是否已开始（统一使用UTC-naive比较语义）
+        now = get_localized_now()
+        from src.utils.time_helpers import safe_greater_than
+        if activity.start_time and safe_greater_than(now, activity.start_time):
             flash('活动已开始，无法取消报名', 'warning')
             return redirect(url_for('student.my_activities'))
         

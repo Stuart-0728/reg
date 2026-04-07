@@ -29,9 +29,6 @@ Page({
   goToNotifications() {
     wx.navigateTo({ url: '/pages/notifications/notifications' });
   },
-  goToAIChat() {
-    wx.navigateTo({ url: '/pages/chat/chat' });
-  },
   goToProfile() {
     wx.navigateTo({ url: '/pages/profile/profile' });
   },

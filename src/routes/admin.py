@@ -3835,11 +3835,14 @@ def export_activity_registrations(id):
             flash('您只能导出所属社团活动报名', 'danger')
             return redirect(url_for('admin.activities'))
         is_team_mode = (getattr(activity, 'registration_mode', 'individual') or 'individual') == 'team'
+        include_cancelled = (request.args.get('include_cancelled') or '').strip().lower() in ('1', 'true', 'yes', 'on')
         
         # 获取报名学生列表
-        registrations = Registration.query.filter_by(
-            activity_id=id
-        ).join(
+        query = Registration.query.filter_by(activity_id=id)
+        if not include_cancelled:
+            query = query.filter(Registration.status != 'cancelled')
+
+        registrations = query.join(
             User, Registration.user_id == User.id
         ).join(
             StudentInfo, User.id == StudentInfo.user_id
@@ -3920,10 +3923,10 @@ def export_activity_registrations(id):
         output.seek(0)
         
         # 记录操作日志
-        log_action('export_registrations', f'导出活动({activity.title})的报名信息')
+        log_action('export_registrations', f"导出活动({activity.title})的报名信息，包含已取消={include_cancelled}")
         
         # 使用北京时间作为文件名
-        beijing_now = get_localized_now()
+        beijing_now = get_beijing_time()
         
         # 返回Excel文件
         return send_file(
@@ -4178,7 +4181,7 @@ def export_students():
         log_action('export_students', '导出所有学生信息')
         
         # 使用北京时间作为文件名
-        beijing_now = get_localized_now()
+        beijing_now = get_beijing_time()
         
         # 返回Excel文件
         return send_file(
@@ -6447,8 +6450,15 @@ def fix_timezone():
                             SET end_time = end_time AT TIME ZONE 'Asia/Shanghai' AT TIME ZONE 'UTC'
                             WHERE end_time IS NOT NULL;
                             """)
+
+                            # 3. 修复活动报名开始时间
+                            cursor.execute("""
+                            UPDATE activities
+                            SET registration_start_time = registration_start_time AT TIME ZONE 'Asia/Shanghai' AT TIME ZONE 'UTC'
+                            WHERE registration_start_time IS NOT NULL;
+                            """)
                             
-                            # 3. 修复活动报名截止时间
+                            # 4. 修复活动报名截止时间
                             cursor.execute("""
                             UPDATE activities
                             SET registration_deadline = registration_deadline AT TIME ZONE 'Asia/Shanghai' AT TIME ZONE 'UTC'

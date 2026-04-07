@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import func, desc, text, and_, or_, case
 from src import db, cache, limiter
 from src.models import Activity, Registration, User, Tag, Notification, Announcement, Role
-from src.utils.time_helpers import get_localized_now, ensure_timezone_aware, safe_less_than, safe_greater_than, display_datetime, get_activity_status
+from src.utils.time_helpers import get_localized_now, safe_less_than, safe_greater_than, display_datetime, get_activity_status
 import time
 import traceback
 import pytz
@@ -374,7 +374,7 @@ def activity_detail(activity_id):
         # 延迟导入，避免循环导入问题
         from src import db
         from src.models import Activity, Registration, User, Tag
-        from src.utils.time_helpers import display_datetime, get_localized_now, safe_less_than, safe_greater_than, safe_compare, ensure_timezone_aware
+        from src.utils.time_helpers import display_datetime, get_localized_now, safe_less_than, safe_greater_than, safe_compare
         # 导入FlaskForm创建CSRF令牌
         from flask_wtf import FlaskForm
         
@@ -417,11 +417,10 @@ def activity_detail(activity_id):
         now = get_localized_now()
         logger.info(f"当前UTC时间: {now}, 活动截止时间: {activity.registration_deadline}, 活动开始时间: {activity.start_time}")
         
-        # 判断是否可以报名 - 使用安全比较函数
-        # 确保所有时间都有时区信息
-        start_registration_aware = ensure_timezone_aware(getattr(activity, 'registration_start_time', None))
-        deadline_aware = ensure_timezone_aware(activity.registration_deadline)
-        start_time_aware = ensure_timezone_aware(activity.start_time)
+        # 判断是否可以报名 - 使用安全比较函数（统一按UTC语义比较）
+        start_registration_aware = getattr(activity, 'registration_start_time', None)
+        deadline_aware = activity.registration_deadline
+        start_time_aware = activity.start_time
         
         can_register = (
             not is_registered and 

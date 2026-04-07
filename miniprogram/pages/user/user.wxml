@@ -46,12 +46,6 @@
   <view class="menu-group">
     <text class="group-title font-bold">更多</text>
     <view class="menu-card border-outline rounded-xl shadow-subtle">
-
-      <view class="menu-item" hover-class="menu-hover" bindtap="goToAIChat">
-        <view class="menu-icon-wrap"><image src="/assets/icons/robot.png" class="menu-icon" style="width: 48rpx; height: 48rpx;"></image></view>
-        <text class="menu-text font-medium">AI 助手</text>
-      </view>
-      <view class="menu-divider"></view>
       <view class="menu-item" hover-class="menu-hover" bindtap="goToProfile">
         <view class="menu-icon-wrap"><image src="/assets/icons/settings.png" class="menu-icon"></image></view>
         <text class="menu-text font-medium">个人档案</text>

@@ -2,8 +2,20 @@ from flask import Blueprint, jsonify, request, current_app
 from src.utils.time_helpers import display_datetime
 from src.models import Activity, User, StudentInfo, Registration
 from src import db
+import pytz
 
 api_mp_bp = Blueprint('api_mp', __name__, url_prefix='/api/mp')
+
+
+def _to_unix_ms(dt):
+    """Convert datetime to UTC unix timestamp in milliseconds."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    else:
+        dt = dt.astimezone(pytz.utc)
+    return int(dt.timestamp() * 1000)
 
 @api_mp_bp.route('/login', methods=['POST'])
 def mp_login():
@@ -113,7 +125,7 @@ def get_activity_detail(id):
             user = User.query.get(user_id)
             if user:
                 from src.models import Registration
-                reg = Registration.query.filter_by(user_id=user.id, activity_id=a.id).order_by(Registration.created_at.desc()).first()
+                reg = Registration.query.filter_by(user_id=user.id, activity_id=a.id).order_by(Registration.register_time.desc(), Registration.id.desc()).first()
                 if reg:
                     user_status = reg.status
 
@@ -124,7 +136,11 @@ def get_activity_detail(id):
             'start_time': display_datetime(a.start_time, '%Y-%m-%d %H:%M') if a.start_time else '待定',
             'end_time': display_datetime(a.end_time, '%Y-%m-%d %H:%M') if a.end_time else '待定',
             'registration_start_time': display_datetime(getattr(a, 'registration_start_time', None), '%Y-%m-%d %H:%M') if getattr(a, 'registration_start_time', None) else '待定',
-            'registration_end_time': display_datetime(getattr(a, 'registration_end_time', None), '%Y-%m-%d %H:%M') if getattr(a, 'registration_end_time', None) else '待定',
+            # Keep registration_end_time for mini program compatibility, but map from registration_deadline.
+            'registration_end_time': display_datetime(getattr(a, 'registration_deadline', None), '%Y-%m-%d %H:%M') if getattr(a, 'registration_deadline', None) else '待定',
+            'registration_deadline': display_datetime(getattr(a, 'registration_deadline', None), '%Y-%m-%d %H:%M') if getattr(a, 'registration_deadline', None) else '待定',
+            'registration_start_ts': _to_unix_ms(getattr(a, 'registration_start_time', None)),
+            'registration_deadline_ts': _to_unix_ms(getattr(a, 'registration_deadline', None)),
             'checkin_enabled': getattr(a, 'checkin_enabled', False),
             'user_status': user_status,
             'location': a.location or '待定',
@@ -142,7 +158,6 @@ def get_activity_detail(id):
 from functools import wraps
 from src.models import Registration, PointsHistory
 from datetime import datetime
-import pytz
 
 def require_token(f):
     @wraps(f)
@@ -210,6 +225,12 @@ def register_activity(id):
     a = Activity.query.get_or_404(id)
     if a.status != 'active':
         return jsonify({'success': False, 'msg': '活动不在报名中'})
+
+    now = datetime.utcnow()
+    if a.registration_start_time and now < a.registration_start_time:
+        return jsonify({'success': False, 'msg': '报名尚未开始'})
+    if a.registration_deadline and now > a.registration_deadline:
+        return jsonify({'success': False, 'msg': '该活动已过报名截止时间'})
         
     existing = Registration.query.filter_by(user_id=user.id, activity_id=id).first()
     if existing:

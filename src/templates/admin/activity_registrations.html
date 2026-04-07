@@ -10,9 +10,15 @@
             <h5 class="text-muted">{{ activity.title }}</h5>
         </div>
         <div class="col-md-4 text-end">
-            <a href="{{ url_for('admin.export_activity_registrations', id=activity.id) }}" class="btn btn-success">
+            <a id="export-registrations-btn" href="{{ url_for('admin.export_activity_registrations', id=activity.id) }}" class="btn btn-success">
                 <i class="fas fa-file-excel me-2"></i>导出Excel
             </a>
+            <div class="form-check mt-2 d-flex justify-content-end">
+                <input class="form-check-input me-2" type="checkbox" value="1" id="include-cancelled-export">
+                <label class="form-check-label small text-muted" for="include-cancelled-export">
+                    导出已取消同学
+                </label>
+            </div>
             <a href="{{ url_for('admin.activities') }}" class="btn btn-secondary ms-2">
                 <i class="fas fa-arrow-left me-2"></i>返回
             </a>
@@ -307,6 +313,21 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const exportBtn = document.getElementById('export-registrations-btn');
+    const includeCancelledExport = document.getElementById('include-cancelled-export');
+    if (exportBtn && includeCancelledExport) {
+        const baseUrl = exportBtn.getAttribute('href');
+        const refreshExportUrl = function() {
+            if (includeCancelledExport.checked) {
+                exportBtn.setAttribute('href', `${baseUrl}?include_cancelled=1`);
+            } else {
+                exportBtn.setAttribute('href', baseUrl);
+            }
+        };
+        includeCancelledExport.addEventListener('change', refreshExportUrl);
+        refreshExportUrl();
+    }
+
     // 为所有状态更新表单添加确认处理
     const statusForms = document.querySelectorAll('form[action*="update_registration_status"]');
     statusForms.forEach(function(form) {

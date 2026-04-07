@@ -47,6 +47,9 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "[1/8] 准备服务器目录"
 ssh ${SERVER_USER}@${SERVER_IP} "sudo mkdir -p ${APP_DIR} ${ACTIVITY_DOCS_DIR} && sudo chown -R ${SERVER_USER}:${SERVER_USER} /var/www/reg"
 
+echo "[1.2/8] 服务器时区与时间基线检查"
+ssh ${SERVER_USER}@${SERVER_IP} "echo 'timedatectl:'; timedatectl | sed -n '1,8p'; echo 'date -u:'; date -u '+%F %T %Z'; echo 'date(local):'; date '+%F %T %Z'"
+
 echo "[1.1/8] 迁移历史活动资料到持久化目录（若存在）"
 ssh ${SERVER_USER}@${SERVER_IP} "LEGACY_DIR='${APP_DIR}/static/uploads/posters/activity_docs'; if [ -d \"\${LEGACY_DIR}\" ]; then mkdir -p '${ACTIVITY_DOCS_DIR}' && cp -an \"\${LEGACY_DIR}/.\" '${ACTIVITY_DOCS_DIR}/' || true; fi"
 
@@ -197,8 +200,8 @@ sync_remote_env_key "DIGITAL_HUMAN_SCALE" "${DIGITAL_HUMAN_SCALE}"
 sync_remote_env_key "DIGITAL_HUMAN_MOVE_H" "${DIGITAL_HUMAN_MOVE_H}"
 sync_remote_env_key "DIGITAL_HUMAN_MOVE_V" "${DIGITAL_HUMAN_MOVE_V}"
 
-echo "[6/8] 检查并重载 systemd 服务"
-ssh ${SERVER_USER}@${SERVER_IP} "if [ ! -f /etc/systemd/system/${SERVICE_NAME}.service ]; then sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null << EOF
+echo "[6/8] 重写并重载 systemd 服务"
+ssh ${SERVER_USER}@${SERVER_IP} "sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null << EOF
 [Unit]
 Description=Gunicorn service for reg.cqaibase.cn
 After=network.target
@@ -208,6 +211,7 @@ User=${SERVER_USER}
 Group=www-data
 WorkingDirectory=${APP_DIR}
 Environment=PYTHONUNBUFFERED=1
+Environment=TZ=UTC
 EnvironmentFile=${APP_DIR}/.env
 ExecStart=${APP_DIR}/venv/bin/gunicorn --preload --workers 3 --bind 127.0.0.1:8082 --timeout 120 wsgi:app
 Restart=always
@@ -217,8 +221,32 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 sudo systemctl daemon-reload && sudo systemctl enable ${SERVICE_NAME}.service
-fi
 sudo systemctl restart ${SERVICE_NAME}.service"
+
+echo "[6.1/8] 校验PostgreSQL会话时区"
+ssh ${SERVER_USER}@${SERVER_IP} "cd ${APP_DIR}; source venv/bin/activate; python - << 'PY'
+import os
+from sqlalchemy import create_engine, text
+
+env = {}
+with open('.env', 'r', encoding='utf-8') as f:
+  for line in f:
+    line = line.strip()
+    if not line or line.startswith('#') or '=' not in line:
+      continue
+    k, v = line.split('=', 1)
+    env[k] = v
+
+url = env.get('DATABASE_URL') or os.environ.get('DATABASE_URL')
+if not url:
+  print('DATABASE_URL not found')
+  raise SystemExit(1)
+
+engine = create_engine(url)
+with engine.connect() as conn:
+  tz = conn.execute(text("SHOW timezone")).scalar()
+  print('postgres timezone =', tz)
+PY"
 
 echo "[7/8] 检查并配置 Nginx 站点与自动任务"
 ssh ${SERVER_USER}@${SERVER_IP} "if [ ! -f /etc/nginx/sites-available/reg ]; then sudo tee /etc/nginx/sites-available/reg > /dev/null << 'EOF'
