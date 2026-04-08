@@ -1033,6 +1033,21 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             border-radius: var(--border-radius);
         }
+
+        /* 约束账号菜单高度，避免小屏时“退出登录”等项落到可视区外 */
+        .glass-nav #auth-nav-logged-in > .dropdown-menu {
+            max-height: min(70vh, calc(100dvh - 120px));
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .glass-nav #auth-nav-logged-in.dropup > .dropdown-menu {
+            bottom: 100%;
+            top: auto;
+            margin-top: 0;
+            margin-bottom: 0.45rem;
+        }
         
         /* 现代化搜索框内联放大镜基础通用类 */
         .modern-search-form {
@@ -1226,6 +1241,11 @@
                 margin-top: 0.85rem;
                 padding-top: 0.5rem;
                 border-top: 1px solid rgba(79, 70, 229, 0.12);
+                max-height: var(--mobile-nav-max-height, calc(100dvh - var(--header-notice-offset, 0px) - var(--mobile-nav-safe-bottom, 56px) - 12px));
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: calc(var(--mobile-nav-safe-bottom, 56px) + env(safe-area-inset-bottom));
             }
 
             .glass-nav .navbar-collapse .navbar-nav .nav-item {
@@ -1265,6 +1285,9 @@
                 width: 100%;
                 margin-top: 0.4rem;
                 border-radius: 12px;
+                max-height: none;
+                overflow: visible;
+                padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
             }
 
             .glass-nav .bottom-area .navbar-nav .dropdown-menu > li > .dropdown-item {
@@ -1745,6 +1768,122 @@
                 }, ms);
             };
 
+            const adjustAuthDropdownDirection = (dropdownRoot) => {
+                if (!dropdownRoot) return;
+
+                const menu = dropdownRoot.querySelector('.dropdown-menu');
+                if (!menu) return;
+
+                // 仅在小屏自动调整方向，避免影响桌面端布局
+                const isMobileViewport = window.matchMedia('(max-width: 1199.98px)').matches;
+                if (!isMobileViewport) {
+                    dropdownRoot.classList.remove('dropup');
+                    menu.style.maxHeight = '';
+                    menu.style.overflowY = '';
+                    menu.style.webkitOverflowScrolling = '';
+                    return;
+                }
+
+                dropdownRoot.classList.remove('dropup');
+                const menuStyle = window.getComputedStyle(menu);
+
+                const getViewportHeight = () => {
+                    if (window.visualViewport && Number.isFinite(window.visualViewport.height)) {
+                        return window.visualViewport.height;
+                    }
+                    return window.innerHeight || document.documentElement.clientHeight || 0;
+                };
+
+                // 折叠态下菜单为 static 流式布局：按可视区剩余空间动态限高，避免底部项被遮挡
+                if (menuStyle.position === 'static') {
+                    menu.style.maxHeight = '';
+                    menu.style.overflowY = '';
+                    menu.style.webkitOverflowScrolling = '';
+
+                    const logoutLink = menu.querySelector('a[href*="/auth/logout"]');
+                    const tailItem = logoutLink || menu.querySelector('li:last-child .dropdown-item');
+                    if (tailItem && typeof tailItem.scrollIntoView === 'function') {
+                        requestAnimationFrame(() => {
+                            tailItem.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                        });
+                    }
+                    return;
+                }
+
+                const triggerRect = dropdownRoot.getBoundingClientRect();
+                const menuRect = menu.getBoundingClientRect();
+                const viewportHeight = getViewportHeight();
+                const spaceBelow = viewportHeight - triggerRect.bottom;
+                const spaceAbove = triggerRect.top;
+                const menuNeed = Math.max(menuRect.height, menu.scrollHeight, 180);
+
+                if (spaceBelow < menuNeed && spaceAbove > spaceBelow) {
+                    dropdownRoot.classList.add('dropup');
+                }
+            };
+
+            const getMobileBottomObstruction = () => {
+                const isMobileViewport = window.matchMedia('(max-width: 1199.98px)').matches;
+                if (!isMobileViewport) return 0;
+
+                const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+                const minReserve = coarsePointer ? 56 : 24;
+                const vv = window.visualViewport;
+
+                if (!vv) {
+                    return minReserve;
+                }
+
+                const layoutHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+                const occludedBottom = Math.max(0, Math.round(layoutHeight - (vv.height + vv.offsetTop)));
+
+                return Math.max(minReserve, occludedBottom + 12);
+            };
+
+            const pushAuthDropdownAboveBottomBar = (dropdownRoot) => {
+                if (!dropdownRoot) return;
+                const navbarCollapse = document.getElementById('navbarNav');
+                if (!navbarCollapse || !navbarCollapse.classList.contains('show')) return;
+
+                const menu = dropdownRoot.querySelector('.dropdown-menu');
+                if (!menu) return;
+
+                const vv = window.visualViewport;
+                const viewportHeight = (vv && Number.isFinite(vv.height))
+                    ? vv.height
+                    : (window.innerHeight || document.documentElement.clientHeight || 0);
+                const bottomObstruction = getMobileBottomObstruction();
+                const targetBottom = viewportHeight - bottomObstruction - 8;
+                const menuRect = menu.getBoundingClientRect();
+
+                if (menuRect.bottom > targetBottom) {
+                    const delta = Math.ceil(menuRect.bottom - targetBottom);
+                    navbarCollapse.scrollTop += delta;
+                }
+            };
+
+            const updateMobileNavViewportHeight = () => {
+                if (!window.matchMedia('(max-width: 1199.98px)').matches) {
+                    document.documentElement.style.removeProperty('--mobile-nav-max-height');
+                    document.documentElement.style.removeProperty('--mobile-nav-safe-bottom');
+                    return;
+                }
+
+                const navbarCollapse = document.getElementById('navbarNav');
+                if (!navbarCollapse) return;
+
+                const viewportHeight = (window.visualViewport && Number.isFinite(window.visualViewport.height))
+                    ? window.visualViewport.height
+                    : (window.innerHeight || document.documentElement.clientHeight || 0);
+                const topOffset = Math.max(0, navbarCollapse.getBoundingClientRect().top);
+                const safeGap = 10;
+                const bottomObstruction = getMobileBottomObstruction();
+                const available = Math.max(220, Math.floor(viewportHeight - topOffset - safeGap - bottomObstruction));
+
+                document.documentElement.style.setProperty('--mobile-nav-safe-bottom', `${bottomObstruction}px`);
+                document.documentElement.style.setProperty('--mobile-nav-max-height', `${available}px`);
+            };
+
             const urls = {
                 home: '{{ url_for("main.index") }}',
                 resources: '{{ url_for("education.resources") }}',
@@ -2041,6 +2180,7 @@
 
             // 首次进入页面以SSR为准，仅做轻量同步；锁定期中延迟到锁结束后执行
             syncAuthState(false);
+            updateMobileNavViewportHeight();
 
             // 处理浏览器后退/前进缓存恢复，避免显示上一个账号导航
             window.addEventListener('pageshow', function (event) {
@@ -2057,6 +2197,42 @@
                     syncAuthState(false);
                 }
             });
+
+            document.addEventListener('show.bs.dropdown', function (event) {
+                const dropdownRoot = event && event.target ? event.target.closest('#auth-nav-logged-in') : null;
+                if (!dropdownRoot) return;
+
+                // 等 Bootstrap 写入 .show 后再测量尺寸
+                requestAnimationFrame(() => {
+                    adjustAuthDropdownDirection(dropdownRoot);
+                    requestAnimationFrame(() => pushAuthDropdownAboveBottomBar(dropdownRoot));
+                });
+            });
+
+            document.addEventListener('hidden.bs.dropdown', function (event) {
+                const dropdownRoot = event && event.target ? event.target.closest('#auth-nav-logged-in') : null;
+                if (!dropdownRoot) return;
+                dropdownRoot.classList.remove('dropup');
+                const menu = dropdownRoot.querySelector('.dropdown-menu');
+                if (menu) {
+                    menu.style.maxHeight = '';
+                    menu.style.overflowY = '';
+                    menu.style.webkitOverflowScrolling = '';
+                }
+            });
+
+            window.addEventListener('resize', function () {
+                updateMobileNavViewportHeight();
+                const dropdownRoot = document.getElementById('auth-nav-logged-in');
+                if (!dropdownRoot) return;
+                if (!dropdownRoot.classList.contains('show')) return;
+                adjustAuthDropdownDirection(dropdownRoot);
+            }, { passive: true });
+
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', updateMobileNavViewportHeight, { passive: true });
+                window.visualViewport.addEventListener('scroll', updateMobileNavViewportHeight, { passive: true });
+            }
         });
     </script>
     {% block scripts %}{% endblock %}

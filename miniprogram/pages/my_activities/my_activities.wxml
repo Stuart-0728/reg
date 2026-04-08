@@ -36,8 +36,8 @@
           </view>
           
           <view class="action-buttons">
-            <text class="action-btn meta-cancel" wx:if="{{item.status=='registered'}}" bindtap="handleCancel" data-id="{{item.activity_id}}">取消报名</text>
-            <text class="action-btn meta-register" wx:if="{{item.status=='cancelled' && item.activity_status=='active'}}" bindtap="handleRegister" data-id="{{item.activity_id}}">重新报名</text>
+            <text class="action-btn meta-cancel" wx:if="{{item.status=='registered'}}" catchtap="handleCancel" data-id="{{item.activity_id}}">取消报名</text>
+            <text class="action-btn meta-register" wx:if="{{item.status=='cancelled' && item.activity_status=='active'}}" catchtap="handleRegister" data-id="{{item.activity_id}}">重新报名</text>
           </view>
         </view>
       </view>

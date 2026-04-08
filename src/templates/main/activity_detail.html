@@ -32,6 +32,7 @@
                 
                 {% if activity.poster_image %}
                 <div class="text-center p-3">
+                    {% set poster_v = ((activity.updated_at or activity.created_at).timestamp()|int) if (activity.updated_at or activity.created_at) else 0 %}
                     {% if 'banner' in activity.poster_image %}
                     <img src="{{ url_for('static', filename='img/' + activity.poster_image) }}" 
                         class="img-fluid rounded poster-zoom-trigger" 
@@ -39,10 +40,10 @@
                         data-full-src="{{ url_for('static', filename='img/' + activity.poster_image) }}"
                          style="max-height: 400px; width: auto; object-fit: contain;">
                     {% else %}
-                    <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" 
+                    <img src="{{ url_for('main.poster_image', activity_id=activity.id, v=poster_v) }}" 
                         class="img-fluid rounded poster-zoom-trigger" 
                          alt="{{ activity.title }}" 
-                        data-full-src="{{ url_for('main.poster_image', activity_id=activity.id) }}"
+                        data-full-src="{{ url_for('main.poster_image', activity_id=activity.id, v=poster_v) }}"
                          style="max-height: 400px; width: auto; object-fit: contain;">
                     {% endif %}
                 </div>

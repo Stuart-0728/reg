@@ -1,1 +1,6 @@
-{"navigationBarTitleText": "我的活动", "navigationBarBackgroundColor": "#ffffff", "navigationBarTextStyle": "black"}
+{
+  "navigationBarTitleText": "我的活动",
+  "navigationBarBackgroundColor": "#ffffff",
+  "navigationBarTextStyle": "black",
+  "enablePullDownRefresh": true
+}

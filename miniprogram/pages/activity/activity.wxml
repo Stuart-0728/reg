@@ -45,6 +45,14 @@
           <text class="info-value font-medium">{{activity.current_participants}} / {{activity.max_participants > 0 ? activity.max_participants : '不限'}}</text>
         </view>
       </view>
+        <view class="info-row">
+          <view class="icon-box"><image src="/assets/icons/clock.png" class="icon-img"></image></view>
+          <view class="info-text">
+            <text class="info-label">报名时间</text>
+            <text class="info-value font-medium">{{activity.registration_start_time}} - {{activity.registration_end_time}}</text>
+          </view>
+        </view>
+
     </view>
 
       <view class="info-row">

@@ -1,0 +1,38 @@
+<view class="container">
+  <view class="title">团小智日程记录 小程序隐私保护指引</view>
+
+  <view class="content">本指引是团小智日程记录小程序开发者 （以下简称“开发者”）为处理你的个人信息而制定。</view>
+
+  <view class="section-title">开发者处理的信息</view>
+  <view class="content">根据法律规定，开发者仅处理实现小程序功能所必要的信息。</view>
+  <view class="content">开发者 <text class="bold">读取你的剪切板</text>，用于分享活动快捷报名。</view>
+  <view class="content">开发者将在获取你的明示同意后，<text class="bold">收集你的手机号</text>，用途是【方便后续联系用户，对手机号进行登记】</view>
+  <view class="content">开发者 <text class="bold">收集你的邮箱</text>，用于方便后续联系用户，并确认邮箱真实性，对账号进行认证。</view>
+
+  <view class="section-title">未成年人保护</view>
+  <view class="content">根据相关法律法规的规定，若你是14周岁以下的未成年人，你需要和你的监护人共同仔细阅读本指引，并在征得监护人明示同意后继续使用小程序服务。开发者将根据相关法律法规的规定及本指引内容，处理经监护人同意而收集的未成年人用户信息，并通过【本指引你的权益部分】披露的内容保障未成年人在个人信息处理活动中的各项权利。</view>
+
+  <view class="section-title">你的权益</view>
+  <view class="content">关于读取你的剪切板，你可以通过以下路径：小程序主页右上角“...” — “设置” — “小程序已获取的信息” — 点击特定信息 — 点击“通知开发者删除”，开发者承诺收到通知后将删除信息。法律法规另有规定的，开发者承诺将停止除存储和采取必要的安全保护措施之外的处理。</view>
+  <view class="content">关于你的个人信息，你可以通过以下方式与开发者联系，行使查阅、复制、更正、删除等法定权利。</view>
+  <view class="content">若你在小程序中注册了账号，你可以通过以下方式与开发者联系，申请注销你在小程序中使用的账号。在受理你的申请后，开发者承诺在十五个工作日内完成核查和处理，并按照法律法规要求处理你的相关信息。</view>
+  <view class="content"><text class="bold">联系方式：</text></view>
+  <view class="content">邮箱: stuart01@qq.com</view>
+  <view class="content">qq: 1078184866</view>
+  <view class="content">微信号: stuart4613</view>
+
+  <view class="section-title">开发者对信息的存储</view>
+  <view class="content">开发者承诺，除法律法规另有规定外，开发者对你的信息的保存期限应当为实现处理目的所必要的最短时间。</view>
+
+  <view class="section-title">信息的使用规则</view>
+  <view class="content">开发者将会在本指引所明示的用途内使用收集的信息。</view>
+  <view class="content">如开发者使用你的信息超出本指引目的或合理范围，开发者必须在变更使用目的或范围前，再次以邮箱或其他方式告知并征得你的明示同意。</view>
+
+  <view class="section-title">信息对外提供</view>
+  <view class="content">开发者承诺，不会主动共享或转让你的信息至任何第三方，如存在确需共享或转让时，开发者应当直接征得或确认第三方征得你的单独同意。</view>
+  <view class="content">开发者承诺，不会对外公开披露你的信息，如必须公开披露时，开发者应当向你告知公开披露的目的、披露信息的类型及可能涉及的信息，并征得你的单独同意。</view>
+
+  <view class="content" style="margin-top: 30rpx;">你认为开发者未遵守上述约定，或有其他的投诉建议、或未成年人个人信息保护相关问题，可通过以下方式与开发者联系；或者向微信进行投诉。</view>
+  
+  <view class="content" style="margin-top: 40rpx; color: #9ca3af; text-align: center;">更新日期：2026-04-08</view>
+</view>

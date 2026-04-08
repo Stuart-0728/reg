@@ -28,6 +28,7 @@
       <view class="menu-item" hover-class="menu-hover" bindtap="goToNotifications">
         <view class="menu-icon-wrap"><image src="/assets/icons/notifications.png" class="menu-icon" style="width: 48rpx; height: 48rpx;"></image></view>
         <text class="menu-text font-medium">消息通知</text>
+        <view class="unread-badge" wx:if="{{unreadCount > 0}}">{{unreadCount}}</view>
       </view>
       <view class="menu-divider"></view>
 

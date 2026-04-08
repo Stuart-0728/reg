@@ -358,11 +358,12 @@
                 {% if activity and activity.poster_image %}
                 <div class="mt-2">
                   <p class="mb-1">当前海报:</p>
+                  {% set poster_v = ((activity.updated_at or activity.created_at).timestamp()|int) if (activity.updated_at or activity.created_at) else 0 %}
                   {% if 'banner' in activity.poster_image %}
                   <img src="{{ url_for('static', filename='img/' + activity.poster_image) }}" alt="活动海报" class="img-thumbnail poster-zoom-trigger" style="max-height: 200px;" data-full-src="{{ url_for('static', filename='img/' + activity.poster_image) }}">
                   <small class="form-text text-muted d-block mt-1">使用系统默认图片：{{ activity.poster_image }}</small>
                   {% else %}
-                  <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" alt="活动海报" class="img-thumbnail poster-zoom-trigger" style="max-height: 200px;" data-full-src="{{ url_for('main.poster_image', activity_id=activity.id) }}">
+                  <img src="{{ url_for('main.poster_image', activity_id=activity.id, v=poster_v) }}" alt="活动海报" class="img-thumbnail poster-zoom-trigger" style="max-height: 200px;" data-full-src="{{ url_for('main.poster_image', activity_id=activity.id, v=poster_v) }}">
                   <small class="form-text text-muted d-block mt-1">当前文件名：{{ activity.poster_image }}</small>
                   {% endif %}
                 </div>

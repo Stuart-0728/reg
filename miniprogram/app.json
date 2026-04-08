@@ -9,10 +9,12 @@
     "pages/verify_email/verify_email",
     "pages/profile/profile",
     "pages/notifications/notifications",
-    "pages/notification_detail/notification_detail"
+    "pages/notification_detail/notification_detail",
+    "pages/privacy/privacy",
+    "pages/agreement/agreement"
   ],
   "window": {
-    "backgroundTextStyle": "light",
+    "backgroundTextStyle": "dark",
     "navigationBarBackgroundColor": "#ffffff",
     "navigationBarTitleText": "掌上活动平台",
     "navigationBarTextStyle": "black",

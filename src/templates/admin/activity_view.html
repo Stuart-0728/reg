@@ -30,7 +30,8 @@
 
                     <div class="mb-4">
                         {% if activity.poster_image %}
-                        <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" class="img-fluid rounded" style="max-height: 350px; width: auto; margin: 0 auto; display: block;">
+                        {% set poster_v = ((activity.updated_at or activity.created_at).timestamp()|int) if (activity.updated_at or activity.created_at) else 0 %}
+                        <img src="{{ url_for('main.poster_image', activity_id=activity.id, v=poster_v) }}" class="img-fluid rounded" style="max-height: 350px; width: auto; margin: 0 auto; display: block;">
                         {% else %}
                         <div class="alert alert-secondary text-center">未上传海报</div>
                         {% endif %}

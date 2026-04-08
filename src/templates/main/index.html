@@ -232,8 +232,9 @@
                                                                                                                                                                         <!-- Poster Image Area -->
                             <div class="position-relative w-100" style="height: 200px; background-color: #f3f4f6; border-top-left-radius: 12px; border-top-right-radius: 12px; overflow: hidden;">
                                 {% if activity.poster_image %}
+                                    {% set poster_v = ((activity.updated_at or activity.created_at).timestamp()|int) if (activity.updated_at or activity.created_at) else 0 %}
                                     {% if activity.poster_data %}
-                                        <img src="{{ url_for('main.poster_image', activity_id=activity.id) }}" class="w-100 h-100" style="object-fit: cover;" alt="{{ activity.title }}">
+                                        <img src="{{ url_for('main.poster_image', activity_id=activity.id, v=poster_v) }}" class="w-100 h-100" style="object-fit: cover;" alt="{{ activity.title }}">
                                     {% else %}
                                         <img src="{{ url_for('static', filename='uploads/posters/' ~ activity.poster_image) }}" class="w-100 h-100" style="object-fit: cover;" alt="{{ activity.title }}">
                                     {% endif %}

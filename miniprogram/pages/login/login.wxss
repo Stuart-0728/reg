@@ -21,3 +21,29 @@
   padding: 20rpx;
   cursor: pointer;
 }
+
+.agreement-section {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 10rpx;
+  margin-bottom: 40rpx;
+  font-size: 24rpx;
+  color: #6b7280;
+}
+.agreement-section checkbox-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.agreement-label {
+  display: flex;
+  align-items: center;
+}
+.agreement-text {
+  color: #6b7280;
+}
+.link-text {
+  color: #3b82f6;
+  display: inline;
+}

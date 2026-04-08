@@ -1,0 +1,26 @@
+<view class="container">
+  <view class="title">团小智日程记录 小程序服务协议</view>
+  
+  <view class="content">欢迎您使用“团小智日程记录”微信小程序服务！在此特别提醒您在注册成为用户之前，仔细阅读本《用户服务协议》(以下简称“本协议”)。</view>
+  
+  <view class="section-title">第一条 账号注册与使用</view>
+  <view class="content">1. 用户在使用本服务前需要注册一个账号。考虑到系统功能的可用性，用户需要绑定或注册真实有效的联系方式与身份信息以参与活动报名及通知。</view>
+  <view class="content">2. 用户应当保证在注册和使用账号时，提交的信息真实、准确、完整。如果信息发生变更，应当及时更新。</view>
+  
+  <view class="section-title">第二条 用户信息保护</view>
+  <view class="content">1. 我们承诺将严格保护您的个人信息，不会在未经您授权的情况下向无关第三方泄露您的信息。</view>
+  <view class="content">2. 请务必阅读我们的《隐私保护指引》，以了解我们在收集、使用、存储您的个人信息时的具体规则和您的各项权利。</view>
+
+  <view class="section-title">第三条 用户行为规范</view>
+  <view class="content">1. 用户在使用本服务过程中，应当遵守国家相关法律法规、公序良俗等，不得利用本服务从事违法违规的活动。</view>
+  <view class="content">2. 用户需对自己在小程序内的所有行为负责，包括发布的信息以及由此产生的任何后果。</view>
+
+  <view class="section-title">第四条 违约责任</view>
+  <view class="content">1. 如果用户违反上述规定，开发者有权视情况采取暂停服务、限制账号功能或永久封停账号等措施。</view>
+
+  <view class="section-title">第五条 其他</view>
+  <view class="content">1. 本协议的最终解释权归“团小智日程记录”小程序的所有者所有。</view>
+  <view class="content">2. 若本协议有任何更新，开发者将在小程序内进行提示。</view>
+  
+  <view class="content" style="margin-top: 40rpx; color: #9ca3af; text-align: center;">更新日期：2026-04-08</view>
+</view>

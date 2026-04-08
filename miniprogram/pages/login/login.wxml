@@ -6,6 +6,18 @@
   </view>
 
   <view class="form-wrapper">
+    <view class="agreement-section">
+      <checkbox-group bindchange="onAgreeChange">
+        <label class="agreement-label">
+          <checkbox value="agree" checked="{{isAgreed}}" color="#3b82f6" style="transform: scale(0.7);" />
+          <text class="agreement-text">我已阅读并同意</text>
+        </label>
+        <navigator url="/pages/agreement/agreement" class="link-text">《用户服务协议》</navigator>
+        <text class="agreement-text">及</text>
+        <navigator url="/pages/privacy/privacy" class="link-text">《隐私保护指引》</navigator>
+      </checkbox-group>
+    </view>
+
     <block wx:if="{{!needBind}}">
       <button class="login-btn font-bold" bindtap="handleWxLogin" loading="{{isSubmitting}}" disabled="{{isSubmitting}}">微信一键登录</button>
       <view class="toggle-text" bindtap="toggleBindMode">已有学号密码？直接登录 ></view>

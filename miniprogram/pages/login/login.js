@@ -14,6 +14,9 @@ Page({
   },
 
   handleWxLogin() {
+    if (!this.data.isAgreed) {
+      return wx.showToast({ title: '请先阅读并同意服务协议和隐私保护指引', icon: 'none' });
+    }
     this.setData({ isSubmitting: true });
     wx.login({
       success: (loginRes) => {
@@ -71,6 +74,9 @@ Page({
   },
 
   handleBindAccount() {
+    if (!this.data.isAgreed) {
+      return wx.showToast({ title: '请先阅读并同意服务协议和隐私保护指引', icon: 'none' });
+    }
     if (!this.data.student_id || !this.data.password) {
       wx.showToast({ title: '请输入完整信息', icon: 'none' });
       return;

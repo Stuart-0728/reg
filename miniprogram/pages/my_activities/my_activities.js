@@ -1,5 +1,14 @@
 const app = getApp();
 Page({
+  onPullDownRefresh() {
+    if (this.onShow) {
+      this.onShow();
+    } else if (this.onLoad) {
+      this.onLoad();
+    }
+    setTimeout(() => wx.stopPullDownRefresh(), 600);
+  },
+
   data: {
     activities: [],
     filteredActivities: [],

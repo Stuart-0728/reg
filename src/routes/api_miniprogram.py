@@ -1,3 +1,4 @@
+from src.routes.student import _ensure_activity_start_reminders
 from flask import Blueprint, jsonify, request, current_app
 from src.utils.time_helpers import display_datetime
 from src.models import Activity, User, StudentInfo, Registration
@@ -180,6 +181,11 @@ def require_token(f):
 @require_token
 def my_activities():
     user = request.mp_user
+    try:
+        _ensure_activity_start_reminders(user.id)
+    except Exception as e:
+        current_app.logger.error(f"Failed to generate reminders in my_activities: {e}")
+    user = request.mp_user
     regs = Registration.query.filter_by(user_id=user.id).order_by(Registration.register_time.desc()).all()
     data = []
     for r in regs:
@@ -240,6 +246,8 @@ def register_activity(id):
                 if current_count >= a.max_participants:
                     return jsonify({'success': False, 'msg': '名额已满'})
             existing.status = 'registered'
+            from src.routes.student import _create_registration_success_notification
+            _create_registration_success_notification(user.id, a)
             db.session.commit()
             return jsonify({'success': True, 'msg': '重新报名成功'})
         return jsonify({'success': False, 'msg': '您已经报名过该活动啦'})
@@ -251,6 +259,8 @@ def register_activity(id):
 
     new_reg = Registration(user_id=user.id, activity_id=id)
     db.session.add(new_reg)
+    from src.routes.student import _create_registration_success_notification
+    _create_registration_success_notification(user.id, a)
     db.session.commit()
     return jsonify({'success': True, 'msg': '报名成功！'})
 
@@ -381,13 +391,39 @@ def wx_login():
         })
 
 
+
+@api_mp_bp.route('/notifications/unread_count', methods=['GET'])
+@require_token
+def get_unread_count():
+    from src.models import Notification, NotificationRead
+    user = request.mp_user
+    # 触发活动前提醒生成
+    try:
+        _ensure_activity_start_reminders(user.id)
+    except Exception as e:
+        current_app.logger.error(f'Failed to generate reminders: {e}')
+    # 查找所有公开或直接给该用户的通知
+    notifications = Notification.query.filter(db.or_(Notification.is_public == True, db.and_(Notification.is_public == False, Notification.created_by == user.id))).all()
+    reads = NotificationRead.query.filter_by(user_id=user.id).all()
+    read_ids = [r.notification_id for r in reads if not r.is_deleted] if hasattr(NotificationRead, 'is_deleted') else [r.notification_id for r in reads]
+    
+    unread_count = sum(1 for n in notifications if n.id not in read_ids)
+    
+    return jsonify({'success': True, 'unread_count': unread_count})
+
 @api_mp_bp.route('/notifications', methods=['GET'])
+
 @require_token
 def mp_notifications():
     from src.models import Notification, NotificationRead
     user = request.mp_user
+    # 触发活动前提醒生成
+    try:
+        _ensure_activity_start_reminders(user.id)
+    except Exception as e:
+        current_app.logger.error(f'Failed to generate reminders: {e}')
     # 查找所有公开或直接给该用户的通知
-    notifications = Notification.query.filter_by(is_public=True).order_by(Notification.created_at.desc()).limit(20).all()
+    notifications = Notification.query.filter(db.or_(Notification.is_public == True, db.and_(Notification.is_public == False, Notification.created_by == user.id))).order_by(Notification.created_at.desc()).limit(20).all()
     # 也可以过滤掉已过期的
     
     # 找到所有的已读记录

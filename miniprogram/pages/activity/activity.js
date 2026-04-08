@@ -209,12 +209,14 @@ Page({
 
     if (activity.user_status === 'attended') {
         state = { text: '已签到', extraClass: 'btn-disabled', disabled: true, action: 'none' };
-    } else if (activity.user_status === 'registered') {
-        if (activity.checkin_enabled) {
-            state = { text: '立即签到', extraClass: 'btn-special', disabled: false, action: 'checkin' };
-        } else {
-            state = { text: '取消报名', extraClass: 'btn-danger', disabled: false, action: 'cancel' };
-        }
+      } else if (activity.user_status === 'registered') {
+          if (activity.checkin_enabled) {
+              state = { text: '立即签到', extraClass: 'btn-special', disabled: false, action: 'checkin' };
+          } else if (regEnd !== Infinity && now > regEnd) {
+              state = { text: '等待开始', extraClass: 'btn-disabled', disabled: true, action: 'none' };
+          } else {
+              state = { text: '取消报名', extraClass: 'btn-danger', disabled: false, action: 'cancel' };
+          }
     } else if (activity.user_status === 'cancelled') {
         if (!isTimeValid) {
             state = { text: '已过时间', extraClass: 'btn-disabled', disabled: true, action: 'none' };
@@ -257,6 +259,7 @@ Page({
                             if (res.data.success) {
                                 wx.showToast({ title: '已取消报名', icon: 'success' });
                                 this.fetchDetail(this.data.activity.id);
+                                if (app.updateUnreadCount) app.updateUnreadCount();
                             } else {
                                 wx.showToast({ title: res.data.msg || '取消失败', icon: 'none' });
                             }
@@ -278,7 +281,8 @@ Page({
                         wx.hideLoading();
                         if(apiRes.data.success) {
                             wx.showToast({title: apiRes.data.msg, icon: 'success', duration: 3000});
-                            this.fetchDetail(this.data.activity.id); // Refresh status
+                            this.fetchDetail(this.data.activity.id);
+                    if (app.updateUnreadCount) app.updateUnreadCount(); // Refresh status
                         } else {
                             wx.showModal({title: '签到失败', content: apiRes.data.msg || '可能是二维码已过期或非活动二维码', showCancel: false});
                         }
@@ -320,7 +324,8 @@ Page({
               success: (res) => {
                 if(res.data.success) {
                     wx.showToast({title: res.data.msg, icon: 'success'});
-                    this.fetchDetail(this.data.activity.id); // 刷新详情
+                    this.fetchDetail(this.data.activity.id);
+                    if (app.updateUnreadCount) app.updateUnreadCount(); // 刷新详情
                 } else {
                     wx.showModal({title: '提示', content: res.data.msg, showCancel: false});
                 }

@@ -8,7 +8,7 @@ Page({
     loading: true
   },
   _navigatingToDetail: false,
-  onLoad() {
+  onShow() {
     this.fetchSocieties();
     this.fetchActivities();
   },

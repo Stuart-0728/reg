@@ -597,7 +597,8 @@ def poster_image(activity_id):
         # 返回图片数据
         response = make_response(activity.poster_data)
         response.headers.set('Content-Type', mime_type)
-        response.headers.set('Cache-Control', 'public, max-age=600, s-maxage=86400, stale-while-revalidate=600')
+        # 允许温和缓存；前端通过 ?v=updated_at 进行版本切换以立即刷新新海报
+        response.headers.set('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=300')
         response.headers.set('Vary', 'Accept-Encoding')
         return response
     except Exception as e:

@@ -27,7 +27,7 @@
     </view>
 
     <!-- 可选档案 -->
-    <view class="section-title">教育与联系档案 (选填)</view>
+    <view class="section-title">教育与联系档案 (必填)</view>
     <view class="row-group">
       <input class="styled-input flex-1" placeholder="年级(如2024级)" placeholder-class="ph-color" value="{{form.grade}}" bindinput="onInput" data-field="grade" />
       <view class="space"></view>
@@ -60,6 +60,19 @@
         <text>{{item.name}}</text>
       </label>
     </checkbox-group>
+
+
+    <view class="agreement-section">
+      <checkbox-group bindchange="onAgreeChange">
+        <label class="agreement-label">
+          <checkbox value="agree" checked="{{isAgreed}}" color="#3b82f6" style="transform: scale(0.7);" />
+          <text class="agreement-text">我已阅读并同意</text>
+        </label>
+        <navigator url="/pages/agreement/agreement" class="link-text">《用户服务协议》</navigator>
+        <text class="agreement-text">及</text>
+        <navigator url="/pages/privacy/privacy" class="link-text">《隐私保护指引》</navigator>
+      </checkbox-group>
+    </view>
 
     <button class="login-btn font-bold" bindtap="handleSubmit" loading="{{isSubmitting}}" 
       disabled="{{isSubmitting || !form.username || !form.password || !form.email || !form.real_name || !form.student_id}}">

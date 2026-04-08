@@ -81,6 +81,9 @@ Page({
   },
 
   handleSubmit() {
+    if (!this.data.isAgreed) {
+      return wx.showToast({ title: '请先阅读并同意服务协议和隐私保护指引', icon: 'none' });
+    }
     const { username, password, email, real_name, student_id, phone, qq, college, major, grade } = this.data.form;
     if (!username || !password || !email || !real_name || !student_id || !phone || !qq || !college || !major || !grade) {
       wx.showToast({ title: '请填写所有必填档案(包括联系资料)', icon: 'none' });
