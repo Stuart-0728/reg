@@ -11,7 +11,8 @@ Page({
 
   data: {
     userInfo: null,
-    stats: { attended: 0 }
+    stats: { attended: 0 },
+    unreadCount: 0
   },
   onShow() {
     this.setData({ userInfo: app.globalData.userInfo });
@@ -27,21 +28,10 @@ Page({
           }
         }
       });
-      // 获取未读消息数量
-      wx.request({
-        url: app.globalData.baseUrl + '/api/mp/notifications/unread_count',
-        method: 'GET',
-        header: { 'Authorization': app.globalData.token },
-        success: (res) => {
-          if (res.data.success) {
-            const count = res.data.unread_count;
-            this.setData({ unreadCount: count });
-            if (count > 0) {
-              wx.setTabBarBadge({ index: 1, text: count.toString() });
-            } else {
-              wx.removeTabBarBadge({ index: 1 });
-            }
-          }
+      this.setData({ unreadCount: app.globalData.unreadCount || 0 });
+      app.updateUnreadCount({
+        onDone: (count) => {
+          this.setData({ unreadCount: count });
         }
       });
     } else {

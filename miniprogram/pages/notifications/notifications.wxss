@@ -1,6 +1,26 @@
 .container { padding: 40rpx; min-height: 100vh; background: #fafafa; }
-.header { margin-bottom: 40rpx; }
+.header {
+  margin-bottom: 40rpx;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
 .title { font-size: 56rpx; color: var(--text-main); }
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.header-link {
+  font-size: 24rpx;
+  color: #111827;
+  line-height: 1.6;
+}
+.header-sep {
+  margin: 0 12rpx;
+  font-size: 24rpx;
+  color: #d1d5db;
+}
 
 .list { padding-bottom: 60rpx; }
 .notification-card {
@@ -31,7 +51,7 @@
   left: 16rpx;
 }
 .card-title {
-  font-size: 32rpx;
+  font-size: 36rpx;
   color: var(--text-main);
   flex: 1;
   margin-left: 8rpx;
@@ -43,15 +63,31 @@
   padding-left: 12rpx;
 }
 .card-time {
-  font-size: 24rpx;
+  font-size: 26rpx;
   color: var(--text-sub);
   margin-left: 20rpx;
 }
 .card-desc {
-  font-size: 28rpx;
+  font-size: 31rpx;
   color: var(--text-sub);
-  line-height: 1.5;
+  line-height: 1.65;
   display: block;
+}
+.card-actions {
+  margin-top: 18rpx;
+  display: flex;
+  justify-content: flex-end;
+}
+.delete-action {
+  width: 52rpx;
+  height: 52rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.trash-icon {
+  width: 40rpx;
+  height: 40rpx;
 }
 .empty-state, .loading-state {
   text-align: center;

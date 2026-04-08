@@ -1,5 +1,24 @@
-.container { padding: 40rpx; }
-.header { margin-bottom: 40rpx; border-bottom: 1px solid #eee; padding-bottom: 20rpx; }
-.title { font-size: 36rpx; display: block; margin-bottom: 10rpx; color: #333; }
-.time { font-size: 24rpx; color: #999; }
-.content { font-size: 28rpx; color: #444; line-height: 1.6; }
+.container { padding: 40rpx; min-height: 100vh; box-sizing: border-box; background: #fafafa; }
+.header { margin-bottom: 36rpx; border-bottom: 1px solid #eee; padding-bottom: 22rpx; }
+.title { font-size: 42rpx; display: block; margin-bottom: 12rpx; color: #111827; line-height: 1.4; }
+.time { font-size: 26rpx; color: #9ca3af; }
+.content { font-size: 33rpx; color: #374151; line-height: 1.8; background: #fff; border-radius: 20rpx; padding: 28rpx; }
+.bottom-actions {
+	margin-top: 28rpx;
+	display: flex;
+	justify-content: flex-end;
+}
+.delete-action {
+	display: flex;
+	align-items: center;
+	gap: 10rpx;
+}
+.trash-icon {
+	width: 40rpx;
+	height: 40rpx;
+}
+.delete-link {
+	color: #ef4444;
+	font-size: 26rpx;
+	line-height: 1.6;
+}

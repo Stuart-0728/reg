@@ -6,7 +6,14 @@ Page({
     password: '',
     isSubmitting: false,
     needBind: false,
-    openid: ''
+    openid: '',
+    isAgreed: false
+  },
+
+  onAgreeChange(e) {
+    this.setData({
+      isAgreed: e.detail.value.includes('agree')
+    });
   },
   
   toggleBindMode() {

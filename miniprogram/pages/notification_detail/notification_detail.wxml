@@ -6,4 +6,10 @@
   <view class="content">
     <text user-select>{{notification.content}}</text>
   </view>
+  <view class="bottom-actions" wx:if="{{notification.id}}">
+    <view class="delete-action" bindtap="deleteNotification">
+      <image class="trash-icon" src="/assets/icons/trash.svg" mode="aspectFit"></image>
+      <text class="delete-link">删除此通知</text>
+    </view>
+  </view>
 </view>

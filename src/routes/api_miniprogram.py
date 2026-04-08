@@ -397,17 +397,31 @@ def wx_login():
 def get_unread_count():
     from src.models import Notification, NotificationRead
     user = request.mp_user
-    # 触发活动前提醒生成
-    try:
-        _ensure_activity_start_reminders(user.id)
-    except Exception as e:
-        current_app.logger.error(f'Failed to generate reminders: {e}')
-    # 查找所有公开或直接给该用户的通知
-    notifications = Notification.query.filter(db.or_(Notification.is_public == True, db.and_(Notification.is_public == False, Notification.created_by == user.id))).all()
-    reads = NotificationRead.query.filter_by(user_id=user.id).all()
-    read_ids = [r.notification_id for r in reads if not r.is_deleted] if hasattr(NotificationRead, 'is_deleted') else [r.notification_id for r in reads]
-    
-    unread_count = sum(1 for n in notifications if n.id not in read_ids)
+    now = datetime.utcnow()
+
+    deleted_ids_subq = db.select(NotificationRead.notification_id).filter(
+        NotificationRead.user_id == user.id,
+        NotificationRead.is_deleted.is_(True)
+    )
+
+    read_ids_subq = db.select(NotificationRead.notification_id).filter(
+        NotificationRead.user_id == user.id,
+        NotificationRead.is_deleted.is_(False)
+    )
+
+    unread_count = db.session.execute(
+        db.select(db.func.count(Notification.id)).filter(
+            db.or_(
+                Notification.is_public == True,
+                db.and_(Notification.is_public == False, Notification.created_by == user.id)
+            ),
+            db.or_(Notification.expiry_date == None, Notification.expiry_date >= now),
+            Notification.title.isnot(None),
+            Notification.content.isnot(None),
+            ~Notification.id.in_(deleted_ids_subq),
+            ~Notification.id.in_(read_ids_subq)
+        )
+    ).scalar() or 0
     
     return jsonify({'success': True, 'unread_count': unread_count})
 
@@ -422,14 +436,30 @@ def mp_notifications():
         _ensure_activity_start_reminders(user.id)
     except Exception as e:
         current_app.logger.error(f'Failed to generate reminders: {e}')
-    # 查找所有公开或直接给该用户的通知
-    notifications = Notification.query.filter(db.or_(Notification.is_public == True, db.and_(Notification.is_public == False, Notification.created_by == user.id))).order_by(Notification.created_at.desc()).limit(20).all()
-    # 也可以过滤掉已过期的
+    now = datetime.utcnow()
+
+    deleted_ids = db.session.execute(
+        db.select(NotificationRead.notification_id).filter(
+            NotificationRead.user_id == user.id,
+            NotificationRead.is_deleted.is_(True)
+        )
+    ).scalars().all()
+
+    notifications = Notification.query.filter(
+        db.or_(
+            Notification.is_public == True,
+            db.and_(Notification.is_public == False, Notification.created_by == user.id)
+        ),
+        db.or_(Notification.expiry_date == None, Notification.expiry_date >= now),
+        Notification.title.isnot(None),
+        Notification.content.isnot(None),
+        ~Notification.id.in_(deleted_ids) if deleted_ids else True
+    ).order_by(Notification.created_at.desc()).limit(20).all()
     
     # 找到所有的已读记录
     # (考虑到性能可以用in_，不过这里记录不多)
     reads = NotificationRead.query.filter_by(user_id=user.id).all()
-    read_ids = [r.notification_id for r in reads if not r.is_deleted] if hasattr(NotificationRead, 'is_deleted') else [r.notification_id for r in reads]
+    read_ids = [r.notification_id for r in reads if not r.is_deleted]
     
     data = []
     for n in notifications:
@@ -565,15 +595,141 @@ def mp_register():
 @api_mp_bp.route('/notifications/<int:id>/read', methods=['POST'])
 @require_token
 def mp_notification_read(id):
-    from src.models import NotificationRead
+    from src.models import NotificationRead, Notification
     user = request.mp_user
-    # 查找是否已存在记录
+    now = datetime.utcnow()
+
+    notification = Notification.query.filter(
+        Notification.id == id,
+        db.or_(
+            Notification.is_public == True,
+            db.and_(Notification.is_public == False, Notification.created_by == user.id)
+        ),
+        db.or_(Notification.expiry_date == None, Notification.expiry_date >= now)
+    ).first()
+    if not notification:
+        return jsonify({'success': False, 'msg': '通知不存在或不可访问'}), 404
+
+    n_read = NotificationRead.query.filter_by(user_id=user.id, notification_id=id).first()
+    if n_read and n_read.is_deleted:
+        return jsonify({'success': False, 'msg': '通知已删除', 'deleted': True}), 410
+
+    if not n_read:
+        n_read = NotificationRead(user_id=user.id, notification_id=id, read_at=now, is_deleted=False)
+        db.session.add(n_read)
+    else:
+        if not n_read.read_at:
+            n_read.read_at = now
+
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@api_mp_bp.route('/notifications/<int:id>', methods=['DELETE'])
+@require_token
+def mp_notification_delete(id):
+    from src.models import NotificationRead, Notification
+    user = request.mp_user
+    now = datetime.utcnow()
+
+    notification = Notification.query.filter(
+        Notification.id == id,
+        db.or_(
+            Notification.is_public == True,
+            db.and_(Notification.is_public == False, Notification.created_by == user.id)
+        ),
+        db.or_(Notification.expiry_date == None, Notification.expiry_date >= now)
+    ).first()
+    if not notification:
+        return jsonify({'success': False, 'msg': '通知不存在或不可访问'}), 404
+
     n_read = NotificationRead.query.filter_by(user_id=user.id, notification_id=id).first()
     if not n_read:
-        n_read = NotificationRead(user_id=user.id, notification_id=id)
+        n_read = NotificationRead(user_id=user.id, notification_id=id, read_at=now, is_deleted=True)
         db.session.add(n_read)
-        db.session.commit()
-    return jsonify({'success': True})
+    else:
+        if not n_read.read_at:
+            n_read.read_at = now
+        n_read.is_deleted = True
+
+    db.session.commit()
+    return jsonify({'success': True, 'msg': '通知已删除'})
+
+
+@api_mp_bp.route('/notifications/<int:id>/delete', methods=['POST'])
+@require_token
+def mp_notification_delete_post(id):
+    # 兼容部分网关/代理不透传 DELETE 的场景
+    return mp_notification_delete(id)
+
+
+@api_mp_bp.route('/notifications/mark_all_read', methods=['POST'])
+@require_token
+def mp_notifications_mark_all_read():
+    from src.models import NotificationRead, Notification
+    user = request.mp_user
+    now = datetime.utcnow()
+
+    deleted_ids = db.session.execute(
+        db.select(NotificationRead.notification_id).filter(
+            NotificationRead.user_id == user.id,
+            NotificationRead.is_deleted.is_(True)
+        )
+    ).scalars().all()
+
+    notifications = Notification.query.filter(
+        db.or_(
+            Notification.is_public == True,
+            db.and_(Notification.is_public == False, Notification.created_by == user.id)
+        ),
+        db.or_(Notification.expiry_date == None, Notification.expiry_date >= now),
+        Notification.title.isnot(None),
+        Notification.content.isnot(None),
+        ~Notification.id.in_(deleted_ids) if deleted_ids else True
+    ).all()
+
+    reads = NotificationRead.query.filter_by(user_id=user.id).all()
+    read_map = {r.notification_id: r for r in reads}
+    updated = 0
+    for n in notifications:
+        record = read_map.get(n.id)
+        if not record:
+            db.session.add(NotificationRead(
+                user_id=user.id,
+                notification_id=n.id,
+                read_at=now,
+                is_deleted=False
+            ))
+            updated += 1
+        else:
+            changed = False
+            if record.is_deleted:
+                record.is_deleted = False
+                changed = True
+            if not record.read_at:
+                record.read_at = now
+                changed = True
+            if changed:
+                updated += 1
+
+    db.session.commit()
+    return jsonify({'success': True, 'msg': f'已标记 {updated} 条通知为已读'})
+
+
+@api_mp_bp.route('/notifications/delete_read', methods=['POST'])
+@require_token
+def mp_notifications_delete_read():
+    from src.models import NotificationRead
+    user = request.mp_user
+
+    updated = NotificationRead.query.filter(
+        NotificationRead.user_id == user.id,
+        db.or_(NotificationRead.is_deleted == False, NotificationRead.is_deleted.is_(None)),
+        NotificationRead.read_at.isnot(None)
+    ).update({NotificationRead.is_deleted: True}, synchronize_session=False)
+
+    db.session.commit()
+    return jsonify({'success': True, 'msg': f'已删除 {updated} 条已读通知'})
 
 
 @api_mp_bp.route('/profile', methods=['GET', 'POST'])

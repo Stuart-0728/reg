@@ -18,13 +18,20 @@ Page({
     },
     societies: [],
     tags: [],
-    isSubmitting: false
+    isSubmitting: false,
+    isAgreed: false
   },
 
   onInput(e) {
     const field = e.currentTarget.dataset.field;
     this.setData({
       [`form.${field}`]: e.detail.value
+    });
+  },
+
+  onAgreeChange(e) {
+    this.setData({
+      isAgreed: e.detail.value.includes('agree')
     });
   },
   

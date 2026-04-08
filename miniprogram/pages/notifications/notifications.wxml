@@ -1,6 +1,11 @@
 <view class="container">
   <view class="header">
     <text class="title font-heavy">消息通知</text>
+    <view class="header-actions" wx:if="{{notifications.length > 0}}">
+      <text class="header-link" bindtap="markAllRead">一键已读</text>
+      <text class="header-sep">｜</text>
+      <text class="header-link" bindtap="deleteRead">删除已读</text>
+    </view>
   </view>
 
   <view class="loading-state" wx:if="{{loading}}">正在加载...</view>
@@ -17,6 +22,11 @@
         <text class="card-time">{{item.time}}</text>
       </view>
       <text class="card-desc">{{item.summary || item.content}}</text>
+      <view class="card-actions">
+        <view class="delete-action" catchtap="deleteNotification" data-id="{{item.id}}" data-index="{{index}}">
+          <image class="trash-icon" src="/assets/icons/trash.svg" mode="aspectFit"></image>
+        </view>
+      </view>
     </view>
   </view>
 </view>
