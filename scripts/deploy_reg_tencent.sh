@@ -244,7 +244,7 @@ if not url:
 
 engine = create_engine(url)
 with engine.connect() as conn:
-  tz = conn.execute(text("SHOW timezone")).scalar()
+  tz = conn.execute(text('SHOW timezone')).scalar()
   print('postgres timezone =', tz)
 PY"
 
