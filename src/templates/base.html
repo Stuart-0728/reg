@@ -86,6 +86,17 @@
             transition: none !important;
             animation: none !important;
         }
+
+        /* 首屏先隐藏权限相关区域，等待 /auth/session-state 纠偏，防止缓存污染导致管理员菜单闪现 */
+        html.auth-state-pending #primaryNavMenu,
+        html.auth-state-pending #authNavRight {
+            visibility: hidden;
+        }
+
+        html.auth-state-pending #dhFloatingTrigger,
+        html.auth-state-pending #dhInlinePopup {
+            display: none !important;
+        }
         
         /* 卡片样式优化 */
         .card {
@@ -1370,6 +1381,11 @@
             }
         }
     </style>
+    <script>
+        (function () {
+            document.documentElement.classList.add('auth-state-pending');
+        })();
+    </script>
 </head>
 {% set can_enter_student_mode = current_user.is_authenticated and current_user.role and current_user.role.name|lower == 'admin' and (not current_user.is_super_admin) %}
 {% set admin_student_mode = can_enter_student_mode and session.get('admin_student_mode') %}
@@ -2040,6 +2056,47 @@
                 }
             };
 
+            const syncDigitalHumanVisibility = (data) => {
+                const trigger = document.getElementById('dhFloatingTrigger');
+                const popup = document.getElementById('dhInlinePopup');
+                const isSuperAdmin = !!(data && data.authenticated && String(data.role || '').toLowerCase() === 'admin' && data.is_super_admin);
+
+                if (!isSuperAdmin) {
+                    if (popup) {
+                        popup.remove();
+                    }
+                    if (trigger) {
+                        trigger.remove();
+                    }
+                }
+            };
+
+            const applySafeAnonymousShell = () => {
+                if (primaryNav) {
+                    primaryNav.innerHTML = `
+                        <li class="nav-item"><a class="nav-link" href="${urls.home}">首页</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.resources}">教育资源</a></li>
+                        <li class="nav-item"><a class="nav-link" href="${urls.about}">关于我们</a></li>
+                    `;
+                }
+
+                if (authNav) {
+                    authNav.innerHTML = `
+                        <li class="nav-item" id="auth-nav-logged-out-login">
+                            <a class="nav-link" href="${urls.login}">登录</a>
+                        </li>
+                        <li class="nav-item" id="auth-nav-logged-out-register">
+                            <a class="nav-link" href="${urls.register}">注册</a>
+                        </li>
+                    `;
+                }
+
+                bodyEl.dataset.userLoggedIn = 'false';
+                bodyEl.dataset.userRole = '';
+                syncDigitalHumanVisibility({ authenticated: false, role: '', is_super_admin: false });
+                document.documentElement.classList.remove('auth-state-pending');
+            };
+
             const applyLoggedOutImmediately = () => {
                 applyAuthState({
                     success: true,
@@ -2075,6 +2132,8 @@
 
                 renderPrimaryNav(data);
                 renderAuthNav(data);
+                syncDigitalHumanVisibility(data);
+                document.documentElement.classList.remove('auth-state-pending');
 
                 const eventPayload = {
                     ...data,
@@ -2178,7 +2237,10 @@
                 applyLoggedOutImmediately();
             }
 
-            // 首次进入页面以SSR为准，仅做轻量同步；锁定期中延迟到锁结束后执行
+            // 首屏先应用匿名壳，避免缓存污染导致管理员菜单/团小慧闪现。
+            applySafeAnonymousShell();
+
+            // 首次进入页面仅做轻量同步；锁定期中延迟到锁结束后执行
             syncAuthState(false);
             updateMobileNavViewportHeight();
 

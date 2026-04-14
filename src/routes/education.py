@@ -3,7 +3,7 @@ import requests
 import logging
 from math import ceil
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify, send_from_directory
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify, send_from_directory, make_response
 from flask_login import current_user
 
 from src.routes.utils import log_action
@@ -234,12 +234,22 @@ def resources():
         online_pagination = paginate_list(online_items, online_page, per_page=6)
         local_pagination = paginate_list(local_items, local_page, per_page=9)
 
-        return render_template(
+        response = make_response(render_template(
             'education/resources.html',
             online_pagination=online_pagination,
             local_pagination=local_pagination,
             ai_login_required=not current_user.is_authenticated,
-        )
+        ))
+
+        # 教育资源页包含登录态相关导航，强制浏览器/边缘代理不缓存，避免跨账号串页。
+        response.headers['Cache-Control'] = 'private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        response.headers['CDN-Cache-Control'] = 'no-store'
+        response.headers['Surrogate-Control'] = 'no-store'
+        response.headers['Vary'] = 'Accept-Encoding, Cookie, Authorization'
+
+        return response
     except Exception as e:
         logger.error(f"加载教育资源页面出错: {e}", exc_info=True)
         flash('加载教育资源页面时出错，请稍后再试', 'danger')
